@@ -1,4 +1,4 @@
-import type { FolioAttachment, FolioDoc, FolioHost, FolioImage, FolioListItem, FolioPath } from './types.ts';
+import type { FolioAttachment, FolioDoc, FolioHost, FolioImage, FolioListItem, FolioListOpts, FolioPath } from './types.ts';
 
 /**
  * 独立模式的浏览器侧实现：fetch 本仓小服务（src/server/）的 /folio/v1/*。
@@ -40,8 +40,13 @@ export class StandaloneHost implements FolioHost {
         await this.send('PUT', '/folio/v1/doc', { path, markdown });
     }
 
-    async list(): Promise<FolioListItem[]> {
-        const resp = await fetch(this.url('/folio/v1/list'));
+    async list(opts: FolioListOpts = {}): Promise<FolioListItem[]> {
+        const query = new URLSearchParams();
+        if (opts.dir) query.set('dir', opts.dir);
+        if (opts.tag) query.set('tag', opts.tag);
+        if (opts.kind) query.set('kind', opts.kind);
+        const qs = query.toString();
+        const resp = await fetch(this.url(`/folio/v1/list${qs ? `?${qs}` : ''}`));
         return this.json<FolioListItem[]>(resp);
     }
 

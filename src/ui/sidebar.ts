@@ -46,3 +46,31 @@ export function markCurrent(nav: HTMLElement, path: string | null): void {
         else button.removeAttribute('aria-current');
     });
 }
+
+/**
+ * 标签条（单元 6）：frontmatter tags 的并集，点一个筛一层；一条可多标签。
+ * 数据来自 host.list() 的 tags 字段，不搞 [[标签页]]（AGENTS.md 不做清单）。
+ */
+export function renderTagBar(
+    bar: HTMLElement,
+    files: FolioListItem[],
+    activeTag: string | null,
+    onToggle: (tag: string) => void,
+): void {
+    const tags = new Set<string>();
+    for (const file of files) for (const tag of file.tags ?? []) tags.add(tag);
+
+    bar.replaceChildren();
+    if (tags.size === 0) return;
+
+    for (const tag of [...tags].sort((a, b) => a.localeCompare(b, 'zh'))) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'tag-chip';
+        chip.textContent = tag;
+        chip.dataset.tag = tag;
+        if (tag === activeTag) chip.setAttribute('aria-pressed', 'true');
+        chip.addEventListener('click', () => onToggle(tag));
+        bar.append(chip);
+    }
+}

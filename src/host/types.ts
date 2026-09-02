@@ -14,6 +14,17 @@ export type FolioDoc = {
 export type FolioListItem = {
     path: FolioPath;
     title: string;
+    /** frontmatter tags:（单元 6），无 frontmatter 时为空 */
+    tags?: string[];
+    /** notes/ 长文、memos/ 速记；其它目录不给 kind */
+    kind?: 'note' | 'memo';
+};
+
+/** list 的筛选（单元 6）。合入后 daemon 按同样语义扫资产层。 */
+export type FolioListOpts = {
+    dir?: string;
+    tag?: string;
+    kind?: 'note' | 'memo';
 };
 
 export type FolioImage = {
@@ -32,7 +43,7 @@ export type FolioIndex = {
 export interface FolioHost {
     read(path: FolioPath): Promise<FolioDoc>;
     write(path: FolioPath, markdown: string): Promise<void>;
-    list(): Promise<FolioListItem[]>;
+    list(opts?: FolioListOpts): Promise<FolioListItem[]>;
     saveImage(bytes: Uint8Array, hint: string): Promise<FolioImage>;
     /** 音视频等附件落盘（单元 4）；合入后由 daemon 提供同名能力 */
     saveFile?(bytes: Uint8Array, hint: string): Promise<FolioAttachment>;

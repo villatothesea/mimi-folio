@@ -10,7 +10,18 @@ const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-vault-'));
 process.env.FOLIO_VAULT = vault;
 
 await fs.mkdir(path.join(vault, 'notes'), { recursive: true });
+await fs.mkdir(path.join(vault, 'memos'), { recursive: true });
 await fs.writeFile(path.join(vault, 'notes', 'a.md'), '# A\r\n\r\nWindows 换行\r\n', 'utf8');
+await fs.writeFile(
+    path.join(vault, 'notes', 'tagged.md'),
+    '---\ntags: [项目, 长文]\n---\n# 有标签的笔记\n',
+    'utf8',
+);
+await fs.writeFile(
+    path.join(vault, 'memos', 'm1.md'),
+    '---\ntags: [速记]\n---\n# 一条速记\n',
+    'utf8',
+);
 
 const server = createAppServer();
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -20,10 +31,40 @@ const base = `http://127.0.0.1:${port}`;
 after(() => void server.close());
 
 describe('GET /folio/v1/*', () => {
-    it('list 返回全部 md 与标题', async () => {
+    it('list 返回全部 md、标题、tags 与 kind', async () => {
+        const res = await fetch(`${base}/folio/v1/list`);
+        const files = (await res.json()) as { path: string; title: string; tags: string[]; kind: string }[];
+        assert.equal(files.length, 3);
+        const tagged = files.find((f) => f.path === 'notes/tagged.md')!;
+        assert.deepEqual(tagged.tags, ['项目', '长文']);
+        assert.equal(tagged.kind, 'note');
+        const memo = files.find((f) => f.path === 'memos/m1.md')!;
+        assert.equal(memo.kind, 'memo');
+        assert.equal(files.find((f) => f.path === 'notes/a.md')!.kind, 'note');
+    });
+
+    it('list?tag= 筛出含该标签的文件', async () => {
+        const res = await fetch(`${base}/folio/v1/list?tag=${encodeURIComponent('项目')}`);
+        const files = (await res.json()) as { path: string }[];
+        assert.deepEqual(files.map((f) => f.path), ['notes/tagged.md']);
+    });
+
+    it('list?kind=memo 只给速记', async () => {
+        const res = await fetch(`${base}/folio/v1/list?kind=memo`);
+        const files = (await res.json()) as { path: string }[];
+        assert.deepEqual(files.map((f) => f.path), ['memos/m1.md']);
+    });
+
+    it('list?dir= 只给该目录', async () => {
+        const res = await fetch(`${base}/folio/v1/list?dir=memos`);
+        const files = (await res.json()) as { path: string }[];
+        assert.deepEqual(files.map((f) => f.path), ['memos/m1.md']);
+    });
+
+    it('标题取自 frontmatter 之后的正文', async () => {
         const res = await fetch(`${base}/folio/v1/list`);
         const files = (await res.json()) as { path: string; title: string }[];
-        assert.deepEqual(files, [{ path: 'notes/a.md', title: 'A' }]);
+        assert.equal(files.find((f) => f.path === 'memos/m1.md')!.title, '一条速记');
     });
 
     it('read 出来的是 LF（muya 只认 LF）', async () => {

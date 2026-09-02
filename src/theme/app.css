@@ -46,6 +46,31 @@
     letter-spacing: 0.05em;
 }
 
+#tagbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--folio-space-1);
+    padding: var(--folio-space-2) var(--folio-space-3);
+    border-bottom: 1px solid var(--folio-border);
+}
+
+.tag-chip {
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: none;
+    color: var(--folio-fg-muted);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-2);
+    cursor: pointer;
+}
+
+.tag-chip[aria-pressed='true'] {
+    background: var(--folio-primary);
+    color: var(--folio-primary-fg);
+    border-color: var(--folio-primary);
+}
+
 #files button:hover {
     background: var(--folio-hover);
 }

@@ -7,7 +7,8 @@ import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 
-import type { FolioListItem } from '../host/types.ts';
+import type { FolioListItem, FolioListOpts } from '../host/types.ts';
+import { splitFrontmatter } from './frontmatter.ts';
 
 const PREFIX = '/folio/v1/';
 const MD_RE = /\.md$/i;
@@ -61,12 +62,19 @@ function fail(res: ServerResponse, status: number, message: string): boolean {
 }
 
 function titleOf(rel: string, markdown: string): string {
-    const heading = markdown.split('\n').find((line) => /^#{1,6}\s+\S/.test(line));
+    const { body } = splitFrontmatter(markdown);
+    const heading = body.split('\n').find((line) => /^#{1,6}\s+\S/.test(line));
     if (heading) return heading.replace(/^#{1,6}\s+/, '').trim();
     return rel.replace(/\.md$/i, '');
 }
 
-async function listMarkdown(root: string): Promise<FolioListItem[]> {
+function kindOf(rel: string): 'note' | 'memo' | undefined {
+    if (rel === 'notes' || rel.startsWith('notes/')) return 'note';
+    if (rel === 'memos' || rel.startsWith('memos/')) return 'memo';
+    return undefined;
+}
+
+async function listMarkdown(root: string, opts: FolioListOpts): Promise<FolioListItem[]> {
     const out: FolioListItem[] = [];
     async function walk(dir: string): Promise<void> {
         for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
@@ -75,12 +83,18 @@ async function listMarkdown(root: string): Promise<FolioListItem[]> {
             if (entry.isDirectory()) await walk(abs);
             else if (entry.isFile() && MD_RE.test(entry.name)) {
                 const rel = path.relative(root, abs).split(path.sep).join('/');
-                out.push({ path: rel, title: titleOf(rel, await fs.readFile(abs, 'utf8')) });
+                const markdown = await fs.readFile(abs, 'utf8');
+                const { tags } = splitFrontmatter(markdown);
+                out.push({ path: rel, title: titleOf(rel, markdown), tags, kind: kindOf(rel) });
             }
         }
     }
     await walk(root);
-    return out.sort((a, b) => a.path.localeCompare(b.path, 'zh'));
+    let result = out;
+    if (opts.dir) result = result.filter((f) => f.path.startsWith(`${opts.dir}/`));
+    if (opts.tag) result = result.filter((f) => f.tags?.includes(opts.tag!));
+    if (opts.kind) result = result.filter((f) => f.kind === opts.kind);
+    return result.sort((a, b) => a.path.localeCompare(b.path, 'zh'));
 }
 
 /** 附件名只留安全字符；重名时塞时间戳，不覆盖。 */
@@ -148,7 +162,14 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
 
     try {
         if (req.method === 'GET' && pathname === 'list') {
-            send(res, 200, await listMarkdown(root));
+            const opts: FolioListOpts = {};
+            const dir = query.get('dir');
+            const tag = query.get('tag');
+            const kind = query.get('kind');
+            if (dir) opts.dir = dir;
+            if (tag) opts.tag = tag;
+            if (kind === 'note' || kind === 'memo') opts.kind = kind;
+            send(res, 200, await listMarkdown(root, opts));
             return true;
         }
 
