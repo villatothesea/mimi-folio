@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.vite/
+*.local
+vault/**
+!vault/.gitkeep
+!vault/欢迎.md

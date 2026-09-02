@@ -1,0 +1,53 @@
+/**
+ * 米素视觉 token。组件只许 var(--folio-*)。
+ * 出厂：白底、近黑字、灰线。换主题 = 覆写这组变量，不要改组件。
+ */
+:root {
+    color-scheme: light;
+
+    --folio-bg: #ffffff;
+    --folio-bg-alt: #f4f4f4;
+    --folio-panel: #fafafa;
+    --folio-fg: #1a1a1a;
+    --folio-fg-muted: #6e6e6e;
+    --folio-border: #d6d6d6;
+    --folio-border-strong: #b3b3b3;
+    --folio-hover: #ececec;
+    --folio-hover-active: #e2e2e2;
+    --folio-selection: #d8d8d8;
+    --folio-primary: #2a2a2a;
+    --folio-primary-fg: #ffffff;
+    --folio-danger: #4a4a4a;
+    --folio-warning: #5c5c5c;
+    --folio-success: #3d3d3d;
+    --folio-info: #5a5a5a;
+
+    --folio-font: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+    --folio-font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+    --folio-font-size: 16px;
+    --folio-font-size-sm: 13px;
+    --folio-line-height: 1.6;
+    --folio-space-1: 4px;
+    --folio-space-2: 8px;
+    --folio-space-3: 12px;
+    --folio-space-4: 16px;
+    --folio-radius: 0px;
+    --folio-icon-size: 18px;
+    --folio-icon-stroke: 1.5;
+
+    /* Muya 只吃下面这些，从 folio 映射，禁止在别处给 --mu-* 赋 hex */
+    --mu-font-size: var(--folio-font-size);
+    --mu-line-height: var(--folio-line-height);
+    --mu-font-family: var(--folio-font);
+    --mu-code-font-family: var(--folio-font-mono);
+}
+
+html,
+body {
+    margin: 0;
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font-family: var(--folio-font);
+    font-size: var(--folio-font-size);
+    line-height: var(--folio-line-height);
+}
