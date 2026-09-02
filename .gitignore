@@ -2,6 +2,12 @@ node_modules/
 dist/
 .vite/
 *.local
+
+# vault 内容不入库，只留目录约定和示例
 vault/**
-!vault/.gitkeep
-!vault/欢迎.md
+!vault/notes/
+!vault/memos/
+!vault/attachments/
+!vault/notes/欢迎.md
+!vault/memos/示例速记.md
+!vault/attachments/.gitkeep

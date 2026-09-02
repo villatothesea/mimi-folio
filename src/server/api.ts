@@ -1,0 +1,151 @@
+/**
+ * 独立模式小服务：磁盘上的 vault ↔ HTTP /folio/v1/*。
+ * 路径与合入后 daemon 提供的一致（docs/计划.md §合入），合入只换实现不换接口。
+ * 只放行 vault 内的 .md 与 attachments/；越界路径一律 4xx。
+ */
+import { promises as fs } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
+import type { FolioListItem } from '../host/types.ts';
+
+const PREFIX = '/folio/v1/';
+const MD_RE = /\.md$/i;
+const MAX_BODY = 10 * 1024 * 1024;
+
+export function vaultRoot(): string {
+    return process.env.FOLIO_VAULT ?? path.join(process.cwd(), 'vault');
+}
+
+/** vault 内的 posix 相对路径；带 .. 、绝对路径、反斜杠、空段一律拒收。 */
+function safeRel(raw: string): string | null {
+    if (!raw || raw.includes('\\') || raw.includes('\0')) return null;
+    const segs = raw.split('/');
+    if (segs.some((s) => !s || s === '.' || s === '..')) return null;
+    return segs.join('/');
+}
+
+async function fileExists(p: string): Promise<boolean> {
+    try {
+        await fs.access(p);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function readBody(req: IncomingMessage): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req) {
+        size += (chunk as Buffer).length;
+        if (size > MAX_BODY) throw new Error('body 超过 10MB 上限');
+        chunks.push(chunk as Buffer);
+    }
+    return Buffer.concat(chunks);
+}
+
+function send(res: ServerResponse, status: number, body?: unknown): void {
+    res.statusCode = status;
+    if (body !== undefined) {
+        res.setHeader('content-type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify(body));
+    } else {
+        res.end();
+    }
+}
+
+function fail(res: ServerResponse, status: number, message: string): boolean {
+    send(res, status, { error: message });
+    return true;
+}
+
+function titleOf(rel: string, markdown: string): string {
+    const heading = markdown.split('\n').find((line) => /^#{1,6}\s+\S/.test(line));
+    if (heading) return heading.replace(/^#{1,6}\s+/, '').trim();
+    return rel.replace(/\.md$/i, '');
+}
+
+async function listMarkdown(root: string): Promise<FolioListItem[]> {
+    const out: FolioListItem[] = [];
+    async function walk(dir: string): Promise<void> {
+        for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+            if (entry.name.startsWith('.')) continue;
+            const abs = path.join(dir, entry.name);
+            if (entry.isDirectory()) await walk(abs);
+            else if (entry.isFile() && MD_RE.test(entry.name)) {
+                const rel = path.relative(root, abs).split(path.sep).join('/');
+                out.push({ path: rel, title: titleOf(rel, await fs.readFile(abs, 'utf8')) });
+            }
+        }
+    }
+    await walk(root);
+    return out.sort((a, b) => a.path.localeCompare(b.path, 'zh'));
+}
+
+/** 附件名只留安全字符；重名时塞时间戳，不覆盖。 */
+async function saveAttachment(root: string, bytes: Buffer, hint: string): Promise<string> {
+    const base = path.posix.basename(hint.replaceAll('\\', '/'));
+    const stem = base.replace(/\.[^.]*$/, '').replace(/[^\p{L}\p{N}._-]+/gu, '_').slice(0, 80) || 'file';
+    const ext = (base.match(/\.[^.]*$/)?.[0] ?? '.bin').slice(0, 16);
+    const dir = path.join(root, 'attachments');
+    await fs.mkdir(dir, { recursive: true });
+    let name = `${stem}${ext}`;
+    for (let i = 0; await fileExists(path.join(dir, name)); i++) {
+        name = `${stem}-${Date.now()}-${i}${ext}`;
+    }
+    await fs.writeFile(path.join(dir, name), bytes);
+    return `attachments/${name}`;
+}
+
+/**
+ * 统一入口：匹配 /folio/v1/* 就处理并回 true，否则回 false 由调用方走静态/下一个中间件。
+ * dev 由 vite 中间件调，独立整服由 src/server/main.ts 调，合入后 daemon 按同一契约实现。
+ */
+export async function handleFolioApi(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+    const raw = req.url ?? '';
+    if (!raw.startsWith(PREFIX)) return false;
+    const [pathname, search = ''] = raw.slice(PREFIX.length).split('?');
+    const query = new URLSearchParams(search);
+    const root = vaultRoot();
+
+    try {
+        if (req.method === 'GET' && pathname === 'list') {
+            send(res, 200, await listMarkdown(root));
+            return true;
+        }
+
+        if (req.method === 'GET' && pathname === 'doc') {
+            const p = safeRel(query.get('path') ?? '');
+            if (!p) return fail(res, 400, 'path 非法');
+            if (!MD_RE.test(p)) return fail(res, 400, '只读 .md');
+            send(res, 200, { path: p, markdown: await fs.readFile(path.join(root, p), 'utf8') });
+            return true;
+        }
+
+        if (req.method === 'PUT' && pathname === 'doc') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { path?: string; markdown?: string };
+            const p = safeRel(body.path ?? '');
+            if (!p || !MD_RE.test(p) || typeof body.markdown !== 'string') {
+                return fail(res, 400, '需要 {path: *.md, markdown}');
+            }
+            const abs = path.join(root, p);
+            await fs.mkdir(path.dirname(abs), { recursive: true });
+            await fs.writeFile(abs, body.markdown, 'utf8');
+            send(res, 204);
+            return true;
+        }
+
+        if (req.method === 'POST' && pathname === 'image') {
+            const bytes = await readBody(req);
+            const src = await saveAttachment(root, bytes, String(req.headers['x-folio-hint'] ?? 'image.png'));
+            send(res, 200, { src });
+            return true;
+        }
+
+        return fail(res, 404, `未知路由 ${req.method} /folio/v1/${pathname}`);
+    } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code === 'ENOENT' ? 404 : 400;
+        return fail(res, code, err instanceof Error ? err.message : String(err));
+    }
+}

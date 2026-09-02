@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>米素</title>
+  </head>
+  <body>
+    <div id="app">
+      <nav id="files" aria-label="文件列表"></nav>
+      <main id="page">
+        <header id="page-head">
+          <span id="current-path">未打开</span>
+          <button id="save" type="button" disabled>保存</button>
+        </header>
+        <textarea id="editor" spellcheck="false" placeholder="左侧选一篇，或直接改这里后保存" disabled></textarea>
+        <p id="status" role="status"></p>
+      </main>
+    </div>
+    <style>
+      /* 单元 0 的临时骨架页：只有布局，颜色/字号/间距全部吃 --folio-*。单元 1 换 Muya。 */
+      #app {
+        display: flex;
+        height: 100vh;
+      }
+      #files {
+        width: 220px;
+        flex: none;
+        overflow-y: auto;
+        border-right: 1px solid var(--folio-border);
+        background: var(--folio-panel);
+        padding: var(--folio-space-3);
+      }
+      #files button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 0;
+        background: none;
+        color: var(--folio-fg);
+        font: inherit;
+        font-size: var(--folio-font-size-sm);
+        padding: var(--folio-space-2) var(--folio-space-3);
+        border-radius: var(--folio-radius);
+        cursor: pointer;
+      }
+      #files button:hover {
+        background: var(--folio-hover);
+      }
+      #files button[aria-current="true"] {
+        background: var(--folio-hover-active);
+        font-weight: 600;
+      }
+      #page {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        padding: var(--folio-space-4);
+        gap: var(--folio-space-3);
+      }
+      #page-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--folio-space-3);
+      }
+      #current-path {
+        color: var(--folio-fg-muted);
+        font-size: var(--folio-font-size-sm);
+      }
+      #editor {
+        flex: 1;
+        resize: none;
+        border: 1px solid var(--folio-border);
+        border-radius: var(--folio-radius);
+        background: var(--folio-bg);
+        color: var(--folio-fg);
+        font-family: var(--folio-font-mono);
+        font-size: var(--folio-font-size-sm);
+        line-height: var(--folio-line-height);
+        padding: var(--folio-space-3);
+      }
+      #save {
+        border: 1px solid var(--folio-border-strong);
+        border-radius: var(--folio-radius);
+        background: var(--folio-primary);
+        color: var(--folio-primary-fg);
+        font: inherit;
+        font-size: var(--folio-font-size-sm);
+        padding: var(--folio-space-1) var(--folio-space-4);
+        cursor: pointer;
+      }
+      #save:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      #status {
+        margin: 0;
+        min-height: 1.5em;
+        color: var(--folio-fg-muted);
+        font-size: var(--folio-font-size-sm);
+      }
+    </style>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

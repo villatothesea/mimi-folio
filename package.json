@@ -5,10 +5,16 @@
   "description": "米素：一页可写的 markdown（folio）",
   "type": "module",
   "scripts": {
-    "dev": "echo \"单元 0：先接 Host 再挂 Muya，见 docs/计划.md\" && exit 1",
-    "build": "echo \"单元 0 未做\" && exit 1"
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "start": "node src/server/main.ts"
   },
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
   }
 }
