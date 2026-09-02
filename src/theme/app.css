@@ -39,6 +39,13 @@
     cursor: pointer;
 }
 
+.side-group {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-2) var(--folio-space-3) var(--folio-space-1);
+    letter-spacing: 0.05em;
+}
+
 #files button:hover {
     background: var(--folio-hover);
 }

@@ -3,9 +3,10 @@ import './theme/tokens.css';
 import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
+import { renderSidebar } from './ui/sidebar.ts';
 
 /**
- * 页面编排：列表选文件 → host.read → Muya 编辑 → json-change 防抖 → host.write。
+ * 页面编排：侧栏选文件 → host.read → Muya 编辑 → json-change 防抖 → host.write。
  * 真源是盘上的 md；编辑器只是视图（AGENTS.md 硬规则 3）。
  */
 const host = createHost();
@@ -43,7 +44,7 @@ function onEditorChange(markdown: string): void {
     saveTimer = setTimeout(() => void saveNow(markdown), 400);
 }
 
-async function open(path: string, button?: HTMLButtonElement): Promise<void> {
+async function open(path: string): Promise<void> {
     try {
         // 切文件前把上一篇落盘
         if (openFile && currentEditor()) await saveNow(currentEditor()!.getMarkdown());
@@ -54,30 +55,15 @@ async function open(path: string, button?: HTMLButtonElement): Promise<void> {
         currentPathEl.textContent = doc.path;
         saySave('');
         mountEditor(wrap, doc.markdown, host, onEditorChange);
-        markCurrent(button);
     } catch (err) {
         saySave(`读失败：${(err as Error).message}`);
     }
 }
 
-function markCurrent(button?: HTMLButtonElement): void {
-    nav.querySelectorAll('button').forEach((b) => b.removeAttribute('aria-current'));
-    button?.setAttribute('aria-current', 'true');
-}
-
 async function refreshList(): Promise<void> {
     try {
         const files = await host.list();
-        nav.replaceChildren(
-            ...files.map((file) => {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.textContent = file.title;
-                button.title = file.path;
-                button.addEventListener('click', () => void open(file.path, button));
-                return button;
-            }),
-        );
+        renderSidebar(nav, files, { activePath: openFile, onOpen: (p) => void open(p) });
     } catch (err) {
         saySave(`列目录失败：${(err as Error).message}`);
     }
