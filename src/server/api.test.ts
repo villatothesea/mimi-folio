@@ -19,9 +19,10 @@ await fs.writeFile(
 );
 await fs.writeFile(
     path.join(vault, 'memos', 'm1.md'),
-    '---\ntags: [速记]\n---\n# 一条速记\n',
+    '---\ntags: [速记]\n---\n# 一条速记\n\n想到 [[tagged]]。\n',
     'utf8',
 );
+await fs.writeFile(path.join(vault, 'notes', 'orphan.md'), '链向 [[m1]]\n', 'utf8');
 
 const server = createAppServer();
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -34,7 +35,7 @@ describe('GET /folio/v1/*', () => {
     it('list 返回全部 md、标题、tags 与 kind', async () => {
         const res = await fetch(`${base}/folio/v1/list`);
         const files = (await res.json()) as { path: string; title: string; tags: string[]; kind: string }[];
-        assert.equal(files.length, 3);
+        assert.equal(files.length, 4);
         const tagged = files.find((f) => f.path === 'notes/tagged.md')!;
         assert.deepEqual(tagged.tags, ['项目', '长文']);
         assert.equal(tagged.kind, 'note');
@@ -123,6 +124,27 @@ describe('PUT /folio/v1/doc', () => {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ path: 'notes/x.exe', markdown: 'MZ' }),
         });
+        assert.equal(res.status, 400);
+    });
+});
+
+describe('GET /folio/v1/index', () => {
+    it('出链解析到具体页，反链能看见谁链过来', async () => {
+        const res = await fetch(`${base}/folio/v1/index?path=${encodeURIComponent('memos/m1.md')}`);
+        const index = (await res.json()) as { outgoing: string[]; backlinks: string[] };
+        assert.deepEqual(index.outgoing, ['notes/tagged.md']);
+        assert.deepEqual(index.backlinks, ['notes/orphan.md']);
+    });
+
+    it('按文件名解析跨目录链接', async () => {
+        const res = await fetch(`${base}/folio/v1/index?path=${encodeURIComponent('notes/orphan.md')}`);
+        const index = (await res.json()) as { outgoing: string[]; backlinks: string[] };
+        assert.deepEqual(index.outgoing, ['memos/m1.md']);
+        assert.deepEqual(index.backlinks, []);
+    });
+
+    it('index 缺 path 400', async () => {
+        const res = await fetch(`${base}/folio/v1/index`);
         assert.equal(res.status, 400);
     });
 });

@@ -1,4 +1,4 @@
-import type { FolioAttachment, FolioDoc, FolioHost, FolioImage, FolioListItem, FolioListOpts, FolioPath } from './types.ts';
+import type { FolioAttachment, FolioDoc, FolioHost, FolioImage, FolioIndex, FolioListItem, FolioListOpts, FolioPath } from './types.ts';
 
 /**
  * 独立模式的浏览器侧实现：fetch 本仓小服务（src/server/）的 /folio/v1/*。
@@ -68,5 +68,10 @@ export class StandaloneHost implements FolioHost {
             body: new Blob([new Uint8Array(bytes)]),
         });
         return this.json<FolioAttachment>(resp);
+    }
+
+    async index(path: FolioPath): Promise<FolioIndex> {
+        const resp = await fetch(this.url(`/folio/v1/index?path=${encodeURIComponent(path)}`));
+        return this.json<FolioIndex>(resp);
     }
 }

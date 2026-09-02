@@ -9,6 +9,7 @@ import path from 'node:path';
 
 import type { FolioListItem, FolioListOpts } from '../host/types.ts';
 import { splitFrontmatter } from './frontmatter.ts';
+import { buildIndex, linksFor, type WikilinkIndex } from './wikilink.ts';
 
 const PREFIX = '/folio/v1/';
 const MD_RE = /\.md$/i;
@@ -95,6 +96,24 @@ async function listMarkdown(root: string, opts: FolioListOpts): Promise<FolioLis
     if (opts.tag) result = result.filter((f) => f.tags?.includes(opts.tag!));
     if (opts.kind) result = result.filter((f) => f.kind === opts.kind);
     return result.sort((a, b) => a.path.localeCompare(b.path, 'zh'));
+}
+
+/** 全 vault 的 wikilink 索引：出链/反链都在这一棵树上算（iwe 算法合入后归 daemon）。 */
+async function buildWikilinkIndex(root: string): Promise<WikilinkIndex> {
+    const docs = new Map<string, string>();
+    async function walk(dir: string): Promise<void> {
+        for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+            if (entry.name.startsWith('.')) continue;
+            const abs = path.join(dir, entry.name);
+            if (entry.isDirectory()) await walk(abs);
+            else if (entry.isFile() && MD_RE.test(entry.name)) {
+                const rel = path.relative(root, abs).split(path.sep).join('/');
+                docs.set(rel, await fs.readFile(abs, 'utf8'));
+            }
+        }
+    }
+    await walk(root);
+    return buildIndex(docs);
 }
 
 /** 附件名只留安全字符；重名时塞时间戳，不覆盖。 */
@@ -193,6 +212,14 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             await fs.mkdir(path.dirname(abs), { recursive: true });
             await fs.writeFile(abs, body.markdown, 'utf8');
             send(res, 204);
+            return true;
+        }
+
+        if (req.method === 'GET' && pathname === 'index') {
+            const p = safeRel(query.get('path') ?? '');
+            if (!p) return fail(res, 400, 'path 非法');
+            const index = await buildWikilinkIndex(root);
+            send(res, 200, linksFor(index, p));
             return true;
         }
 

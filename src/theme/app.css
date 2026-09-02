@@ -110,3 +110,71 @@
     flex: 1;
     overflow-y: auto;
 }
+
+#backlinks {
+    border-top: 1px solid var(--folio-border);
+    background: var(--folio-panel);
+    padding: var(--folio-space-2) var(--folio-space-4);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--folio-space-2);
+    min-height: var(--folio-space-4);
+}
+
+#backlinks:empty {
+    display: none;
+}
+
+.bl-heading {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+}
+
+.bl-group {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--folio-space-1);
+}
+
+.bl-label {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+}
+
+.bl-chip {
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-2);
+    cursor: pointer;
+}
+
+.bl-chip:hover {
+    background: var(--folio-hover);
+}
+
+.wiki-chip {
+    position: fixed;
+    z-index: 30;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--folio-border-strong);
+    border-radius: var(--folio-radius);
+    background: var(--folio-bg);
+    box-shadow: var(--folio-shadow);
+    padding: var(--folio-space-1) var(--folio-space-3);
+    font-size: var(--folio-font-size-sm);
+    cursor: pointer;
+    max-width: 240px;
+}
+
+.wiki-chip-label {
+    color: var(--folio-fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

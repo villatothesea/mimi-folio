@@ -4,6 +4,8 @@ import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { renderSidebar, renderTagBar } from './ui/sidebar.ts';
+import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
+import type { FolioListItem } from './host/types.ts';
 
 /**
  * 页面编排：侧栏选文件 → host.read → Muya 编辑 → json-change 防抖 → host.write。
@@ -21,6 +23,7 @@ let openFile: string | null = null;
 let lastSaved = '';
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let activeTag: string | null = null;
+let allFiles: FolioListItem[] = [];
 
 function saySave(message: string): void {
     saveStateEl.textContent = message;
@@ -34,9 +37,28 @@ async function saveNow(markdown: string): Promise<void> {
         lastSaved = markdown;
         saySave(`已存 ${new Date().toLocaleTimeString()}`);
         void refreshList();
+        void refreshBacklinks();
     } catch (err) {
         saySave(`存失败：${(err as Error).message}`);
     }
+}
+
+async function refreshBacklinks(): Promise<void> {
+    if (!openFile || !host.index) return;
+    try {
+        const index = await host.index(openFile);
+        renderBacklinks(backlinksEl, index, (p) => void open(p));
+    } catch {
+        backlinksEl.replaceChildren();
+    }
+}
+
+/** 点击未命中的 wikilink → 在 notes/ 建页并打开（Foam 规则）。 */
+async function createAndOpen(path: string): Promise<void> {
+    const name = path.replace(/^notes\//, '').replace(/\.md$/i, '');
+    await host.write(path, `# ${name}\n`);
+    await open(path);
+    void refreshList();
 }
 
 function onEditorChange(markdown: string): void {
@@ -57,21 +79,25 @@ async function open(path: string): Promise<void> {
         currentPathEl.textContent = doc.path;
         saySave('');
         mountEditor(wrap, doc.markdown, host, onEditorChange);
+        void refreshBacklinks();
     } catch (err) {
         saySave(`读失败：${(err as Error).message}`);
     }
 }
 
+const backlinksEl = document.querySelector<HTMLElement>('#backlinks')!;
+
 async function refreshList(): Promise<void> {
     try {
-        const allFiles = await host.list();
+        const files = await host.list();
+        allFiles = files;
         // 筛选走 host.list(opts)（单元 6 契约），标签并集来自全量
-        const files = activeTag ? await host.list({ tag: activeTag }) : allFiles;
+        const shown = activeTag ? await host.list({ tag: activeTag }) : allFiles;
         renderTagBar(tagbar, allFiles, activeTag, (tag) => {
             activeTag = activeTag === tag ? null : tag;
             void refreshList();
         });
-        renderSidebar(nav, files, { activePath: openFile, onOpen: (p) => void open(p) });
+        renderSidebar(nav, shown, { activePath: openFile, onOpen: (p) => void open(p) });
     } catch (err) {
         saySave(`列目录失败：${(err as Error).message}`);
     }
@@ -89,5 +115,12 @@ window.addEventListener('pagehide', () => {
 
 // 音视频/图片文件的粘贴与拖放落盘（单元 4）；外壳常驻，编辑器重建不受影响
 attachMediaHandlers(wrap, host, currentEditor);
+
+// [[wikilink]] 点击芯片 / Ctrl+点击跳转（单元 7）
+attachWikilinkHandlers(wrap, {
+    getPages: () => allFiles.map((f) => f.path),
+    onOpen: (p) => void open(p),
+    onCreate: (p) => void createAndOpen(p),
+});
 
 void refreshList();
