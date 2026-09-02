@@ -8,9 +8,18 @@
   <body>
     <div id="app">
       <aside id="sidebar">
-        <header id="sidebar-head">米素</header>
+        <header id="sidebar-head">
+          <span>米素</span>
+          <span id="view-switch">
+            <button id="view-notes" type="button" aria-pressed="true">笔记</button>
+            <button id="view-memos" type="button" aria-pressed="false">速记</button>
+          </span>
+        </header>
         <div id="tagbar" aria-label="标签筛选"></div>
         <nav id="files" aria-label="文件列表"></nav>
+        <footer id="sidebar-foot">
+          <button id="new-memo" type="button" hidden>新建速记</button>
+        </footer>
       </aside>
       <main id="page">
         <header id="page-head">

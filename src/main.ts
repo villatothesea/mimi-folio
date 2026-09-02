@@ -3,7 +3,7 @@ import './theme/tokens.css';
 import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
-import { renderSidebar, renderTagBar } from './ui/sidebar.ts';
+import { renderMemoTimeline, renderSidebar, renderTagBar } from './ui/sidebar.ts';
 import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
 import type { FolioListItem } from './host/types.ts';
 
@@ -18,12 +18,16 @@ const tagbar = document.querySelector<HTMLElement>('#tagbar')!;
 const wrap = document.querySelector<HTMLElement>('#editor-wrap')!;
 const currentPathEl = document.querySelector<HTMLElement>('#current-path')!;
 const saveStateEl = document.querySelector<HTMLElement>('#save-state')!;
+const viewNotesBtn = document.querySelector<HTMLButtonElement>('#view-notes')!;
+const viewMemosBtn = document.querySelector<HTMLButtonElement>('#view-memos')!;
+const newMemoBtn = document.querySelector<HTMLButtonElement>('#new-memo')!;
 
 let openFile: string | null = null;
 let lastSaved = '';
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let activeTag: string | null = null;
 let allFiles: FolioListItem[] = [];
+let view: 'notes' | 'memos' = 'notes';
 
 function saySave(message: string): void {
     saveStateEl.textContent = message;
@@ -92,16 +96,53 @@ async function refreshList(): Promise<void> {
         const files = await host.list();
         allFiles = files;
         // 筛选走 host.list(opts)（单元 6 契约），标签并集来自全量
-        const shown = activeTag ? await host.list({ tag: activeTag }) : allFiles;
-        renderTagBar(tagbar, allFiles, activeTag, (tag) => {
+        const shown = activeTag ? await host.list({ tag: activeTag }) : files;
+        renderTagBar(tagbar, files, activeTag, (tag) => {
             activeTag = activeTag === tag ? null : tag;
             void refreshList();
         });
-        renderSidebar(nav, shown, { activePath: openFile, onOpen: (p) => void open(p) });
+        if (view === 'memos') {
+            renderMemoTimeline(nav, shown.filter((f) => f.kind === 'memo'), {
+                activePath: openFile,
+                onOpen: (p) => void open(p),
+            });
+        } else {
+            renderSidebar(nav, shown.filter((f) => f.kind !== 'memo'), {
+                activePath: openFile,
+                onOpen: (p) => void open(p),
+            });
+        }
     } catch (err) {
         saySave(`列目录失败：${(err as Error).message}`);
     }
 }
+
+function setView(next: 'notes' | 'memos'): void {
+    view = next;
+    viewNotesBtn.setAttribute('aria-pressed', String(next === 'notes'));
+    viewMemosBtn.setAttribute('aria-pressed', String(next === 'memos'));
+    newMemoBtn.hidden = next !== 'memos';
+    void refreshList();
+}
+
+/** 新建速记：memos/<日期时间>.md，frontmatter 留好 tags（单元 8）。 */
+async function newMemo(): Promise<void> {
+    const stamp = new Date()
+        .toLocaleString('sv', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        .replace(/[\s:]/g, '-');
+    const path = `memos/${stamp}.md`;
+    try {
+        await host.write(path, '---\ntags: []\n---\n\n');
+        await open(path);
+        void refreshList();
+    } catch (err) {
+        saySave(`新建失败：${(err as Error).message}`);
+    }
+}
+
+viewNotesBtn.addEventListener('click', () => setView('notes'));
+viewMemosBtn.addEventListener('click', () => setView('memos'));
+newMemoBtn.addEventListener('click', () => void newMemo());
 
 window.addEventListener('beforeunload', (event) => {
     if (openFile && currentEditor() && currentEditor()!.getMarkdown() !== lastSaved) {

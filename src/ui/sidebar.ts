@@ -48,6 +48,45 @@ export function markCurrent(nav: HTMLElement, path: string | null): void {
 }
 
 /**
+ * 速记时间线（单元 8）：memos/ 按文件名倒序（约定文件名带日期前缀），
+ * 标题旁挂标签。是同一座 vault 的一种看法，不是嵌 memos。
+ */
+export function renderMemoTimeline(
+    nav: HTMLElement,
+    files: FolioListItem[],
+    opts: SidebarOptions,
+): void {
+    nav.replaceChildren();
+    const sorted = [...files].sort((a, b) => b.path.localeCompare(a.path, 'zh'));
+    for (const file of sorted) {
+        const row = document.createElement('div');
+        row.className = 'memo-row';
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'memo-open';
+        button.textContent = file.title;
+        button.title = file.path;
+        button.dataset.path = file.path;
+        if (file.path === opts.activePath) button.setAttribute('aria-current', 'true');
+        button.addEventListener('click', () => opts.onOpen(file.path, button));
+        row.append(button);
+
+        const tags = document.createElement('span');
+        tags.className = 'memo-tags';
+        tags.textContent = file.tags?.length ? file.tags.join(' · ') : '';
+        row.append(tags);
+
+        nav.append(row);
+    }
+    if (sorted.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'side-group';
+        empty.textContent = 'memos/ 还没有速记';
+        nav.append(empty);
+    }
+}
+/**
  * 标签条（单元 6）：frontmatter tags 的并集，点一个筛一层；一条可多标签。
  * 数据来自 host.list() 的 tags 字段，不搞 [[标签页]]（AGENTS.md 不做清单）。
  */
