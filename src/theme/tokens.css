@@ -34,6 +34,9 @@
     --folio-radius: 0px;
     --folio-icon-size: 18px;
     --folio-icon-stroke: 1.5;
+    --folio-measure: 800px;
+    --folio-font-size-code: 14px;
+    --folio-shadow: rgb(0 0 0 / 5%) 0 0 0 1px, rgb(0 0 0 / 6%) 0 3px 6px;
 
     /* Muya 只吃下面这些，从 folio 映射，禁止在别处给 --mu-* 赋 hex */
     --mu-font-size: var(--folio-font-size);

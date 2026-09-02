@@ -21,6 +21,8 @@ import {
 import type { Muya as TMuya } from '@muyajs/core';
 import { MENU_CONFIG } from '@muyajs/core/ui/paragraphQuickInsertMenu/config.ts';
 
+import '../theme/muya.css';
+
 /**
  * 单元 2：斜杠菜单裁剪与内容开关（AGENTS.md 硬规则 5：默认不出网、开放 HTML 不进斜杠）。
  * MENU_CONFIG 是 muya 模块级常量，ParagraphQuickInsertMenu 构造时引用同一份，

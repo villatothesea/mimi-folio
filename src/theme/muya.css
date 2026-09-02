@@ -1,0 +1,64 @@
+/**
+ * Muya 变量映射：--mu-* / --editor-* / --float-* 等全部来自 --folio-*，
+ * 禁止在此出现第二处色值（AGENTS.md 硬规则 8）。换主题只动 tokens.css。
+ * 作用域压在 .mu-editor 上，覆盖 muya 自带 :root 的出厂绿色调。
+ */
+.mu-editor {
+    /* 编辑器主体 */
+    --theme-color: var(--folio-primary);
+    --highlight-color: var(--folio-selection);
+    --selection-color: var(--folio-selection);
+    --editor-color: var(--folio-fg);
+    --editor-color-80: var(--folio-fg);
+    --editor-color-50: var(--folio-fg-muted);
+    --editor-color-30: var(--folio-border-strong);
+    --editor-color-10: var(--folio-border);
+    --editor-color-04: var(--folio-bg-alt);
+    --editor-bg-color: var(--folio-bg);
+    --editor-area-width: var(--folio-measure);
+
+    /* 附件界面元素 */
+    --delete-color: var(--folio-danger);
+    --icon-color: var(--folio-fg-muted);
+    --code-block-bg-color: var(--folio-bg-alt);
+    --table-border-color: var(--folio-border);
+    --input-bg-color: var(--folio-bg-alt);
+
+    /* 按钮 */
+    --button-font-color: var(--folio-fg);
+    --button-bg-color: var(--folio-bg);
+    --button-border: 1px solid var(--folio-border);
+    --button-bg-color-hover: linear-gradient(var(--folio-hover), var(--folio-hover));
+    --button-border-hover: 1px solid var(--folio-border-strong);
+    --button-bg-color-active: var(--folio-hover-active);
+    --button-border-active: 1px solid var(--folio-border-strong);
+    --button-border-focus: 1px solid var(--folio-border-strong);
+
+    /* 浮层（斜杠菜单、行内工具条等） */
+    --float-bg-color: var(--folio-bg);
+    --float-hover-color: var(--folio-hover);
+    --float-border-color: var(--folio-border);
+    --float-shadow: var(--folio-shadow);
+
+    /* markdown 元素 */
+    --link-color: var(--folio-primary);
+    --h1-color: var(--folio-fg);
+    --h2-color: var(--folio-fg);
+    --h3-color: var(--folio-fg);
+    --h4-color: var(--folio-fg);
+    --h5-color: var(--folio-fg);
+    --h6-color: var(--folio-fg);
+    --blockquote-text-color: var(--folio-fg-muted);
+    --blockquote-border-color: var(--folio-border-strong);
+    --strong-color: inherit;
+    --em-color: inherit;
+    --list-marker-color: inherit;
+    --hr-color: var(--folio-border);
+
+    /* 排版，来自 tokens.css */
+    --mu-font-size: var(--folio-font-size);
+    --mu-line-height: var(--folio-line-height);
+    --mu-font-family: var(--folio-font);
+    --mu-code-font-size: var(--folio-font-size-code);
+    --mu-code-font-family: var(--folio-font-mono);
+}
