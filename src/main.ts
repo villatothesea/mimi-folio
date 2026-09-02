@@ -4,6 +4,7 @@ import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { renderMemoTimeline, renderSidebar, renderTagBar } from './ui/sidebar.ts';
+import { extractVideoLinks, renderEmbeds } from './ui/embeds.ts';
 import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
 import type { FolioListItem } from './host/types.ts';
 
@@ -68,6 +69,7 @@ async function createAndOpen(path: string): Promise<void> {
 function onEditorChange(markdown: string): void {
     if (markdown === lastSaved) return;
     saySave('改动中…');
+    renderEmbeds(embedsEl, extractVideoLinks(markdown), createVideoIframe);
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => void saveNow(markdown), 400);
 }
@@ -83,6 +85,7 @@ async function open(path: string): Promise<void> {
         currentPathEl.textContent = doc.path;
         saySave('');
         mountEditor(wrap, doc.markdown, host, onEditorChange);
+        renderEmbeds(embedsEl, extractVideoLinks(doc.markdown), createVideoIframe);
         void refreshBacklinks();
     } catch (err) {
         saySave(`读失败：${(err as Error).message}`);
@@ -90,6 +93,7 @@ async function open(path: string): Promise<void> {
 }
 
 const backlinksEl = document.querySelector<HTMLElement>('#backlinks')!;
+const embedsEl = document.querySelector<HTMLElement>('#embeds')!;
 
 async function refreshList(): Promise<void> {
     try {
@@ -138,6 +142,15 @@ async function newMemo(): Promise<void> {
     } catch (err) {
         saySave(`新建失败：${(err as Error).message}`);
     }
+}
+
+/** 页内播放器（单元 9）：iframe 只存在于页面，md 里仍是链接。 */
+function createVideoIframe(link: { embed: string }): HTMLIFrameElement {
+    const frame = document.createElement('iframe');
+    frame.src = link.embed;
+    frame.setAttribute('allow', 'fullscreen; encrypted-media; picture-in-picture');
+    frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+    return frame;
 }
 
 viewNotesBtn.addEventListener('click', () => setView('notes'));
