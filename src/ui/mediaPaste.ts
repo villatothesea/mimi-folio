@@ -1,0 +1,91 @@
+/**
+ * 本机多媒体进盘（单元 4）：
+ *   - 截图/位图粘贴 → muya 原生 imageAction（editorHost 里接 host.saveImage）
+ *   - 音视频文件粘贴/拖放 → host.saveFile 落盘，md 插 <video>/<audio> html-block
+ *   - 图片文件拖放 → host.saveImage 后 pasteImage；其它文件插相对链接
+ * 监听挂在编辑器外壳上用捕获阶段，拦下的不再进 muya 默认粘贴。
+ */
+import type { Muya } from '@muyajs/core';
+
+import type { FolioHost } from '../host/types.ts';
+
+const AV_RE = /\.(mp4|webm|mp3|wav|ogg|m4a|flac)$/i;
+const IMG_RE = /\.(png|jpe?g|gif|webp|svg)$/i;
+
+async function bytesOf(file: File): Promise<Uint8Array> {
+    return new Uint8Array(await file.arrayBuffer());
+}
+
+function stampHint(name: string, fallbackExt: string): string {
+    const base = name.replace(/\.[^.]*$/, '').trim() || 'attachment';
+    // 原名自带扩展名就保留，只在没有扩展名时补默认值
+    const ext = name.match(/\.[^.]*$/)?.[0] ?? fallbackExt;
+    return `${base}${ext}`;
+}
+
+async function insertAvBlock(editor: Muya, src: string, file: File): Promise<void> {
+    const html = /\.mp4|webm$/i.test(file.name)
+        ? `<video src="${src}" controls></video>`
+        : `<audio src="${src}" controls></audio>`;
+    // insertParagraph 对 '<' 开头的文本会直接建成 html-block，无需再转换
+    editor.insertParagraph('after', html);
+}
+
+export function attachMediaHandlers(container: HTMLElement, host: FolioHost, getEditor: () => Muya | null): void {
+    if (!host.saveFile) throw new Error('当前 FolioHost 未实现 saveFile，无法落盘音视频附件');
+    const putFile = host.saveFile.bind(host);
+    async function handleFiles(files: FileList | File[], isPaste: boolean): Promise<void> {
+        const editor = getEditor();
+        if (!editor) return;
+        for (const file of files) {
+            const name = file.name || '粘贴.png';
+            if (isPaste && file.type.startsWith('image/')) continue; // 位图粘贴归 muya imageAction
+            if (AV_RE.test(name)) {
+                const { src } = await putFile(await bytesOf(file), stampHint(name, file.type.startsWith('video/') ? '.mp4' : '.mp3'));
+                await insertAvBlock(editor, src, file);
+            } else if (IMG_RE.test(name) || file.type.startsWith('image/')) {
+                const { src } = await host.saveImage(await bytesOf(file), stampHint(name, '.png'));
+                editor.pasteImage(src);
+            } else {
+                const { src } = await putFile(await bytesOf(file), name);
+                editor.insertParagraph('after', `[${name}](${src})`);
+            }
+        }
+    }
+
+    container.addEventListener(
+        'paste',
+        (event) => {
+            const files = event.clipboardData?.files;
+            if (!files || files.length === 0) return;
+            const av = [...files].some((f) => AV_RE.test(f.name) || (!f.type.startsWith('image/') && f.type !== ''));
+            // 只拦 muya 不会处理的（音视频/其它文件）；位图继续走 muya
+            if (!av) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            void handleFiles(files, true);
+        },
+        { capture: true },
+    );
+
+    container.addEventListener(
+        'drop',
+        (event) => {
+            const files = event.dataTransfer?.files;
+            if (!files || files.length === 0) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            void handleFiles(files, false);
+        },
+        { capture: true },
+    );
+
+    // 拖拽悬停时别让浏览器直接打开文件
+    container.addEventListener(
+        'dragover',
+        (event) => {
+            if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+        },
+        { capture: true },
+    );
+}

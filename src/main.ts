@@ -2,6 +2,7 @@ import './theme/app.css';
 import './theme/tokens.css';
 import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
+import { attachMediaHandlers } from './ui/mediaPaste.ts';
 
 /**
  * 页面编排：列表选文件 → host.read → Muya 编辑 → json-change 防抖 → host.write。
@@ -52,7 +53,7 @@ async function open(path: string, button?: HTMLButtonElement): Promise<void> {
         lastSaved = doc.markdown;
         currentPathEl.textContent = doc.path;
         saySave('');
-        mountEditor(wrap, doc.markdown, onEditorChange);
+        mountEditor(wrap, doc.markdown, host, onEditorChange);
         markCurrent(button);
     } catch (err) {
         saySave(`读失败：${(err as Error).message}`);
@@ -91,5 +92,8 @@ window.addEventListener('pagehide', () => {
     if (openFile && currentEditor()) void saveNow(currentEditor()!.getMarkdown());
     destroyEditor();
 });
+
+// 音视频/图片文件的粘贴与拖放落盘（单元 4）；外壳常驻，编辑器重建不受影响
+attachMediaHandlers(wrap, host, currentEditor);
 
 void refreshList();

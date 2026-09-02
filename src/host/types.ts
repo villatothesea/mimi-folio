@@ -21,6 +21,9 @@ export type FolioImage = {
     src: string;
 };
 
+/** saveFile 与 saveImage 同形：都回 attachments/ 下的相对路径 */
+export type FolioAttachment = FolioImage;
+
 export type FolioIndex = {
     outgoing: FolioPath[];
     backlinks: FolioPath[];
@@ -31,6 +34,8 @@ export interface FolioHost {
     write(path: FolioPath, markdown: string): Promise<void>;
     list(): Promise<FolioListItem[]>;
     saveImage(bytes: Uint8Array, hint: string): Promise<FolioImage>;
+    /** 音视频等附件落盘（单元 4）；合入后由 daemon 提供同名能力 */
+    saveFile?(bytes: Uint8Array, hint: string): Promise<FolioAttachment>;
     index?(path: FolioPath): Promise<FolioIndex>;
 }
 

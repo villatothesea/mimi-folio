@@ -1,4 +1,4 @@
-import type { FolioHost, FolioDoc, FolioImage, FolioIndex, FolioListItem, FolioPath } from './types';
+import type { FolioAttachment, FolioDoc, FolioHost, FolioImage, FolioIndex, FolioListItem, FolioPath } from './types';
 
 /**
  * 合入米米时填实：打 daemon 的 /folio/v1/*。
@@ -18,6 +18,10 @@ export class MimiHost implements FolioHost {
     }
 
     async saveImage(_bytes: Uint8Array, _hint: string): Promise<FolioImage> {
+        throw new Error('MimiHost：合入前未接 daemon');
+    }
+
+    async saveFile(_bytes: Uint8Array, _hint: string): Promise<FolioAttachment> {
         throw new Error('MimiHost：合入前未接 daemon');
     }
 

@@ -1,4 +1,4 @@
-import type { FolioDoc, FolioHost, FolioImage, FolioListItem, FolioPath } from './types.ts';
+import type { FolioAttachment, FolioDoc, FolioHost, FolioImage, FolioListItem, FolioPath } from './types.ts';
 
 /**
  * 独立模式的浏览器侧实现：fetch 本仓小服务（src/server/）的 /folio/v1/*。
@@ -48,10 +48,20 @@ export class StandaloneHost implements FolioHost {
     async saveImage(bytes: Uint8Array, hint: string): Promise<FolioImage> {
         const resp = await fetch(this.url('/folio/v1/image'), {
             method: 'POST',
-            headers: { 'content-type': 'application/octet-stream', 'x-folio-hint': hint },
+            // 文件名可能含中文，头部只许 ByteString，先编码
+            headers: { 'content-type': 'application/octet-stream', 'x-folio-hint': encodeURIComponent(hint) },
             // 拷进独立 ArrayBuffer，规避 Uint8Array<ArrayBufferLike> 与 BlobPart 的类型冲突
             body: new Blob([new Uint8Array(bytes)]),
         });
         return this.json<FolioImage>(resp);
+    }
+
+    async saveFile(bytes: Uint8Array, hint: string): Promise<FolioAttachment> {
+        const resp = await fetch(this.url('/folio/v1/file'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/octet-stream', 'x-folio-hint': encodeURIComponent(hint) },
+            body: new Blob([new Uint8Array(bytes)]),
+        });
+        return this.json<FolioAttachment>(resp);
     }
 }

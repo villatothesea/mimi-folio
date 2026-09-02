@@ -21,6 +21,7 @@ import {
 import type { Muya as TMuya } from '@muyajs/core';
 import { MENU_CONFIG } from '@muyajs/core/ui/paragraphQuickInsertMenu/config.ts';
 
+import type { FolioHost } from '../host/types.ts';
 import '../theme/muya.css';
 
 /**
@@ -76,7 +77,7 @@ export function currentEditor(): TMuya | null {
 }
 
 /** 挂载一篇 markdown；muya 会替换传入元素，故每次重建壳元素。 */
-export function mountEditor(wrap: HTMLElement, markdown: string, onChange: (markdown: string) => void): void {
+export function mountEditor(wrap: HTMLElement, markdown: string, host: FolioHost, onChange: (markdown: string) => void): void {
     const fresh = document.createElement('div');
     wrap.replaceChildren(fresh);
     const editor = new Muya(fresh, {
@@ -89,6 +90,14 @@ export function mountEditor(wrap: HTMLElement, markdown: string, onChange: (mark
         plantumlServer: 'http://127.0.0.1:9',
         mermaidTheme: 'default',
         vegaTheme: 'latimes',
+        // 粘贴/拖放的位图经此落盘（单元 4），md 里只留相对路径
+        imageAction: async (state) => {
+            if (!state.src.startsWith('data:')) return state.src;
+            const bytes = new Uint8Array(await (await fetch(state.src)).arrayBuffer());
+            const hint = state.alt || state.title || `image-${Date.now()}.png`;
+            const { src } = await host.saveImage(bytes, hint);
+            return src;
+        },
     });
     editor.locale(zhCN);
     editor.init();

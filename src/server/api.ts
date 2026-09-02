@@ -98,6 +98,43 @@ async function saveAttachment(root: string, bytes: Buffer, hint: string): Promis
     return `attachments/${name}`;
 }
 
+const ATTACH_MIME: Record<string, string> = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.ogg': 'audio/ogg',
+    '.pdf': 'application/pdf',
+};
+
+/**
+ * GET /attachments/<name>：把 vault 附件端给 <img>/<video>/<audio>。
+ * md 里存的是相对路径，页面根就是 vault 根；合入后 daemon 按同样规则端。
+ */
+export async function serveAttachment(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+    const raw = req.url ?? '';
+    if (req.method !== 'GET' || !raw.startsWith('/attachments/')) return false;
+    const name = decodeURIComponent(raw.slice('/attachments/'.length).split('?')[0]);
+    if (!name || name.includes('/') || name.includes('\\') || name.includes('..') || name.startsWith('.')) {
+        fail(res, 400, '附件名非法');
+        return true;
+    }
+    try {
+        const abs = path.join(vaultRoot(), 'attachments', name);
+        res.setHeader('content-type', ATTACH_MIME[path.extname(abs).toLowerCase()] ?? 'application/octet-stream');
+        res.end(await fs.readFile(abs));
+        return true;
+    } catch {
+        return false; // 交给调用方走 404
+    }
+}
+
 /**
  * 统一入口：匹配 /folio/v1/* 就处理并回 true，否则回 false 由调用方走静态/下一个中间件。
  * dev 由 vite 中间件调，独立整服由 src/server/main.ts 调，合入后 daemon 按同一契约实现。
@@ -138,9 +175,15 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             return true;
         }
 
-        if (req.method === 'POST' && pathname === 'image') {
+        if (req.method === 'POST' && (pathname === 'image' || pathname === 'file')) {
             const bytes = await readBody(req);
-            const src = await saveAttachment(root, bytes, String(req.headers['x-folio-hint'] ?? 'image.png'));
+            let hint = String(req.headers['x-folio-hint'] ?? 'file.bin');
+            try {
+                hint = decodeURIComponent(hint);
+            } catch {
+                // 客户端没编码也能落盘
+            }
+            const src = await saveAttachment(root, bytes, hint);
             send(res, 200, { src });
             return true;
         }
