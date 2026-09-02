@@ -19,6 +19,20 @@ import {
     zhCN,
 } from '@muyajs/core';
 import type { Muya as TMuya } from '@muyajs/core';
+import { MENU_CONFIG } from '@muyajs/core/ui/paragraphQuickInsertMenu/config.ts';
+
+/**
+ * 单元 2：斜杠菜单裁剪与内容开关（AGENTS.md 硬规则 5：默认不出网、开放 HTML 不进斜杠）。
+ * MENU_CONFIG 是 muya 模块级常量，ParagraphQuickInsertMenu 构造时引用同一份，
+ * 在注册插件前原地剔除即可，不改 muya 源码。
+ */
+const BANNED_LABELS = new Set(['html-block', 'diagram plantuml']);
+for (const group of MENU_CONFIG) {
+    group.children = group.children.filter((item) => !BANNED_LABELS.has(item.label));
+}
+for (let i = MENU_CONFIG.length - 1; i >= 0; i--) {
+    if (MENU_CONFIG[i].children.length === 0) MENU_CONFIG.splice(i, 1);
+}
 
 /**
  * Muya 宿主：注册 UI 插件（examples/main.ts 是权威接线）、挂载/重建编辑器、
@@ -63,7 +77,17 @@ export function currentEditor(): TMuya | null {
 export function mountEditor(wrap: HTMLElement, markdown: string, onChange: (markdown: string) => void): void {
     const fresh = document.createElement('div');
     wrap.replaceChildren(fresh);
-    const editor = new Muya(fresh, { markdown });
+    const editor = new Muya(fresh, {
+        markdown,
+        // 内容开关：数学/Mermaid/脚注/frontmatter 开；PlantUML 指向死地址，杜绝公网
+        math: true,
+        frontMatter: true,
+        footnote: true,
+        disableHtml: false,
+        plantumlServer: 'http://127.0.0.1:9',
+        mermaidTheme: 'default',
+        vegaTheme: 'latimes',
+    });
     editor.locale(zhCN);
     editor.init();
     editor.on('json-change', () => {
