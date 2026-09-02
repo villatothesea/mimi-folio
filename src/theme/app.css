@@ -1,0 +1,80 @@
+/* 页面布局与组件样式：只准 var(--folio-*)，色值一律在 tokens.css。 */
+#app {
+    display: flex;
+    height: 100vh;
+}
+
+#sidebar {
+    width: 240px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--folio-border);
+    background: var(--folio-panel);
+}
+
+#sidebar-head {
+    padding: var(--folio-space-3) var(--folio-space-4);
+    border-bottom: 1px solid var(--folio-border);
+    font-weight: 600;
+}
+
+#files {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--folio-space-2) var(--folio-space-3);
+}
+
+#files button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-2) var(--folio-space-3);
+    border-radius: var(--folio-radius);
+    cursor: pointer;
+}
+
+#files button:hover {
+    background: var(--folio-hover);
+}
+
+#files button[aria-current='true'] {
+    background: var(--folio-hover-active);
+    font-weight: 600;
+}
+
+#page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+#page-head {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-4);
+    padding: var(--folio-space-2) var(--folio-space-4);
+    border-bottom: 1px solid var(--folio-border);
+}
+
+#current-path {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+}
+
+#save-state {
+    margin-left: auto;
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+}
+
+#editor-wrap {
+    flex: 1;
+    overflow-y: auto;
+}

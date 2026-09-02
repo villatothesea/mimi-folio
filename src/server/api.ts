@@ -119,7 +119,9 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             const p = safeRel(query.get('path') ?? '');
             if (!p) return fail(res, 400, 'path 非法');
             if (!MD_RE.test(p)) return fail(res, 400, '只读 .md');
-            send(res, 200, { path: p, markdown: await fs.readFile(path.join(root, p), 'utf8') });
+            const raw = await fs.readFile(path.join(root, p), 'utf8');
+            // muya 的 lexer 只认 LF；Windows 盘上的 CRLF 在读出层统一掉，写回也是 LF
+            send(res, 200, { path: p, markdown: raw.replace(/\r\n?/g, '\n') });
             return true;
         }
 

@@ -4,9 +4,16 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  file-icons: file:vendor/file-icons
+
 importers:
 
   .:
+    dependencies:
+      '@muyajs/core':
+        specifier: link:../Assets/marktext-develop/packages/muya
+        version: link:../Assets/marktext-develop/packages/muya
     devDependencies:
       '@types/node':
         specifier: ^26.4.0

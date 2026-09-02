@@ -1,4 +1,5 @@
-import { defineConfig, type Plugin } from 'vite';
+import { fileURLToPath } from 'node:url';
+import { defineConfig, searchForWorkspaceRoot, type Plugin } from 'vite';
 
 import { handleFolioApi } from './src/server/api.ts';
 
@@ -18,4 +19,10 @@ function folioApi(): Plugin {
 
 export default defineConfig({
     plugins: [folioApi()],
+    server: {
+        fs: {
+            // @muyajs/core 以 link: 接本地检出，其字体/图标等资源在仓外，需放行
+            allow: [searchForWorkspaceRoot(process.cwd()), fileURLToPath(new URL('../Assets/marktext-develop', import.meta.url))],
+        },
+    },
 });

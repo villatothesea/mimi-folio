@@ -1,78 +1,95 @@
+import './theme/app.css';
 import './theme/tokens.css';
 import { createHost } from './host/index.ts';
+import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 
 /**
- * 单元 0 骨架页：列表 → 读 → 改 → 存，证明 host 契约通。
- * 单元 1 起 textarea 换成 Muya，这里的 host 用法不变。
+ * 页面编排：列表选文件 → host.read → Muya 编辑 → json-change 防抖 → host.write。
+ * 真源是盘上的 md；编辑器只是视图（AGENTS.md 硬规则 3）。
  */
 const host = createHost();
 
 const nav = document.querySelector<HTMLElement>('#files')!;
-const editor = document.querySelector<HTMLTextAreaElement>('#editor')!;
-const currentPath = document.querySelector<HTMLSpanElement>('#current-path')!;
-const saveBtn = document.querySelector<HTMLButtonElement>('#save')!;
-const status = document.querySelector<HTMLParagraphElement>('#status')!;
+const wrap = document.querySelector<HTMLElement>('#editor-wrap')!;
+const currentPathEl = document.querySelector<HTMLElement>('#current-path')!;
+const saveStateEl = document.querySelector<HTMLElement>('#save-state')!;
 
 let openFile: string | null = null;
+let lastSaved = '';
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
-function say(message: string): void {
-    status.textContent = message;
+function saySave(message: string): void {
+    saveStateEl.textContent = message;
 }
 
-function markCurrent(button: HTMLButtonElement): void {
-    nav.querySelectorAll('button').forEach((b) => b.removeAttribute('aria-current'));
-    if (button) button.setAttribute('aria-current', 'true');
+async function saveNow(markdown: string): Promise<void> {
+    if (!openFile) return;
+    if (markdown === lastSaved) return;
+    try {
+        await host.write(openFile, markdown);
+        lastSaved = markdown;
+        saySave(`已存 ${new Date().toLocaleTimeString()}`);
+        void refreshList();
+    } catch (err) {
+        saySave(`存失败：${(err as Error).message}`);
+    }
+}
+
+function onEditorChange(markdown: string): void {
+    if (markdown === lastSaved) return;
+    saySave('改动中…');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => void saveNow(markdown), 400);
 }
 
 async function open(path: string, button?: HTMLButtonElement): Promise<void> {
     try {
+        // 切文件前把上一篇落盘
+        if (openFile && currentEditor()) await saveNow(currentEditor()!.getMarkdown());
+        clearTimeout(saveTimer);
         const doc = await host.read(path);
         openFile = doc.path;
-        editor.value = doc.markdown;
-        editor.disabled = false;
-        saveBtn.disabled = false;
-        currentPath.textContent = doc.path;
-        if (button) markCurrent(button);
-        say('');
+        lastSaved = doc.markdown;
+        currentPathEl.textContent = doc.path;
+        saySave('');
+        mountEditor(wrap, doc.markdown, onEditorChange);
+        markCurrent(button);
     } catch (err) {
-        say(`读失败：${(err as Error).message}`);
+        saySave(`读失败：${(err as Error).message}`);
     }
 }
 
-async function save(): Promise<void> {
-    if (!openFile) return;
-    try {
-        await host.write(openFile, editor.value);
-        say(`已存 ${new Date().toLocaleTimeString()}`);
-    } catch (err) {
-        say(`存失败：${(err as Error).message}`);
-    }
+function markCurrent(button?: HTMLButtonElement): void {
+    nav.querySelectorAll('button').forEach((b) => b.removeAttribute('aria-current'));
+    button?.setAttribute('aria-current', 'true');
 }
 
 async function refreshList(): Promise<void> {
     try {
         const files = await host.list();
-        nav.textContent = '';
-        for (const file of files) {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.textContent = file.title;
-            button.title = file.path;
-            button.addEventListener('click', () => void open(file.path, button));
-            nav.append(button);
-        }
-        say(files.length ? '' : 'vault 里还没有 .md');
+        nav.replaceChildren(
+            ...files.map((file) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.textContent = file.title;
+                button.title = file.path;
+                button.addEventListener('click', () => void open(file.path, button));
+                return button;
+            }),
+        );
     } catch (err) {
-        say(`列目录失败：${(err as Error).message}`);
+        saySave(`列目录失败：${(err as Error).message}`);
     }
 }
 
-saveBtn.addEventListener('click', () => void save());
-editor.addEventListener('keydown', (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+window.addEventListener('beforeunload', (event) => {
+    if (openFile && currentEditor() && currentEditor()!.getMarkdown() !== lastSaved) {
         event.preventDefault();
-        void save();
     }
+});
+window.addEventListener('pagehide', () => {
+    if (openFile && currentEditor()) void saveNow(currentEditor()!.getMarkdown());
+    destroyEditor();
 });
 
 void refreshList();
