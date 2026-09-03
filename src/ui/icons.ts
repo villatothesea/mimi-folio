@@ -75,3 +75,4 @@ export function icon(name: string, filled = false): string {
     const fill = filled && name === 'star' ? 'currentColor' : 'none';
     return `<svg class="folio-icon" viewBox="0 0 24 24" fill="${fill}" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 }
+

@@ -11,6 +11,8 @@ export type FolioDoc = {
     markdown: string;
     /** 读时的文件 mtime（ms），写回经 If-Match 做冲突保护（米米建议 2） */
     mtimeMs?: number;
+    /** 创建时间（birthtime，ms），中区底栏展示用 */
+    ctimeMs?: number;
 };
 
 export type FolioListItem = {

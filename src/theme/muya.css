@@ -38,7 +38,10 @@
     --float-bg-color: var(--folio-bg);
     --float-hover-color: var(--folio-hover);
     --float-border-color: var(--folio-border);
-    --float-shadow: var(--folio-shadow);
+    /* 浮层（斜杠菜单、行内工具条等）：3px 外侧光晕 + 轻投影（验收清单 9.4.2） */
+    --float-shadow:
+        0 0 0 3px color-mix(in srgb, var(--folio-fg) 12%, transparent),
+        0 2px 6px color-mix(in srgb, var(--folio-fg) 8%, transparent);
 
     /* markdown 元素 */
     --link-color: var(--folio-primary);

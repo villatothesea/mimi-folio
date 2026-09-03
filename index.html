@@ -12,29 +12,39 @@
         <aside id="sidebar">
           <header id="sidebar-head">
             <img id="app-icon" src="/favicon.svg" alt="米素" />
-            <span>米素</span>
+            <span class="head-title">米素</span>
+            <span class="head-actions">
+              <button id="btn-settings" type="button" class="icon-btn" data-tip="设置"></button>
+              <button id="btn-theme" type="button" class="icon-btn" data-tip="明暗切换"></button>
+              <button id="btn-plus" type="button" class="icon-btn" data-tip="新建"></button>
+            </span>
           </header>
           <div id="filterbar" aria-label="筛选">
-            <button id="pill-all" type="button" data-view="all" aria-pressed="true">全部</button>
-            <button id="pill-notes" type="button" data-view="notes" aria-pressed="false">笔记</button>
-            <button id="pill-memos" type="button" data-view="memos" aria-pressed="false">速记</button>
-            <button id="pill-links" type="button" data-view="links" aria-pressed="false">外链</button>
+            <button id="pill-all" type="button" data-view="all" data-tip="全部"></button>
+            <button id="pill-notes" type="button" data-view="notes" data-tip="笔记"></button>
+            <button id="pill-memos" type="button" data-view="memos" data-tip="速记"></button>
+            <button id="pill-links" type="button" data-view="links" data-tip="外链"></button>
+            <button id="pill-fav" type="button" data-view="fav" data-tip="星标"></button>
           </div>
           <nav id="files" aria-label="文件列表"></nav>
-          <footer id="sidebar-foot">
-            <button id="add-note" type="button" class="icon-btn" data-tip="添加笔记"></button>
-            <button id="add-memo" type="button" class="icon-btn" data-tip="添加速记"></button>
-            <button id="add-folder" type="button" class="icon-btn" data-tip="添加文件夹"></button>
-            <button id="link-outside" type="button" class="icon-btn" data-tip="链入外部 md"></button>
+          <footer class="zone-bar" id="bar-left">
+            <button id="collapse-left" type="button" class="icon-btn" data-tip="收起侧栏"></button>
+            <span id="stat-count" class="zone-text"></span>
           </footer>
         </aside>
         <main id="page">
           <header id="page-head">
             <nav id="breadcrumb" aria-label="路径">未打开</nav>
-            <button id="favorite-toggle" type="button" title="收藏（frontmatter favorite）">☆</button>
-            <button id="find-toggle" type="button" title="查找替换（Ctrl+F）">查找</button>
+            <div id="toolbar" aria-label="格式工具栏"></div>
+            <span id="save-state" role="status"></span>
+          </header>
+          <div id="expand-hints">
+            <button id="expand-left" type="button" class="icon-btn breathe" data-tip="展开侧栏" hidden></button>
+            <button id="expand-right" type="button" class="icon-btn breathe" data-tip="展开目录" hidden></button>
+          </div>
+          <section id="findbar-wrap">
             <span id="findbar" hidden>
-              <input id="find-input" type="text" placeholder="查找…" />
+              <input id="find-input" type="text" placeholder="文内查找…" />
               <span id="find-count"></span>
               <button id="find-prev" type="button" title="上一个（Shift+回车）">↑</button>
               <button id="find-next" type="button" title="下一个（回车）">↓</button>
@@ -43,20 +53,21 @@
               <button id="replace-all" type="button">全部</button>
               <button id="find-close" type="button" title="关闭（Esc）">×</button>
             </span>
-            <span id="save-state" role="status"></span>
-          </header>
+          </section>
           <section id="props" aria-label="文档属性" hidden></section>
           <div id="editor-wrap"></div>
+          <footer class="zone-bar" id="bar-center">
+            <button id="doc-meta" type="button" class="zone-text link-like" data-tip="文档属性"></button>
+            <span id="stat-words" class="zone-text"></span>
+          </footer>
         </main>
-        <aside id="toc" aria-label="文档目录"></aside>
+        <aside id="toc" aria-label="文档目录">
+          <nav id="toc-list"></nav>
+          <footer class="zone-bar" id="bar-right">
+            <button id="collapse-right" type="button" class="icon-btn" data-tip="收起目录"></button>
+          </footer>
+        </aside>
       </div>
-      <footer id="statusbar">
-        <span id="stat-count"></span>
-        <span id="stat-words"></span>
-        <span id="backlinks" aria-label="出链与反链"></span>
-        <span id="stat-rest"></span>
-        <button id="theme-toggle" type="button" title="明暗切换">主题</button>
-      </footer>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -3,6 +3,13 @@
  * 不另做分组表、不做文件夹树（docs/计划.md 单元 5 纪律）。
  */
 import type { FolioListItem } from '../host/types.ts';
+import { icon } from './icons';
+
+/** 文档类型图标：外链 > 速记 > 笔记。 */
+function fileIcon(file: FolioListItem): string {
+    if (file.linked) return icon('link');
+    return icon(file.kind === 'memo' ? 'bolt' : 'file-text');
+}
 
 export type SidebarOptions = {
     activePath: string | null;
@@ -44,10 +51,13 @@ function renderGroup(label: string, files: FolioListItem[], opts: SidebarOptions
     for (const file of files) {
         const button = document.createElement('button');
         button.type = 'button';
+        const ic = document.createElement('span');
+        ic.className = 'file-icon';
+        ic.innerHTML = fileIcon(file);
         const name = document.createElement('span');
         name.className = 'file-name';
         name.textContent = file.title;
-        button.append(name);
+        button.append(ic, name);
         if (file.linked) {
             const badge = document.createElement('span');
             badge.className = 'linked-badge';
