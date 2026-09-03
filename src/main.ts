@@ -5,7 +5,7 @@ import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
 import { renderMemoTimeline, renderSidebar, renderTagBar } from './ui/sidebar.ts';
-import { extractVideoLinks, renderEmbeds } from './ui/embeds.ts';
+import { attachInlineEmbeds } from './ui/embeds.ts';
 import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
 import type { FolioListItem } from './host/types.ts';
 
@@ -49,11 +49,26 @@ async function saveNow(markdown: string): Promise<void> {
     }
 }
 
+/** 当前文档的标签芯片（点 1）：frontmatter 的 tags 以小芯片显示在正文上方。 */
+function renderDocTags(): void {
+    const tags = allFiles.find((f) => f.path === openFile)?.tags ?? [];
+    docTagsEl.replaceChildren();
+    for (const tag of tags) {
+        const chip = document.createElement('span');
+        chip.className = 'doc-tag';
+        chip.textContent = tag;
+        docTagsEl.append(chip);
+    }
+}
+
 async function refreshBacklinks(): Promise<void> {
     if (!openFile || !host.index) return;
     try {
         const index = await host.index(openFile);
-        renderBacklinks(backlinksEl, index, (p) => void open(p));
+        renderBacklinks(backlinksEl, index, {
+            titleOf: (p) => allFiles.find((f) => f.path === p)?.title ?? p.replace(/\.md$/i, ''),
+            onOpen: (p) => void open(p),
+        });
     } catch {
         backlinksEl.replaceChildren();
     }
@@ -70,7 +85,6 @@ async function createAndOpen(path: string): Promise<void> {
 function onEditorChange(markdown: string): void {
     if (markdown === lastSaved) return;
     saySave('改动中…');
-    renderEmbeds(embedsEl, extractVideoLinks(markdown), createVideoIframe);
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => void saveNow(markdown), 400);
 }
@@ -86,7 +100,7 @@ async function open(path: string): Promise<void> {
         currentPathEl.textContent = doc.path;
         saySave('');
         mountEditor(wrap, doc.markdown, host, onEditorChange);
-        renderEmbeds(embedsEl, extractVideoLinks(doc.markdown), createVideoIframe);
+        renderDocTags();
         void refreshBacklinks();
     } catch (err) {
         saySave(`读失败：${(err as Error).message}`);
@@ -94,7 +108,7 @@ async function open(path: string): Promise<void> {
 }
 
 const backlinksEl = document.querySelector<HTMLElement>('#backlinks')!;
-const embedsEl = document.querySelector<HTMLElement>('#embeds')!;
+const docTagsEl = document.querySelector<HTMLElement>('#doc-tags')!;
 
 async function refreshList(): Promise<void> {
     try {
@@ -117,6 +131,7 @@ async function refreshList(): Promise<void> {
                 onOpen: (p) => void open(p),
             });
         }
+        renderDocTags();
     } catch (err) {
         saySave(`列目录失败：${(err as Error).message}`);
     }
@@ -145,15 +160,6 @@ async function newMemo(): Promise<void> {
     }
 }
 
-/** 页内播放器（单元 9）：iframe 只存在于页面，md 里仍是链接。 */
-function createVideoIframe(link: { embed: string }): HTMLIFrameElement {
-    const frame = document.createElement('iframe');
-    frame.src = link.embed;
-    frame.setAttribute('allow', 'fullscreen; encrypted-media; picture-in-picture');
-    frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-    return frame;
-}
-
 viewNotesBtn.addEventListener('click', () => setView('notes'));
 viewMemosBtn.addEventListener('click', () => setView('memos'));
 newMemoBtn.addEventListener('click', () => void newMemo());
@@ -168,17 +174,20 @@ window.addEventListener('pagehide', () => {
     destroyEditor();
 });
 
+// [[wikilink]] 点击直达 / 未命中弹新建芯片（单元 7，按验收反馈改为点击即开）
+attachWikilinkHandlers(wrap, {
+    getPages: () => allFiles.map((f) => f.path),
+    onOpen: (p) => void open(p),
+    onCreate: (p) => void createAndOpen(p),
+});
+
 // 音视频/图片文件的粘贴与拖放落盘（单元 4）；外壳常驻，编辑器重建不受影响
 attachMediaHandlers(wrap, host, currentEditor);
 
 // muya 在浏览器里把相对图片路径转成 file:// 必然失败，宿主层兜底补同源 img
 attachImageFallback(wrap);
 
-// [[wikilink]] 点击芯片 / Ctrl+点击跳转（单元 7）
-attachWikilinkHandlers(wrap, {
-    getPages: () => allFiles.map((f) => f.path),
-    onOpen: (p) => void open(p),
-    onCreate: (p) => void createAndOpen(p),
-});
+// 白名单视频链接内嵌正文流（单元 9，按验收反馈从底部面板改入正文）
+attachInlineEmbeds(wrap);
 
 void refreshList();

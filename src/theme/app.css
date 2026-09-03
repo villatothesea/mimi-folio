@@ -175,6 +175,20 @@
     overflow-y: auto;
 }
 
+#doc-tags {
+    display: inline-flex;
+    gap: var(--folio-space-1);
+}
+
+.doc-tag {
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: var(--folio-bg-alt);
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-2);
+}
+
 #backlinks {
     border-top: 1px solid var(--folio-border);
     background: var(--folio-panel);
@@ -186,25 +200,15 @@
     min-height: var(--folio-space-4);
 }
 
-#backlinks:empty,
-#embeds:empty {
+#backlinks:empty {
     display: none;
 }
 
-#embeds {
-    border-top: 1px solid var(--folio-border);
-    background: var(--folio-panel);
-    padding: var(--folio-space-2) var(--folio-space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--folio-space-2);
-    max-height: 40vh;
-    overflow-y: auto;
-}
-
-.embed-frame {
+.folio-video {
+    display: block;
     width: 100%;
     aspect-ratio: 16 / 9;
+    margin-top: var(--folio-space-2);
     border: 1px solid var(--folio-border);
     border-radius: var(--folio-radius);
     background: var(--folio-bg-alt);
@@ -216,10 +220,28 @@
     border-radius: var(--folio-radius);
 }
 
-.folio-img-fixed .mu-image-icon-success,
-.folio-img-fixed .mu-image-icon-fail,
-.folio-img-fixed .mu-empty-image {
-    display: none;
+/* 兜底图挂上后，muya 的失败态 UI（图标/垃圾桶/占位文案）全部让位 */
+span.mu-inline-image.folio-img-fixed > *:not(.folio-inline-img) {
+    display: none !important;
+}
+
+span.mu-inline-image.folio-img-fixed::before,
+span.mu-inline-image.folio-img-fixed::after,
+span.mu-inline-image.folio-img-fixed .mu-image-container::before,
+span.mu-inline-image.folio-img-fixed .mu-image-container::after {
+    content: none !important;
+    display: none !important;
+}
+
+/* 失败态留下的空框/定位尺寸一并归位，让兜底图按正常流占位 */
+span.mu-inline-image.folio-img-fixed {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    border: 0 !important;
+    background: none !important;
 }
 
 .bl-heading {

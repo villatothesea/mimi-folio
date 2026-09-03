@@ -1,7 +1,7 @@
 /**
  * 链接播视频（单元 9）：粘贴 YouTube / B 站等白名单链接，页内出播放器。
- * md 里只存链接本身；白名单外的链接一律不理，任意 iframe 进不了盘
- * （DOMPurify 本就会剥 iframe，这里也不再新增）。
+ * 播放器内嵌在正文流里（挂在该段落块内，宽度随正文列宽），md 里只存链接本身；
+ * 白名单外的链接一律不理，任意 iframe 进不了盘（DOMPurify 本就会剥 iframe）。
  */
 
 export type VideoLink = {
@@ -42,27 +42,53 @@ export function extractVideoLinks(markdown: string): VideoLink[] {
     return [...seen.values()];
 }
 
-/** 渲染器：链接集合没变就不动 DOM（避免打字时播放器反复重载）。 */
-export function renderEmbeds(
-    el: HTMLElement,
-    links: VideoLink[],
-    createIframe: (link: VideoLink) => HTMLIFrameElement,
-): void {
-    const key = links.map((l) => `${l.provider}:${l.id}`).join('|');
-    if (el.dataset.embedKey === key) return;
-    el.dataset.embedKey = key;
-    el.replaceChildren();
+/** 段落里如果有且只有一个白名单视频链接，返回它；否则 null。 */
+function soleVideoLink(paragraph: Element): VideoLink | null {
+    const text = (paragraph.textContent ?? '').trim();
+    if (!text) return null;
+    const links = extractVideoLinks(text);
+    if (links.length !== 1) return null;
+    // 尾斜杠归一化后再比对（B 站链接常带 / 结尾）
+    const normalize = (s: string) => s.replace(/\/+$/, '');
+    return normalize(text) === normalize(links[0].source) ? links[0] : null;
+}
 
-    const heading = document.createElement('div');
-    heading.className = 'bl-heading';
-    heading.textContent = links.length ? `链接视频 · ${links.length}` : '链接视频';
-    el.append(heading);
+/**
+ * 正文流装饰器：段落文本恰为一个白名单链接时，在段落块内挂播放器。
+ * muya 的块级重渲染会重建子节点，靠 MutationObserver 幂等补挂。
+ */
+export function attachInlineEmbeds(wrap: HTMLElement): void {
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    for (const link of links) {
-        const frame = createIframe(link);
-        frame.className = 'embed-frame';
-        frame.title = `${link.provider} ${link.id}`;
-        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
-        el.append(frame);
+    function scan(): void {
+        const seen = new Set<Element>();
+        for (const paragraph of wrap.querySelectorAll<HTMLElement>('.mu-paragraph')) {
+            const link = soleVideoLink(paragraph);
+            if (!link) continue;
+            seen.add(paragraph);
+            let frame = paragraph.querySelector<HTMLIFrameElement>('iframe.folio-video');
+            if (!frame) {
+                frame = document.createElement('iframe');
+                frame.className = 'folio-video';
+                frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+                frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+                frame.setAttribute('allow', 'fullscreen; encrypted-media; picture-in-picture');
+                frame.contentEditable = 'false';
+                paragraph.append(frame);
+            }
+            const want = new URL(link.embed, location.href).href;
+            if (frame.src !== want) frame.src = want;
+        }
+        // 段落不再是纯链接 → 摘掉播放器
+        for (const frame of wrap.querySelectorAll('iframe.folio-video')) {
+            const owner = frame.closest('.mu-paragraph');
+            if (!owner || !seen.has(owner)) frame.remove();
+        }
     }
+
+    const observer = new MutationObserver(() => {
+        clearTimeout(timer);
+        timer = setTimeout(scan, 250);
+    });
+    observer.observe(wrap, { childList: true, subtree: true, characterData: true });
 }

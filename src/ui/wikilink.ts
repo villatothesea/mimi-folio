@@ -51,7 +51,6 @@ function wikilinkAt(doc: Document, clientX: number, clientY: number): string | n
 
 export function attachWikilinkHandlers(wrap: HTMLElement, options: WikilinkOptions): void {
     let chip: HTMLDivElement | null = null;
-    (window as unknown as { __wlProbe?: string[] }).__wlProbe = ['attached'];
 
     function hideChip(): void {
         chip?.remove();
@@ -80,16 +79,14 @@ export function attachWikilinkHandlers(wrap: HTMLElement, options: WikilinkOptio
 
     wrap.addEventListener('click', (event) => {
         const mouse = event as MouseEvent;
-        (window as unknown as { __wlProbe?: string[] }).__wlProbe?.push('click');
         hideChip();
         const target = wikilinkAt(document, mouse.clientX, mouse.clientY);
-        (window as unknown as { __wlProbe?: string[] }).__wlProbe?.push(`target=${String(target)}`);
         if (!target) return;
-        if (mouse.ctrlKey || mouse.metaKey) {
-            const index: WikilinkIndex = { outgoing: new Map(), pages: new Set(options.getPages()) };
-            const resolved = resolveLink(index, target);
-            if (resolved) options.onOpen(resolved);
-            else options.onCreate(`notes/${safePageName(target)}.md`);
+        const index: WikilinkIndex = { outgoing: new Map(), pages: new Set(options.getPages()) };
+        const resolved = resolveLink(index, target);
+        // 命中：点击直达（Foam 行为）；未命中：弹「新建」芯片
+        if (resolved) {
+            options.onOpen(resolved);
             return;
         }
         showChip(target, mouse.clientX, mouse.clientY);
@@ -102,11 +99,11 @@ export function attachWikilinkHandlers(wrap: HTMLElement, options: WikilinkOptio
     });
 }
 
-/** 反链面板（单元 7）：能看见谁链过来；出链也一并给出，都可点击。 */
+/** 反链面板（单元 7）：能看见谁链过来；显示页标题（悬停看路径），点击直达。 */
 export function renderBacklinks(
     el: HTMLElement,
     index: { outgoing: string[]; backlinks: string[] },
-    onOpen: (path: string) => void,
+    opts: { titleOf: (path: string) => string; onOpen: (path: string) => void },
 ): void {
     el.replaceChildren();
     const heading = document.createElement('div');
@@ -126,9 +123,9 @@ export function renderBacklinks(
             const chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'bl-chip';
-            chip.textContent = p.replace(/\.md$/i, '');
+            chip.textContent = opts.titleOf(p);
             chip.title = p;
-            chip.addEventListener('click', () => onOpen(p));
+            chip.addEventListener('click', () => opts.onOpen(p));
             group.append(chip);
         }
         el.append(group);
