@@ -9,7 +9,7 @@ import path from 'node:path';
 
 import type { FolioListItem, FolioListOpts } from '../host/types.ts';
 import { splitFrontmatter } from './frontmatter.ts';
-import { buildIndex, linksFor, type WikilinkIndex } from './wikilink.ts';
+import { buildIndex, linksFor, type WikilinkIndex } from '../shared/wikilink.ts';
 
 const PREFIX = '/folio/v1/';
 const MD_RE = /\.md$/i;

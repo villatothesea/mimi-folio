@@ -5,7 +5,7 @@
  *   - 目标不存在时一键在 notes/ 建页
  * muya 的内联渲染管线不开放自定义 token，芯片在宿主层做，md 里仍是字面 [[...]]。
  */
-import { resolveLink, type WikilinkIndex } from '../server/wikilink.ts';
+import { resolveLink, type WikilinkIndex } from '../shared/wikilink.ts';
 
 export type WikilinkOptions = {
     /** 当前 vault 全部页路径（惰性取，列表会随刷新变化） */
