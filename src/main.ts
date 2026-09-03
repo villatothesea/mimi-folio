@@ -11,8 +11,10 @@ import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
-import { TAG_COLOR_COUNT, applyTagColor, setTagColor, tagColorIndex } from './ui/tagColors.ts';
+import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
+import { blockNativeContextMenu, showContextMenu } from './ui/contextMenu.ts';
+import { folioConfirm, folioPick, folioPrompt } from './ui/dialogs.ts';
 import { buildToolbar } from './ui/toolbar.ts';
 import { initSettings, openSettings } from './ui/settings.ts';
 import { icon } from './ui/icons.ts';
@@ -84,9 +86,47 @@ function renderProps(): void {
         const ed = currentEditor();
         if (!ed || !openFile) return;
         ed.replaceContent(setTags(ed.getMarkdown(), next));
-        // 走统一链路：改动中… → 防抖存盘 → 刷列表 → 面板随 allFiles 更新
         onEditorChange(ed.getMarkdown());
     };
+
+    // 折叠头：箭头呼吸提示（验收清单 12.1）
+    const head = document.createElement('div');
+    head.className = 'props-head';
+    const chevron = document.createElement('button');
+    chevron.type = 'button';
+    chevron.className = 'icon-btn props-chevron';
+    if (propsCollapsed) chevron.classList.add('breathe');
+    chevron.innerHTML = icon(propsCollapsed ? 'chevron-down' : 'chevron-up');
+    chevron.title = propsCollapsed ? '展开文档属性' : '收起文档属性';
+    chevron.addEventListener('click', () => {
+        propsCollapsed = !propsCollapsed;
+        localStorage.setItem('folio-props-fold', String(propsCollapsed));
+        renderProps();
+    });
+    head.append(chevron);
+    propsEl.append(head);
+    if (propsCollapsed) return;
+
+    // 标题行（验收清单 12.3）：不是 H1，是 frontmatter title
+    const { frontmatter } = splitFrontmatter(editor.getMarkdown());
+    const titleRow = document.createElement('div');
+    titleRow.className = 'prop-row doc-title-row';
+    const titleKey = document.createElement('span');
+    titleKey.className = 'prop-key';
+    titleKey.textContent = '标题';
+    const titleInput = document.createElement('input');
+    titleInput.className = 'doc-title-input';
+    const titleMatch = frontmatter.match(/^title\s*:\s*(.*)$/m);
+    titleInput.value = titleMatch?.[1]?.trim() ?? allFiles.find((f) => f.path === openFile)?.title ?? '';
+    titleInput.addEventListener('change', () => {
+        const ed = currentEditor();
+        if (!ed || !openFile) return;
+        ed.replaceContent(setScalar(ed.getMarkdown(), 'title', titleInput.value.trim() || null));
+        onEditorChange(ed.getMarkdown());
+        void refreshList();
+    });
+    titleRow.append(titleKey, titleInput);
+    propsEl.append(titleRow);
 
     const row = (key: string, value: Node): void => {
         const line = document.createElement('div');
@@ -98,18 +138,16 @@ function renderProps(): void {
         propsEl.append(line);
     };
 
-    // 其余键按原顺序只读展示（tags 行固定在最下）
-    const { frontmatter } = splitFrontmatter(editor.getMarkdown());
     for (const lineText of (frontmatter ?? '').split('\n')) {
         const pair = lineText.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
-        if (!pair || pair[1].toLowerCase() === 'tags') continue;
+        if (!pair || ['tags', 'title', 'favorite'].includes(pair[1].toLowerCase())) continue;
         const v = document.createElement('span');
         v.className = 'prop-value';
         v.textContent = pair[2] || '—';
         row(pair[1], v);
     }
 
-    // tags 行：芯片（点击改名/换色）+ ＋，固定最下
+    // tags 行：芯片（点击换色）+ ＋，固定最下
     const tagsValue = document.createElement('span');
     tagsValue.className = 'prop-tags';
     const tags = allFiles.find((f) => f.path === openFile)?.tags ?? [];
@@ -118,7 +156,7 @@ function renderProps(): void {
         chip.className = 'doc-tag';
         chip.append(document.createTextNode(tag));
         applyTagColor(chip, tag);
-        chip.title = '点击改名 / 换色';
+        chip.title = '点击换色';
         chip.addEventListener('click', (event) => openTagPopover(tag, chip, event));
         const remove = document.createElement('button');
         remove.className = 'doc-tag-x';
@@ -156,7 +194,9 @@ function renderProps(): void {
     row('tags', tagsValue);
 }
 
-/** 标签芯片弹层：重命名 + 换色（色存 localStorage，属视图偏好不进 md）。 */
+let propsCollapsed = localStorage.getItem('folio-props-fold') === 'true';
+
+/** 标签芯片弹层（验收清单 12.2）：色板，默认 HEX，可自定义。 */
 let tagPopover: HTMLDivElement | null = null;
 
 function closeTagPopover(): void {
@@ -164,80 +204,64 @@ function closeTagPopover(): void {
     tagPopover = null;
 }
 
+function tagHex(tag: string): string {
+    const stored = (JSON.parse(localStorage.getItem('folio-tag-colors') ?? '{}') as Record<string, unknown>)[tag];
+    if (typeof stored === 'string' && stored.startsWith('#')) return stored;
+    const cs = getComputedStyle(document.documentElement);
+    return cs.getPropertyValue(`--folio-tag-${tagColorIndex(tag)}`).trim() || '#888888';
+}
+
+function setTagColorHex(tag: string, hex: string | null): void {
+    const map = JSON.parse(localStorage.getItem('folio-tag-colors') ?? '{}') as Record<string, unknown>;
+    if (hex === null) delete map[tag];
+    else map[tag] = hex;
+    localStorage.setItem('folio-tag-colors', JSON.stringify(map));
+}
+
 function openTagPopover(tag: string, chip: HTMLElement, event: MouseEvent): void {
     event.stopPropagation();
     closeTagPopover();
-    const tags = allFiles.find((f) => f.path === openFile)?.tags ?? [];
-
     const pop = document.createElement('div');
     pop.className = 'tag-pop';
     tagPopover = pop;
 
-    const input = document.createElement('input');
-    input.className = 'doc-tag-input';
-    input.value = tag;
-    input.placeholder = '重命名';
-    pop.append(input);
-
-    const swatches = document.createElement('div');
-    swatches.className = 'tag-pop-colors';
-    for (let i = 0; i < TAG_COLOR_COUNT; i++) {
-        const dot = document.createElement('button');
-        dot.type = 'button';
-        dot.className = 'tag-dot';
-        if (tagColorIndex(tag) === i) dot.setAttribute('aria-pressed', 'true');
-        dot.style.setProperty('--tag-c', `var(--folio-tag-${i})`);
-        dot.title = `色 ${i + 1}`;
-        dot.addEventListener('click', () => {
-            setTagColor(tag, i);
-            closeTagPopover();
-            renderProps();
-            void refreshList();
-        });
-        swatches.append(dot);
-    }
-    const reset = document.createElement('button');
-    reset.type = 'button';
-    reset.className = 'tag-dot tag-dot-reset';
-    reset.title = '按名字散列（清除自定义色）';
-    reset.addEventListener('click', () => {
-        setTagColor(tag, null);
-        closeTagPopover();
-        renderProps();
-        void refreshList();
-    });
-    swatches.append(reset);
-    pop.append(swatches);
-
-    const rename = (next: string) => {
-        closeTagPopover();
-        if (next && next !== tag && !tags.includes(next)) {
-            const editor = currentEditor();
-            if (editor) {
-                editor.replaceContent(setTags(editor.getMarkdown(), tags.map((t) => (t === tag ? next : t))));
-                onEditorChange(editor.getMarkdown());
-            }
-        } else {
-            renderProps();
-        }
-    };
-    input.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter') rename(input.value.trim());
-        if (ev.key === 'Escape') closeTagPopover();
+    const color = document.createElement('input');
+    color.type = 'color';
+    color.className = 'tag-color-input';
+    color.value = tagHex(tag);
+    const hexLabel = document.createElement('span');
+    hexLabel.className = 'tag-hex-label';
+    hexLabel.textContent = color.value.toUpperCase();
+    color.addEventListener('input', () => {
+        hexLabel.textContent = color.value.toUpperCase();
     });
     const ok = document.createElement('button');
     ok.type = 'button';
     ok.className = 'doc-tag-add';
-    ok.textContent = '改名';
-    ok.addEventListener('click', () => rename(input.value.trim()));
-    pop.append(ok);
+    ok.textContent = '应用';
+    ok.addEventListener('click', () => {
+        setTagColorHex(tag, color.value);
+        closeTagPopover();
+        renderProps();
+        void refreshList();
+    });
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.className = 'doc-tag-add';
+    reset.textContent = '散列';
+    reset.title = '按名字散列取色';
+    reset.addEventListener('click', () => {
+        setTagColorHex(tag, null);
+        closeTagPopover();
+        renderProps();
+        void refreshList();
+    });
+    pop.append(color, hexLabel, ok, reset);
 
     const rect = chip.getBoundingClientRect();
-    pop.style.left = `${Math.min(rect.left, window.innerWidth - 240)}px`;
+    pop.style.left = `${Math.min(rect.left, window.innerWidth - 260)}px`;
     pop.style.top = `${rect.bottom + 6}px`;
     document.body.append(pop);
-    input.focus();
-    input.select();
 }
 
 document.addEventListener('click', (event) => {
@@ -512,8 +536,8 @@ async function newNote(): Promise<void> {
 }
 
 async function newFolder(): Promise<void> {
-    const name = window.prompt('新文件夹名（建在 notes/ 下，内含一篇未命名笔记）：');
-    if (!name?.trim()) return;
+    const name = await folioPrompt('新文件夹名（建在 notes/ 下）');
+    if (!name) return;
     const safe = name.trim().replace(/[\\/:*?"<>|]/g, '_');
     const path = `notes/${safe}/未命名笔记.md`;
     try {
@@ -541,7 +565,7 @@ async function todayMemo(): Promise<void> {
 
 async function linkOutside(): Promise<void> {
     if (!host.linkOutside) return;
-    const source = window.prompt('库外 md 的绝对路径（读写都会回这个文件，不拷贝）：');
+    const source = await folioPrompt('库外 md 的绝对路径（读写都会回这个文件，不拷贝）');
     if (!source) return;
     try {
         const path = await host.linkOutside(source.trim().replace(/^["']|["']$/g, ''));
@@ -686,6 +710,152 @@ attachImageFallback(wrap);
 
 // 白名单视频链接内嵌正文流（单元 9，按验收反馈从底部面板改入正文）
 attachInlineEmbeds(wrap);
+
+// ==== 右键菜单（验收清单 4/14）====
+blockNativeContextMenu(document.body);
+
+/** 左栏文档右键。 */
+nav.addEventListener('contextmenu', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-path]');
+    if (!button) return;
+    event.preventDefault();
+    const path = button.dataset.path!;
+    const item = allFiles.find((f) => f.path === path);
+
+    const dirsOf = () => {
+        const dirs = new Set<string>(['notes', 'memos']);
+        for (const f of allFiles) {
+            const dir = f.path.split('/').slice(0, -1).join('/');
+            if (dir) dirs.add(dir);
+        }
+        return [...dirs].sort((a, b) => a.localeCompare(b, 'zh'));
+    };
+    const targetOf = async (verb: string) => {
+        const dirs = dirsOf();
+        const current = path.split('/').slice(0, -1).join('/') || undefined;
+        const dir = await folioPick(`${verb}到…`, dirs, current);
+        if (!dir) return null;
+        const name = path.split('/').pop()!;
+        return `${dir}/${name}`;
+    };
+    const withDoc = async (op: 'move' | 'copy' | 'delete', run: () => Promise<unknown>, retry: boolean) => {
+        try {
+            await run();
+        } catch (err) {
+            if (retry && (err as Error).message.includes('已存在')) saySave((err as Error).message);
+            else saySave(`${op} 失败：${(err as Error).message}`);
+        }
+        void refreshList();
+    };
+
+    showContextMenu(event.clientX, event.clientY, [
+        { ic: 'pencil', label: '重命名（改标题）', run: () => void renameInline(button, path) },
+        { ic: 'arrow-move-up', label: '移动到…', run: () => void (async () => {
+            const to = await targetOf('移动');
+            if (to && host.moveDoc) await withDoc('move', () => host.moveDoc!(path, to), true);
+        })() },
+        { ic: 'copy', label: '复制到…', run: () => void (async () => {
+            const to = await targetOf('复制');
+            if (to && host.copyDoc) await withDoc('copy', () => host.copyDoc!(path, to), true);
+        })() },
+        { ic: 'copy-plus', label: '添加副本', run: () => void (async () => {
+            const dir = path.split('/').slice(0, -1).join('/');
+            const name = path.split('/').pop()!.replace(/\.md$/i, '');
+            for (let i = 1; i < 99; i++) {
+                const to = `${dir ? `${dir}/` : ''}${name}-${i}.md`;
+                if (!allFiles.some((f) => f.path === to)) {
+                    if (host.copyDoc) await withDoc('copy', () => host.copyDoc!(path, to), false);
+                    return;
+                }
+            }
+        })() },
+        { ic: 'clipboard-text', label: '复制文档路径', run: () => {
+            void navigator.clipboard.writeText(path);
+            saySave('已复制文档路径');
+        } },
+        { ic: 'robot', label: '添加到米米（合入后可用）', disabled: true },
+        { sep: true },
+        { ic: 'trash', label: '删除', danger: true, run: () => void (async () => {
+            if (await folioConfirm(`删除 ${item?.title ?? path}？`)) {
+                if (host.deleteDoc) await withDoc('delete', () => host.deleteDoc!(path), false);
+                if (openFile === path) {
+                    openFile = null;
+                    destroyEditor();
+                    breadcrumbEl.textContent = '未打开';
+                    propsEl.hidden = true;
+                    renderCenterBar();
+                }
+            }
+        })() },
+    ]);
+});
+
+/** 原地重命名（验收清单 5/14.1）：清单行内直接高亮编辑，写 frontmatter title。 */
+async function renameInline(button: HTMLButtonElement, path: string): Promise<void> {
+    const nameSpan = button.querySelector<HTMLElement>('.file-name');
+    if (!nameSpan) return;
+    const input = document.createElement('input');
+    input.className = 'rename-input';
+    input.value = nameSpan.textContent ?? '';
+    nameSpan.replaceWith(input);
+    input.focus();
+    input.select();
+    const done = async (commit: boolean) => {
+        const value = input.value.trim();
+        input.replaceWith(nameSpan);
+        if (!commit || !value) return;
+        try {
+            const doc = await host.read(path);
+            const editor = currentEditor();
+            const next = setScalar(doc.markdown, 'title', value);
+            await host.write(path, next, doc.mtimeMs);
+            if (openFile === path && editor) {
+                editor.replaceContent(next);
+                lastSaved = next;
+                const fresh = await host.read(path);
+                docMtime = fresh.mtimeMs;
+                renderProps();
+            }
+            void refreshList();
+        } catch (err) {
+            saySave(`重命名失败：${(err as Error).message}`);
+        }
+    };
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') void done(true);
+        if (e.key === 'Escape') void done(false);
+    });
+    input.addEventListener('blur', () => void done(true));
+}
+
+/** 中区右键（验收清单 14.2）：段落级插入/改型/删除，二级菜单与斜杠同源。 */
+const BLOCK_MENU: Array<[string, string]> = [
+    ['段落', 'paragraph'],
+    ['一级标题', 'heading 1'],
+    ['二级标题', 'heading 2'],
+    ['三级标题', 'heading 3'],
+    ['引用', 'blockquote'],
+    ['代码块', 'pre'],
+    ['表格', 'table'],
+    ['公式块', 'mathblock'],
+    ['分割线', 'hr'],
+    ['无序列表', 'ul-bullet'],
+    ['有序列表', 'ol-order'],
+    ['任务列表', 'ul-task'],
+];
+
+wrap.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    showContextMenu(event.clientX, event.clientY, [
+        { ic: 'arrow-big-up', label: '在本段落上方添加', children: BLOCK_MENU.map(([label, para]) => ({ label, run: () => currentEditor()?.insertParagraph('before', '', true) ?? undefined })) },
+        { ic: 'arrow-big-down', label: '在本段落下方添加', children: BLOCK_MENU.map(([label, para]) => ({ label, run: () => currentEditor()?.insertParagraph('after', '', true) ?? undefined })) },
+        { ic: 'pencil', label: '将本段落改为', children: BLOCK_MENU.map(([label, para]) => ({ label, run: () => currentEditor()?.updateParagraph(para) })) },
+        { sep: true },
+        { ic: 'trash', label: '删除本段落', danger: true, run: () => void (async () => {
+            if (await folioConfirm('删除本段落？')) currentEditor()?.deleteParagraph();
+        })() },
+    ]);
+});
 
 // 滚动时高亮 TOC 当前节（单元 12）
 let scrollTimer: ReturnType<typeof setTimeout> | undefined;

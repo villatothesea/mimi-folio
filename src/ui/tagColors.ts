@@ -7,16 +7,17 @@ const KEY = 'folio-tag-colors';
 
 export const TAG_COLOR_COUNT = 8;
 
-function storedMap(): Record<string, number> {
+function storedMap(): Record<string, unknown> {
     try {
-        return JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, number>;
+        return JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, unknown>;
     } catch {
         return {};
     }
 }
 
 export function tagColorIndex(tag: string): number {
-    const stored = storedMap()[tag];
+    const raw = storedMap()[tag];
+    const stored = typeof raw === 'number' ? raw : Number.NaN;
     if (Number.isInteger(stored) && stored >= 0 && stored < TAG_COLOR_COUNT) return stored;
     let hash = 0;
     for (const ch of tag) hash = (hash * 31 + ch.codePointAt(0)!) >>> 0;
@@ -30,7 +31,9 @@ export function setTagColor(tag: string, index: number | null): void {
     localStorage.setItem(KEY, JSON.stringify(map));
 }
 
-/** 应用到芯片上：元素吃 --tag-c，具体色值由 tokens 落。 */
+/** 应用到芯片上：元素吃 --tag-c；自定义 HEX 直落，默认走色板索引。 */
 export function applyTagColor(el: HTMLElement, tag: string): void {
-    el.style.setProperty('--tag-c', `var(--folio-tag-${tagColorIndex(tag)})`);
+    const stored = storedMap()[tag];
+    if (typeof stored === 'string' && String(stored).startsWith('#')) el.style.setProperty('--tag-c', String(stored));
+    else el.style.setProperty('--tag-c', `var(--folio-tag-${tagColorIndex(tag)})`);
 }

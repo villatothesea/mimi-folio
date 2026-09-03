@@ -315,6 +315,31 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             return true;
         }
 
+        // ---- 文档管理（验收清单 14：移动/复制/删除）----
+        if (req.method === 'POST' && (pathname === 'move' || pathname === 'copy' || pathname === 'delete')) {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { from?: string; to?: string };
+            const from = safeRel(body.from ?? '');
+            if (!from || !MD_RE.test(from)) return fail(res, 400, 'from 非法');
+            const fromAbs = path.join(root, from);
+            if (pathname === 'delete') {
+                await fs.rm(fromAbs, { force: true });
+                await fs.rm(`${fromAbs}.bak`, { force: true }).catch(() => undefined);
+                invalidate(root);
+                send(res, 204);
+                return true;
+            }
+            const to = safeRel(body.to ?? '');
+            if (!to || !MD_RE.test(to)) return fail(res, 400, 'to 非法');
+            const toAbs = path.join(root, to);
+            if (await fileExists(toAbs)) return fail(res, 400, '目标已存在');
+            await fs.mkdir(path.dirname(toAbs), { recursive: true });
+            if (pathname === 'move') await fs.rename(fromAbs, toAbs);
+            else await fs.copyFile(fromAbs, toAbs);
+            invalidate(root);
+            send(res, 200, { path: to });
+            return true;
+        }
+
         if (req.method === 'GET' && pathname === 'search') {
             const q = (query.get('q') ?? '').trim();
             if (!q) {

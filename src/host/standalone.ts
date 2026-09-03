@@ -85,6 +85,31 @@ export class StandaloneHost implements FolioHost {
         return out.path;
     }
 
+    async postDocOp(op: 'move' | 'copy' | 'delete', from: FolioPath, to?: FolioPath): Promise<FolioPath | void> {
+        const resp = await fetch(this.url(`/folio/v1/${op}`), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ from, to }),
+        });
+        if (!resp.ok) {
+            const err = (await resp.json().catch(() => ({}))) as { error?: string };
+            throw new Error(err.error ?? `HTTP ${resp.status}`);
+        }
+        if (resp.status === 200) return ((await resp.json()) as { path: FolioPath }).path;
+    }
+
+    moveDoc(from: FolioPath, to: FolioPath): Promise<FolioPath> {
+        return this.postDocOp('move', from, to) as Promise<FolioPath>;
+    }
+
+    copyDoc(from: FolioPath, to: FolioPath): Promise<FolioPath> {
+        return this.postDocOp('copy', from, to) as Promise<FolioPath>;
+    }
+
+    deleteDoc(path: FolioPath): Promise<void> {
+        return this.postDocOp('delete', path) as Promise<void>;
+    }
+
     async search(query: string): Promise<FolioSearchItem[]> {
         const resp = await fetch(this.url(`/folio/v1/search?q=${encodeURIComponent(query)}`));
         return this.json<FolioSearchItem[]>(resp);

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>米素 · 样式库</title>
+    <link rel="stylesheet" href="/src/theme/tokens.css" />
+    <link rel="stylesheet" href="/src/theme/tokens-dark.css" />
+    <style>
+      /* gallery 自身也只吃 --folio-*；这页就是"库"，新控件先在这里立样张再进应用 */
+      body { margin: 0; padding: 32px; background: var(--folio-bg); color: var(--folio-fg); font-family: var(--folio-font); }
+      h1 { font-size: var(--folio-font-size); }
+      section { margin: 24px 0; }
+      .row { display: flex; flex-wrap: wrap; gap: var(--folio-space-2); align-items: center; }
+      .swatch { display: inline-flex; align-items: center; gap: 6px; font-size: var(--folio-font-size-sm); }
+      .swatch i { width: 24px; height: 24px; border: 1px solid var(--folio-border); display: inline-block; }
+      .btn { border: 1px solid var(--folio-border-strong); border-radius: var(--folio-radius); background: var(--folio-bg); color: var(--folio-fg); font: inherit; padding: var(--folio-space-1) var(--folio-space-4); cursor: pointer; }
+      .btn:hover { background: var(--folio-hover); }
+      .tag { --tag-c: var(--folio-tag-0); border: 1px solid color-mix(in srgb, var(--tag-c) 55%, transparent); background: color-mix(in srgb, var(--tag-c) 12%, transparent); color: var(--tag-c); font-size: var(--folio-font-size-sm); padding: 0 var(--folio-space-2); line-height: 1.8; }
+      .panel { background: var(--folio-panel); border: 1px solid var(--folio-border); padding: var(--folio-space-3); }
+      code { font-family: var(--folio-font-mono); font-size: var(--folio-font-size-sm); background: var(--folio-bg-alt); padding: 0 4px; }
+      .scale { font-size: var(--folio-font-size-sm); }
+    </style>
+  </head>
+  <body>
+    <h1>米素样式库（style gallery）</h1>
+    <p class="scale">所有控件/色彩/文字/线条/距离的唯一出处是 tokens.css；这里只是样张。库里没有的先加 token 再用。</p>
+
+    <section>
+      <h2>色彩 token</h2>
+      <div class="row" id="colors"></div>
+    </section>
+
+    <section>
+      <h2>标签色板</h2>
+      <div class="row" id="tags"></div>
+    </section>
+
+    <section>
+      <h2>控件</h2>
+      <div class="row">
+        <button class="btn">按钮</button>
+        <span class="tag">标签芯片</span>
+        <code>行内代码</code>
+      </div>
+    </section>
+
+    <section>
+      <h2>面板与线条</h2>
+      <div class="panel" style="max-width: 360px;">面板（--folio-panel + --folio-border）</div>
+    </section>
+
+    <section>
+      <h2>字号与距离</h2>
+      <p class="scale">正文字号 var(--folio-font-size)；小字 var(--folio-font-size-sm)；间距档位 space-1..4 = 4/8/12/16px；控件高 var(--folio-control-h)；正文列宽 var(--folio-measure)。</p>
+    </section>
+
+    <script type="module">
+      const colors = ['bg','bg-alt','panel','fg','fg-muted','border','border-strong','hover','selection','primary','danger'];
+      document.querySelector('#colors').replaceChildren(...colors.map((c) => {
+        const span = document.createElement('span');
+        span.className = 'swatch';
+        span.innerHTML = `<i style="background: var(--folio-${c})"></i>--folio-${c}`;
+        return span;
+      }));
+      const tags = Array.from({ length: 8 }, (_, i) => {
+        const span = document.createElement('span');
+        span.className = 'tag';
+        span.style.setProperty('--tag-c', `var(--folio-tag-${i})`);
+        span.textContent = `tag-${i}`;
+        return span;
+      });
+      document.querySelector('#tags').replaceChildren(...tags);
+    </script>
+  </body>
+</html>

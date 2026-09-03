@@ -66,6 +66,10 @@ export interface FolioHost {
      * 读写穿透回原文件；**失败抛错，绝不拷贝正文**。合入后 daemon 同名实现。
      */
     linkOutside?(absSource: string): Promise<FolioPath>;
+    /** 文档管理（验收清单 14）；合入后 daemon 同名实现 */
+    moveDoc?(from: FolioPath, to: FolioPath): Promise<FolioPath>;
+    copyDoc?(from: FolioPath, to: FolioPath): Promise<FolioPath>;
+    deleteDoc?(path: FolioPath): Promise<void>;
     /** 全文搜索（单元 13）：标题或正文命中，回清单项 + 上下文行 */
     search?(query: string): Promise<FolioSearchItem[]>;
     index?(path: FolioPath): Promise<FolioIndex>;

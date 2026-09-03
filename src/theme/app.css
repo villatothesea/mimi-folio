@@ -1268,3 +1268,223 @@ html[data-width='wide'] .mu-editor .mu-container {
 .mu-editor table {
     max-width: 100%;
 }
+
+/* ===== 右键菜单（验收清单 14） ===== */
+.ctx-menu {
+    position: fixed;
+    z-index: 80;
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+    border: 1px solid var(--folio-border-strong);
+    background: var(--folio-bg);
+    box-shadow: var(--folio-shadow);
+    padding: var(--folio-space-1);
+}
+
+.ctx-menu button {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-2);
+    border: 0;
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-2);
+    cursor: pointer;
+    text-align: left;
+    position: relative;
+}
+
+.ctx-menu button:hover:not(:disabled) {
+    background: var(--folio-hover);
+}
+
+.ctx-menu button:disabled {
+    color: var(--folio-fg-muted);
+    opacity: 0.55;
+    cursor: default;
+}
+
+.ctx-menu button.danger {
+    color: var(--folio-danger);
+}
+
+.ctx-ic-none {
+    width: var(--folio-icon-size);
+    flex: none;
+}
+
+.ctx-sep {
+    height: 1px;
+    background: var(--folio-border);
+    margin: var(--folio-space-1) 0;
+}
+
+.ctx-has-sub > .ctx-sub {
+    display: none;
+    position: absolute;
+    left: calc(100% - 4px);
+    top: -4px;
+    flex-direction: column;
+    min-width: 130px;
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--folio-border-strong);
+    background: var(--folio-bg);
+    box-shadow: var(--folio-shadow);
+    padding: var(--folio-space-1);
+    z-index: 81;
+}
+
+.ctx-has-sub:hover > .ctx-sub {
+    display: flex;
+}
+
+/* ===== 自定义弹窗（验收清单 5，直角） ===== */
+.folio-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--folio-fg) 10%, transparent);
+}
+
+.folio-modal-box {
+    min-width: 320px;
+    max-width: 90vw;
+    border: 1px solid var(--folio-border-strong);
+    background: var(--folio-bg);
+    box-shadow: var(--folio-shadow);
+    padding: var(--folio-space-3);
+}
+
+.folio-modal-title {
+    font-size: var(--folio-font-size-sm);
+    font-weight: 600;
+    margin-bottom: var(--folio-space-3);
+}
+
+.folio-modal-input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--folio-border);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-2);
+    margin-bottom: var(--folio-space-3);
+    outline: none;
+}
+
+.folio-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--folio-space-2);
+}
+
+.folio-modal-actions button {
+    border: 1px solid var(--folio-border-strong);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-1) var(--folio-space-3);
+    cursor: pointer;
+}
+
+.folio-modal-actions button.danger {
+    color: var(--folio-danger);
+    border-color: var(--folio-danger);
+}
+
+.folio-modal-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.folio-modal-list button {
+    border: 0;
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    text-align: left;
+    padding: var(--folio-space-2);
+    cursor: pointer;
+}
+
+.folio-modal-list button:hover:not(:disabled) {
+    background: var(--folio-hover);
+}
+
+.folio-modal-list button:disabled {
+    color: var(--folio-fg-muted);
+    opacity: 0.5;
+}
+
+/* ===== 清单原地重命名 ===== */
+.rename-input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--folio-border-strong);
+    border-radius: var(--folio-radius);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-1);
+    outline: none;
+}
+
+/* ===== 属性面板：折叠头/标题行/HEX 色板 ===== */
+.props-head {
+    display: flex;
+    justify-content: flex-end;
+    min-height: 0;
+}
+
+.props-chevron {
+    width: calc(var(--folio-control-h) - 6px);
+    height: calc(var(--folio-control-h) - 6px);
+}
+
+.doc-title-input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    border-bottom: 1px dashed var(--folio-border);
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size);
+    padding: var(--folio-space-1) 0;
+    outline: none;
+}
+
+.doc-title-input:focus {
+    border-bottom-color: var(--folio-border-strong);
+}
+
+.tag-color-input {
+    width: calc(var(--folio-control-h) + 8px);
+    height: var(--folio-control-h);
+    border: 1px solid var(--folio-border);
+    background: none;
+    padding: 2px;
+    cursor: pointer;
+}
+
+.tag-hex-label {
+    font-family: var(--folio-font-mono);
+    font-size: var(--folio-font-size-sm);
+    color: var(--folio-fg-muted);
+    min-width: 4.5em;
+}

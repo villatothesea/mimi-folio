@@ -237,6 +237,46 @@ describe('全文搜索（单元 13/验收批）', () => {
     });
 });
 
+describe('文档管理（验收清单 14）', () => {
+    it('move 移动文件（含跨目录），缓存同步失效', async () => {
+        const res = await fetch(`${base}/folio/v1/move`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ from: 'notes/orphan.md', to: 'memos/orphan.md' }),
+        });
+        assert.equal(res.status, 200);
+        const list = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string }[];
+        assert.ok(!list.some((f) => f.path === 'notes/orphan.md'));
+        assert.ok(list.some((f) => f.path === 'memos/orphan.md'));
+    });
+
+    it('copy 复制副本，目标已存在 400', async () => {
+        const res = await fetch(`${base}/folio/v1/copy`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ from: 'memos/orphan.md', to: 'memos/orphan-1.md' }),
+        });
+        assert.equal(res.status, 200);
+        const again = await fetch(`${base}/folio/v1/copy`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ from: 'memos/orphan.md', to: 'memos/orphan-1.md' }),
+        });
+        assert.equal(again.status, 400);
+    });
+
+    it('delete 删除文件与 .bak', async () => {
+        const res = await fetch(`${base}/folio/v1/delete`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ from: 'memos/orphan-1.md' }),
+        });
+        assert.equal(res.status, 204);
+        const list = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string }[];
+        assert.ok(!list.some((f) => f.path === 'memos/orphan-1.md'));
+    });
+});
+
 describe('写回保护（米米建议 2/3/5）', () => {
     it('read 带 mtimeMs；PUT If-Match 不匹配 409 且不落盘', async () => {
         const doc = (await (await fetch(`${base}/folio/v1/doc?path=${encodeURIComponent('notes/a.md')}`)).json()) as { mtimeMs: number };
