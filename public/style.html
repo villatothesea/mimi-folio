@@ -5,6 +5,7 @@
     <title>米素 · 样式库</title>
     <link rel="stylesheet" href="/src/theme/tokens.css" />
     <link rel="stylesheet" href="/src/theme/tokens-dark.css" />
+    <link rel="stylesheet" href="/src/theme/app.css" />
     <style>
       /* gallery 自身也只吃 --folio-*；这页就是"库"，新控件先在这里立样张再进应用 */
       body { margin: 0; padding: 32px; background: var(--folio-bg); color: var(--folio-fg); font-family: var(--folio-font); }
@@ -47,6 +48,42 @@
     <section>
       <h2>面板与线条</h2>
       <div class="panel" style="max-width: 360px;">面板（--folio-panel + --folio-border）</div>
+    </section>
+
+    <section>
+      <h2>弹窗（folio-modal）</h2>
+      <div class="row" style="align-items: flex-start;">
+        <div class="folio-modal-box" style="position: static; min-width: 260px;">
+          <div class="folio-modal-title">输入弹窗（folioPrompt）</div>
+          <input class="folio-modal-input" value="样张文本" />
+          <div class="folio-modal-actions"><button>取消</button><button>确定</button></div>
+        </div>
+        <div class="folio-modal-box danger" style="position: static; min-width: 240px;">
+          <div class="folio-modal-title">危险确认（folioConfirm）</div>
+          <div class="folio-modal-actions"><button>取消</button><button class="danger">删除</button></div>
+        </div>
+        <div class="folio-modal-box" style="position: static; min-width: 220px;">
+          <div class="folio-modal-title">列表选择（folioPick：移动到…）</div>
+          <div class="folio-modal-list">
+            <button>notes</button><button disabled>memos（当前）</button><button>notes/测试</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>菜单（ctx-menu / plus-menu）</h2>
+      <div class="row" style="align-items: flex-start;">
+        <div class="ctx-menu" style="position: static;">
+          <button><span class="ctx-ic-none"></span><span class="ctx-label">重命名（改标题）</span></button>
+          <button><span class="ctx-ic-none"></span><span class="ctx-label">移动到…</span></button>
+          <div class="ctx-sep"></div>
+          <button class="danger"><span class="ctx-ic-none"></span><span class="ctx-label">删除</span></button>
+        </div>
+        <div id="plus-menu" style="position: static;">
+          <button><span>新建笔记</span></button><button><span>今日速记</span></button><button><span>链入外部 md</span></button>
+        </div>
+      </div>
     </section>
 
     <section>

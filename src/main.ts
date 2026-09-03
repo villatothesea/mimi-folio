@@ -367,6 +367,11 @@ async function open(path: string): Promise<void> {
         renderProps();
         renderStatusbar(doc.markdown);
         renderToc(tocEl, currentEditor());
+        // bug3：打开即高亮清单当前项（列表渲染早于 openFile 赋值，这里直接补）
+        nav.querySelectorAll<HTMLButtonElement>('button[data-path]').forEach((b) => {
+            if (b.dataset.path === openFile) b.setAttribute('aria-current', 'true');
+            else b.removeAttribute('aria-current');
+        });
         void refreshBacklinks();
     } catch (err) {
         saySave(`读失败：${(err as Error).message}`);

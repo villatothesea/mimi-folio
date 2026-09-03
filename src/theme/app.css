@@ -104,17 +104,22 @@ body {
     display: none;
 }
 
-#expand-hints {
+/* bug1 修复：呼吸箭头锚在整个正文区左下/右下角（贴着中区底栏上方） */
+#page {
     position: relative;
-    height: 0;
-    flex: none;
+}
+
+#expand-hints {
+    position: absolute;
+    inset: 0;
     pointer-events: none;
+    z-index: 5;
 }
 
 #expand-hints .icon-btn {
     position: absolute;
     pointer-events: auto;
-    bottom: var(--folio-control-h);
+    bottom: calc(var(--folio-control-h) + var(--folio-space-2));
 }
 
 #expand-left {
@@ -225,6 +230,28 @@ body {
     z-index: 30;
 }
 
+/* bug2：上方的按钮 tooltip 向下弹 */
+#sidebar-head .icon-btn[data-tip]:hover::after,
+#toolbar .icon-btn[data-tip]:hover::after,
+#filterbar button[data-tip]:hover::after,
+#page-head .icon-btn[data-tip]:hover::after,
+#expand-hints .icon-btn[data-tip]:hover::after {
+    top: calc(100% + 6px);
+    bottom: auto;
+}
+
+/* bug2：贴边按钮的 tooltip 不出界（左贴左、右贴右） */
+#bar-left .icon-btn:first-child[data-tip]:hover::after {
+    left: 0;
+    transform: none;
+}
+
+#bar-right .icon-btn[data-tip]:hover::after {
+    left: auto;
+    right: 0;
+    transform: none;
+}
+
 /* ===== 筛选 pills：纯图标 ===== */
 #filterbar {
     display: flex;
@@ -293,8 +320,9 @@ body {
 }
 
 #files button[aria-current='true'] {
-    background: var(--folio-hover-active);
+    background: var(--folio-selection);
     font-weight: 600;
+    box-shadow: inset 2px 0 0 var(--folio-primary);
 }
 
 .file-icon {
@@ -1487,4 +1515,37 @@ html[data-width='wide'] .mu-editor .mu-container {
     font-size: var(--folio-font-size-sm);
     color: var(--folio-fg-muted);
     min-width: 4.5em;
+}
+
+/* 目录条目（bug4：纯文字树，无按钮样式，缩进即层级） */
+.toc-item {
+    border: 0;
+    background: none;
+    color: var(--folio-fg-muted);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    line-height: 1.7;
+    text-align: left;
+    padding: 0;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.toc-item:hover {
+    background: none;
+    color: var(--folio-fg);
+    text-decoration: underline;
+}
+
+.toc-item[aria-current='true'] {
+    background: none;
+    color: var(--folio-fg);
+    font-weight: 600;
+}
+
+.toc-empty {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
 }
