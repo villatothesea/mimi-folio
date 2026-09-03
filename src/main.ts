@@ -33,6 +33,8 @@ const saveStateEl = document.querySelector<HTMLElement>('#save-state')!;
 
 let openFile: string | null = null;
 let lastSaved = '';
+/** 读到的文件 mtime：写回带 If-Match，别人改过就 409 而不是静默覆盖（米米建议 2） */
+let docMtime: number | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let allFiles: FolioListItem[] = [];
 let view: 'all' | 'notes' | 'memos' | 'links' = 'all';
@@ -46,13 +48,18 @@ async function saveNow(markdown: string): Promise<void> {
     if (!openFile) return;
     if (markdown === lastSaved) return;
     try {
-        await host.write(openFile, markdown);
+        await host.write(openFile, markdown, docMtime);
         lastSaved = markdown;
         saySave(`已存 ${new Date().toLocaleTimeString()}`);
         void refreshList();
         void refreshBacklinks();
     } catch (err) {
-        saySave(`存失败：${(err as Error).message}`);
+        if ((err as { status?: number }).status === 409 && openFile) {
+            saySave('文件已在别处被修改，已重载最新版');
+            await open(openFile);
+        } else {
+            saySave(`存失败：${(err as Error).message}`);
+        }
     }
 }
 
@@ -284,6 +291,7 @@ async function open(path: string): Promise<void> {
         const doc = await host.read(path);
         openFile = doc.path;
         lastSaved = doc.markdown;
+        docMtime = doc.mtimeMs;
         renderBreadcrumb();
         syncFavoriteBtn();
         saySave('');

@@ -19,25 +19,25 @@ export class StandaloneHost implements FolioHost {
         return (await resp.json()) as T;
     }
 
-    private async send(method: string, p: string, body: unknown): Promise<void> {
-        const resp = await fetch(this.url(p), {
-            method,
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-        if (!resp.ok) {
-            const err = (await resp.json().catch(() => ({}))) as { error?: string };
-            throw new Error(err.error ?? `HTTP ${resp.status}`);
-        }
-    }
-
     async read(path: FolioPath): Promise<FolioDoc> {
         const resp = await fetch(this.url(`/folio/v1/doc?path=${encodeURIComponent(path)}`));
         return this.json<FolioDoc>(resp);
     }
 
-    async write(path: FolioPath, markdown: string): Promise<void> {
-        await this.send('PUT', '/folio/v1/doc', { path, markdown });
+    async write(path: FolioPath, markdown: string, ifMatch?: number): Promise<void> {
+        const headers: Record<string, string> = { 'content-type': 'application/json' };
+        if (ifMatch !== undefined) headers['if-match'] = String(ifMatch);
+        const resp = await fetch(this.url('/folio/v1/doc'), {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({ path, markdown }),
+        });
+        if (!resp.ok) {
+            const err = (await resp.json().catch(() => ({}))) as { error?: string };
+            const e = new Error(err.error ?? `HTTP ${resp.status}`) as Error & { status?: number };
+            e.status = resp.status;
+            throw e;
+        }
     }
 
     async list(opts: FolioListOpts = {}): Promise<FolioListItem[]> {

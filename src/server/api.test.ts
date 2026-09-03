@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { closeVaultWatcher } from './api.ts';
 import { createAppServer } from './main.ts';
 
 const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-vault-'));
@@ -34,7 +35,10 @@ await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
 const port = (server.address() as { port: number }).port;
 const base = `http://127.0.0.1:${port}`;
 
-after(() => void server.close());
+after(() => {
+    closeVaultWatcher();
+    void server.close();
+});
 
 describe('GET /folio/v1/*', () => {
     it('list 返回全部 md、标题、tags 与 kind', async () => {
@@ -230,6 +234,45 @@ describe('全文搜索（单元 13/验收批）', () => {
     it('空查询返回空数组', async () => {
         const res = await fetch(`${base}/folio/v1/search`);
         assert.deepEqual(await res.json(), []);
+    });
+});
+
+describe('写回保护（米米建议 2/3/5）', () => {
+    it('read 带 mtimeMs；PUT If-Match 不匹配 409 且不落盘', async () => {
+        const doc = (await (await fetch(`${base}/folio/v1/doc?path=${encodeURIComponent('notes/a.md')}`)).json()) as { mtimeMs: number };
+        assert.equal(typeof doc.mtimeMs, 'number');
+        const res = await fetch(`${base}/folio/v1/doc`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json', 'if-match': String(doc.mtimeMs - 5000) },
+            body: JSON.stringify({ path: 'notes/a.md', markdown: '# 被盖掉' }),
+        });
+        assert.equal(res.status, 409);
+        const after = (await (await fetch(`${base}/folio/v1/doc?path=${encodeURIComponent('notes/a.md')}`)).json()) as { markdown: string };
+        assert.ok(!after.markdown.includes('被盖掉'));
+    });
+
+    it('PUT 落盘前留 .bak 快照（含旧内容，不进清单）', async () => {
+        const res = await fetch(`${base}/folio/v1/doc`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: 'notes/a.md', markdown: '# A 新版\n' }),
+        });
+        assert.equal(res.status, 204);
+        const bak = await fs.readFile(path.join(vault, 'notes', 'a.md.bak'), 'utf8');
+        assert.ok(!bak.includes('新版'));
+        const list = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string }[];
+        assert.ok(!list.some((f) => f.path.endsWith('.bak')));
+    });
+
+    it('写穿失效索引：PUT 后 search 能搜到新内容', async () => {
+        await fetch(`${base}/folio/v1/doc`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: 'notes/a.md', markdown: '# A\n\n索引失效哨兵词。\n' }),
+        });
+        const res = await fetch(`${base}/folio/v1/search?q=${encodeURIComponent('哨兵词')}`);
+        const results = (await res.json()) as { path: string }[];
+        assert.ok(results.some((r) => r.path === 'notes/a.md'));
     });
 });
 

@@ -9,6 +9,8 @@ export type FolioPath = string;
 export type FolioDoc = {
     path: FolioPath;
     markdown: string;
+    /** 读时的文件 mtime（ms），写回经 If-Match 做冲突保护（米米建议 2） */
+    mtimeMs?: number;
 };
 
 export type FolioListItem = {
@@ -51,7 +53,8 @@ export type FolioIndex = {
 
 export interface FolioHost {
     read(path: FolioPath): Promise<FolioDoc>;
-    write(path: FolioPath, markdown: string): Promise<void>;
+    /** ifMatch 传读时的 mtimeMs：文件已变则 409，不静默覆盖 */
+    write(path: FolioPath, markdown: string, ifMatch?: number): Promise<void>;
     list(opts?: FolioListOpts): Promise<FolioListItem[]>;
     saveImage(bytes: Uint8Array, hint: string): Promise<FolioImage>;
     /** 音视频等附件落盘（单元 4）；合入后由 daemon 提供同名能力 */

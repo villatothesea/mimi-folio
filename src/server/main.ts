@@ -51,7 +51,8 @@ export function createAppServer(): import('node:http').Server {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     const port = Number(process.env.PORT ?? 3789);
-    createAppServer().listen(port, () => {
-        console.log(`米素独立服务 http://localhost:${port}  vault=${vaultRoot()}`);
+    // 只绑回环：本地记忆库不给局域网扫面（米米建议 4）
+    createAppServer().listen(port, '127.0.0.1', () => {
+        console.log(`米素独立服务 http://127.0.0.1:${port}  vault=${vaultRoot()}`);
     });
 }

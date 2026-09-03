@@ -4,6 +4,7 @@
  * 只放行 vault 内的 .md 与 attachments/；越界路径一律 4xx。
  */
 import { promises as fs } from 'node:fs';
+import { watch as fsWatch, type FSWatcher } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 
@@ -110,44 +111,87 @@ async function linkOutside(root: string, absSource: string): Promise<string> {
             );
         }
     }
+    invalidate(root);
     return `links/${name}`;
 }
 
-async function listMarkdown(root: string, opts: FolioListOpts): Promise<FolioListItem[]> {
-    const out: FolioListItem[] = [];
+/**
+ * vault 索引缓存（米米建议 3）：list/search/wikilink 共用一棵内存索引，
+ * 本服务写穿失效，fs.watch 兜底外部改动（合入后这层迁给 daemon 常驻）。
+ */
+type VaultCache = {
+    list: FolioListItem[];
+    contents: Map<string, string>;
+    mtimes: Map<string, number>;
+};
+const cacheByRoot = new Map<string, VaultCache>();
+let watcher: FSWatcher | null = null;
+let watchedRoot = '';
+
+function invalidate(root: string): void {
+    cacheByRoot.delete(root);
+}
+
+/** 关闭常驻 watcher（测试收尾/进程退出用）。 */
+export function closeVaultWatcher(): void {
+    watcher?.close();
+    watcher = null;
+    watchedRoot = '';
+}
+
+function ensureWatcher(root: string): void {
+    if (watchedRoot === root && watcher) return;
+    watcher?.close();
+    watchedRoot = root;
+    watcher = fsWatch(root, { recursive: true }, () => invalidate(root));
+    watcher.on('error', () => invalidate(root));
+}
+
+async function loadVault(root: string): Promise<VaultCache> {
+    ensureWatcher(root);
+    const cached = cacheByRoot.get(root);
+    if (cached) return cached;
+
+    const list: FolioListItem[] = [];
+    const contents = new Map<string, string>();
+    const mtimes = new Map<string, number>();
     async function walk(dir: string): Promise<void> {
         for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
             if (entry.name.startsWith('.')) continue;
             const abs = path.join(dir, entry.name);
-            if (entry.isDirectory()) await walk(abs);
-            // 符号链接（目录项不是 file/dir）也跟进去：links/ 的链入文档要出现在清单
-            else if (entry.isSymbolicLink() && MD_RE.test(entry.name)) {
-                const stat = await fs.stat(abs).catch(() => null);
-                if (stat?.isFile()) {
-                    const rel = path.relative(root, abs).split(path.sep).join('/');
-                    const markdown = await fs.readFile(abs, 'utf8');
-                    const { tags } = splitFrontmatter(markdown);
-                    out.push({ path: rel, title: titleOf(rel, markdown), tags, linked: true });
-                }
-            } else if (entry.isFile() && MD_RE.test(entry.name)) {
-                const rel = path.relative(root, abs).split(path.sep).join('/');
-                const markdown = await fs.readFile(abs, 'utf8');
-                const { frontmatter, tags } = splitFrontmatter(markdown);
-                // 硬链接没有目录项标记，links/ 目录下的都算链入
-                const linked = rel === 'links' || rel.startsWith('links/');
-                out.push({
-                    path: rel,
-                    title: titleOf(rel, markdown),
-                    tags,
-                    kind: kindOf(rel),
-                    linked: linked || undefined,
-                    favorite: /^favorite\s*:\s*true/im.test(frontmatter) || undefined,
-                });
+            const rel = path.relative(root, abs).split(path.sep).join('/');
+            if (entry.isDirectory()) {
+                await walk(abs);
+                continue;
             }
+            const isMdFile = entry.isFile() && MD_RE.test(entry.name);
+            const isMdLink = entry.isSymbolicLink() && MD_RE.test(entry.name);
+            if (!isMdFile && !isMdLink) continue;
+            const stat = await fs.stat(abs).catch(() => null);
+            if (!stat?.isFile()) continue;
+            const markdown = await fs.readFile(abs, 'utf8');
+            contents.set(rel, markdown);
+            mtimes.set(rel, stat.mtimeMs);
+            const { frontmatter, tags } = splitFrontmatter(markdown);
+            list.push({
+                path: rel,
+                title: titleOf(rel, markdown),
+                tags,
+                kind: kindOf(rel),
+                linked: (rel === 'links' || rel.startsWith('links/')) || undefined,
+                favorite: /^favorite\s*:\s*true/im.test(frontmatter) || undefined,
+            });
         }
     }
     await walk(root);
-    let result = out;
+    const cache: VaultCache = { list, contents, mtimes };
+    cacheByRoot.set(root, cache);
+    return cache;
+}
+
+async function listMarkdown(root: string, opts: FolioListOpts): Promise<FolioListItem[]> {
+    const { list } = await loadVault(root);
+    let result = list.map((f) => ({ ...f }));
     if (opts.dir) result = result.filter((f) => f.path.startsWith(`${opts.dir}/`));
     if (opts.tag) result = result.filter((f) => f.tags?.includes(opts.tag!));
     if (opts.kind) result = result.filter((f) => f.kind === opts.kind);
@@ -156,20 +200,8 @@ async function listMarkdown(root: string, opts: FolioListOpts): Promise<FolioLis
 
 /** 全 vault 的 wikilink 索引：出链/反链都在这一棵树上算（iwe 算法合入后归 daemon）。 */
 async function buildWikilinkIndex(root: string): Promise<WikilinkIndex> {
-    const docs = new Map<string, string>();
-    async function walk(dir: string): Promise<void> {
-        for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
-            if (entry.name.startsWith('.')) continue;
-            const abs = path.join(dir, entry.name);
-            if (entry.isDirectory()) await walk(abs);
-            else if (entry.isFile() && MD_RE.test(entry.name)) {
-                const rel = path.relative(root, abs).split(path.sep).join('/');
-                docs.set(rel, await fs.readFile(abs, 'utf8'));
-            }
-        }
-    }
-    await walk(root);
-    return buildIndex(docs);
+    const { contents } = await loadVault(root);
+    return buildIndex(contents);
 }
 
 /** 附件名只留安全字符；重名时塞时间戳，不覆盖。 */
@@ -252,9 +284,12 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             const p = safeRel(query.get('path') ?? '');
             if (!p) return fail(res, 400, 'path 非法');
             if (!MD_RE.test(p)) return fail(res, 400, '只读 .md');
-            const raw = await fs.readFile(path.join(root, p), 'utf8');
-            // muya 的 lexer 只认 LF；Windows 盘上的 CRLF 在读出层统一掉，写回也是 LF
-            send(res, 200, { path: p, markdown: raw.replace(/\r\n?/g, '\n') });
+            const abs = path.join(root, p);
+            const raw = await fs.readFile(abs, 'utf8');
+            const stat = await fs.stat(abs);
+            // muya 的 lexer 只认 LF；Windows 盘上的 CRLF 在读出层统一掉，写回也是 LF。
+            // mtimeMs 供 PUT If-Match 做写回冲突保护（米米建议 2）。
+            send(res, 200, { path: p, markdown: raw.replace(/\r\n?/g, '\n'), mtimeMs: stat.mtimeMs });
             return true;
         }
 
@@ -265,8 +300,17 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
                 return fail(res, 400, '需要 {path: *.md, markdown}');
             }
             const abs = path.join(root, p);
+            const currentStat = await fs.stat(abs).catch(() => null);
+            const ifMatch = req.headers['if-match'];
+            // If-Match 不匹配 → 409，绝不静默盖掉别处的修改（米米建议 2）
+            if (ifMatch && currentStat && String(currentStat.mtimeMs) !== String(ifMatch)) {
+                return fail(res, 409, '文件已在别处被修改（conflict）');
+            }
+            // 落盘前留最近一份快照（米米建议 5）：<名>.md.bak，不带 .md 结尾不进清单
+            if (currentStat) await fs.copyFile(abs, `${abs}.bak`).catch(() => undefined);
             await fs.mkdir(path.dirname(abs), { recursive: true });
             await fs.writeFile(abs, body.markdown, 'utf8');
+            invalidate(root);
             send(res, 204);
             return true;
         }
@@ -278,9 +322,10 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
                 return true;
             }
             const needle = q.toLowerCase();
+            const { list, contents } = await loadVault(root);
             const results: (FolioListItem & { matches: { text: string; start: number }[] })[] = [];
-            for (const item of await listMarkdown(root, {})) {
-                const markdown = await fs.readFile(path.join(root, item.path), 'utf8');
+            for (const item of list) {
+                const markdown = contents.get(item.path) ?? '';
                 const matches: { text: string; start: number }[] = [];
                 const titleHit = item.title.toLowerCase().indexOf(needle);
                 if (titleHit >= 0) matches.push({ text: item.title, start: titleHit });
