@@ -170,6 +170,70 @@
     font-size: var(--folio-font-size-sm);
 }
 
+#find-toggle {
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: none;
+    color: var(--folio-fg-muted);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-2);
+    cursor: pointer;
+}
+
+#find-toggle:hover {
+    background: var(--folio-hover);
+}
+
+/* 查找替换条（单元 11） */
+#findbar {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-2);
+    padding: var(--folio-space-2) var(--folio-space-4);
+    border-bottom: 1px solid var(--folio-border);
+    background: var(--folio-panel);
+}
+
+#findbar input {
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-2);
+    line-height: 1.8;
+    width: 14em;
+}
+
+#findbar input:focus {
+    outline: none;
+    border-color: var(--folio-border-strong);
+}
+
+#find-count {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+    min-width: 3.5em;
+}
+
+#findbar button {
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-2);
+    line-height: 1.8;
+    cursor: pointer;
+}
+
+#findbar button:hover {
+    background: var(--folio-hover);
+}
+
 #editor-wrap {
     flex: 1;
     overflow-y: auto;

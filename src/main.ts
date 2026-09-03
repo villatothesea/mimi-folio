@@ -184,6 +184,10 @@ async function open(path: string): Promise<void> {
 
 const backlinksEl = document.querySelector<HTMLElement>('#backlinks')!;
 const propsEl = document.querySelector<HTMLElement>('#props')!;
+const findbarEl = document.querySelector<HTMLElement>('#findbar')!;
+const findInput = document.querySelector<HTMLInputElement>('#find-input')!;
+const findCount = document.querySelector<HTMLElement>('#find-count')!;
+const replaceInput = document.querySelector<HTMLInputElement>('#replace-input')!;
 
 async function refreshList(): Promise<void> {
     try {
@@ -247,6 +251,68 @@ window.addEventListener('beforeunload', (event) => {
 window.addEventListener('pagehide', () => {
     if (openFile && currentEditor()) void saveNow(currentEditor()!.getMarkdown());
     destroyEditor();
+});
+
+// 查找替换（单元 11）：muya.search/find/replace 的页面壳。
+let findTimer: ReturnType<typeof setTimeout> | undefined;
+
+function doSearch(): void {
+    const editor = currentEditor();
+    if (!editor) return;
+    editor.search(findInput.value, { selectHighlight: true });
+    const hits = (editor as unknown as { editor?: { searchModule?: { matches: unknown[] } } }).editor?.searchModule?.matches?.length ?? 0;
+    findCount.textContent = findInput.value ? `${hits} 处` : '';
+}
+
+function findbarShow(): void {
+    if (!openFile) return;
+    findbarEl.hidden = false;
+    findInput.focus();
+    findInput.select();
+    doSearch();
+}
+
+function findbarHide(): void {
+    findbarEl.hidden = true;
+    currentEditor()?.search('');
+    findCount.textContent = '';
+}
+
+document.querySelector<HTMLButtonElement>('#find-toggle')!.addEventListener('click', () => {
+    if (findbarEl.hidden) findbarShow();
+    else findbarHide();
+});
+document.querySelector<HTMLButtonElement>('#find-close')!.addEventListener('click', findbarHide);
+document.querySelector<HTMLButtonElement>('#find-prev')!.addEventListener('click', () => currentEditor()?.find('previous'));
+document.querySelector<HTMLButtonElement>('#find-next')!.addEventListener('click', () => currentEditor()?.find('next'));
+findInput.addEventListener('input', () => {
+    clearTimeout(findTimer);
+    findTimer = setTimeout(doSearch, 200);
+});
+findbarEl.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        findbarHide();
+        return;
+    }
+    if (event.target !== findInput) return;
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        currentEditor()?.find(event.shiftKey ? 'previous' : 'next');
+    }
+});
+document.querySelector<HTMLButtonElement>('#replace-one')!.addEventListener('click', () => {
+    currentEditor()?.replace(replaceInput.value, { isSingle: true, isRegexp: false });
+    doSearch();
+});
+document.querySelector<HTMLButtonElement>('#replace-all')!.addEventListener('click', () => {
+    currentEditor()?.replace(replaceInput.value, { isSingle: false, isRegexp: false });
+    doSearch();
+});
+window.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f' && openFile) {
+        event.preventDefault();
+        findbarShow();
+    }
 });
 
 // [[wikilink]] 点击直达 / 未命中弹新建芯片（单元 7，按验收反馈改为点击即开）
