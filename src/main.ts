@@ -1,11 +1,14 @@
 import './theme/app.css';
 import './theme/tokens.css';
+import './theme/tokens-dark.css';
+import { wordCount } from '@muyajs/core';
 import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
 import { renderMemoTimeline, renderSidebar, renderTagBar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
+import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
 import { setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import type { FolioListItem } from './host/types.ts';
@@ -158,10 +161,25 @@ async function createAndOpen(path: string): Promise<void> {
 }
 
 function onEditorChange(markdown: string): void {
+    renderStatusbar(markdown);
     if (markdown === lastSaved) return;
     saySave('改动中…');
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => void saveNow(markdown), 400);
+}
+
+/** 底栏（单元 12）：篇数 + 当前文档字数；TOC 随内容重算也挂在这。 */
+let tocTimer: ReturnType<typeof setTimeout> | undefined;
+
+function renderStatusbar(markdown?: string): void {
+    statCount.textContent = allFiles.length ? `${allFiles.length} 篇` : '';
+    const md = markdown ?? currentEditor()?.getMarkdown();
+    if (md !== undefined) {
+        const { word } = wordCount(md);
+        statWords.textContent = `${word} 字`;
+    }
+    clearTimeout(tocTimer);
+    tocTimer = setTimeout(() => renderToc(tocEl, currentEditor()), 300);
 }
 
 async function open(path: string): Promise<void> {
@@ -176,6 +194,8 @@ async function open(path: string): Promise<void> {
         saySave('');
         mountEditor(wrap, doc.markdown, host, onEditorChange);
         renderProps();
+        renderStatusbar(doc.markdown);
+        renderToc(tocEl, currentEditor());
         void refreshBacklinks();
     } catch (err) {
         saySave(`读失败：${(err as Error).message}`);
@@ -184,6 +204,9 @@ async function open(path: string): Promise<void> {
 
 const backlinksEl = document.querySelector<HTMLElement>('#backlinks')!;
 const propsEl = document.querySelector<HTMLElement>('#props')!;
+const tocEl = document.querySelector<HTMLElement>('#toc')!;
+const statCount = document.querySelector<HTMLElement>('#stat-count')!;
+const statWords = document.querySelector<HTMLElement>('#stat-words')!;
 const findbarEl = document.querySelector<HTMLElement>('#findbar')!;
 const findInput = document.querySelector<HTMLInputElement>('#find-input')!;
 const findCount = document.querySelector<HTMLElement>('#find-count')!;
@@ -199,6 +222,7 @@ async function refreshList(): Promise<void> {
             activeTag = activeTag === tag ? null : tag;
             void refreshList();
         });
+        renderStatusbar();
         if (view === 'memos') {
             renderMemoTimeline(nav, shown.filter((f) => f.kind === 'memo'), {
                 activePath: openFile,
@@ -344,5 +368,24 @@ attachImageFallback(wrap);
 
 // 白名单视频链接内嵌正文流（单元 9，按验收反馈从底部面板改入正文）
 attachInlineEmbeds(wrap);
+
+// 滚动时高亮 TOC 当前节（单元 12）
+let scrollTimer: ReturnType<typeof setTimeout> | undefined;
+wrap.addEventListener('scroll', () => {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => highlightActive(tocEl), 150);
+});
+
+// 明暗主题（单元 12）：只切 data-theme，值都在 tokens-dark.css
+const themeToggle = document.querySelector<HTMLButtonElement>('#theme-toggle')!;
+function applyTheme(mode: 'light' | 'dark'): void {
+    document.documentElement.dataset.theme = mode;
+    themeToggle.textContent = mode === 'dark' ? '亮色' : '暗色';
+    localStorage.setItem('folio-theme', mode);
+}
+applyTheme((localStorage.getItem('folio-theme') as 'light' | 'dark') ?? 'light');
+themeToggle.addEventListener('click', () => {
+    applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+});
 
 void refreshList();

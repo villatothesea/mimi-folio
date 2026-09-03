@@ -7,41 +7,50 @@
   </head>
   <body>
     <div id="app">
-      <aside id="sidebar">
-        <header id="sidebar-head">
-          <span>米素</span>
-          <span id="view-switch">
-            <button id="view-notes" type="button" aria-pressed="true">笔记</button>
-            <button id="view-memos" type="button" aria-pressed="false">速记</button>
-          </span>
-        </header>
-        <div id="tagbar" aria-label="标签筛选"></div>
-        <nav id="files" aria-label="文件列表"></nav>
-        <footer id="sidebar-foot">
-          <button id="new-memo" type="button" hidden>新建速记</button>
-          <button id="link-outside" type="button" title="把 vault 外的 md 链进来（不拷贝）">链入外部 md</button>
-        </footer>
-      </aside>
-      <main id="page">
-        <header id="page-head">
-          <span id="current-path">未打开</span>
-          <button id="find-toggle" type="button" title="查找替换（Ctrl+F）">查找</button>
-          <span id="save-state" role="status"></span>
-        </header>
-        <section id="findbar" aria-label="查找替换" hidden>
-          <input id="find-input" type="text" placeholder="查找…" />
-          <span id="find-count"></span>
-          <button id="find-prev" type="button" title="上一个（Shift+回车）">↑</button>
-          <button id="find-next" type="button" title="下一个（回车）">↓</button>
-          <input id="replace-input" type="text" placeholder="替换为…" />
-          <button id="replace-one" type="button">替换</button>
-          <button id="replace-all" type="button">全部</button>
-          <button id="find-close" type="button" title="关闭（Esc）">×</button>
-        </section>
-        <section id="props" aria-label="文档属性" hidden></section>
-        <div id="editor-wrap"></div>
-        <aside id="backlinks" aria-label="出链与反链"></aside>
-      </main>
+      <div id="main-row">
+        <aside id="sidebar">
+          <header id="sidebar-head">
+            <span>米素</span>
+            <span id="view-switch">
+              <button id="view-notes" type="button" aria-pressed="true">笔记</button>
+              <button id="view-memos" type="button" aria-pressed="false">速记</button>
+            </span>
+          </header>
+          <div id="tagbar" aria-label="标签筛选"></div>
+          <nav id="files" aria-label="文件列表"></nav>
+          <footer id="sidebar-foot">
+            <button id="new-memo" type="button" hidden>新建速记</button>
+            <button id="link-outside" type="button" title="把 vault 外的 md 链进来（不拷贝）">链入外部 md</button>
+          </footer>
+        </aside>
+        <main id="page">
+          <header id="page-head">
+            <span id="current-path">未打开</span>
+            <button id="find-toggle" type="button" title="查找替换（Ctrl+F）">查找</button>
+            <span id="save-state" role="status"></span>
+          </header>
+          <section id="findbar" aria-label="查找替换" hidden>
+            <input id="find-input" type="text" placeholder="查找…" />
+            <span id="find-count"></span>
+            <button id="find-prev" type="button" title="上一个（Shift+回车）">↑</button>
+            <button id="find-next" type="button" title="下一个（回车）">↓</button>
+            <input id="replace-input" type="text" placeholder="替换为…" />
+            <button id="replace-one" type="button">替换</button>
+            <button id="replace-all" type="button">全部</button>
+            <button id="find-close" type="button" title="关闭（Esc）">×</button>
+          </section>
+          <section id="props" aria-label="文档属性" hidden></section>
+          <div id="editor-wrap"></div>
+          <aside id="backlinks" aria-label="出链与反链"></aside>
+        </main>
+        <aside id="toc" aria-label="文档目录"></aside>
+      </div>
+      <footer id="statusbar">
+        <span id="stat-count"></span>
+        <span id="stat-words"></span>
+        <span id="stat-rest"></span>
+        <button id="theme-toggle" type="button" title="明暗切换">主题</button>
+      </footer>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

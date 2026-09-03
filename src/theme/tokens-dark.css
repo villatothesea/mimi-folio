@@ -1,0 +1,25 @@
+/**
+ * 暗色主题（单元 12）：只覆写 --folio-* 的值，结构与亮色完全一致
+ * （AGENTS.md 硬规则 8：换色只换 token 值）。挂在 [data-theme='dark']。
+ */
+:root[data-theme='dark'] {
+    color-scheme: dark;
+
+    --folio-bg: #161616;
+    --folio-bg-alt: #242424;
+    --folio-panel: #1c1c1c;
+    --folio-fg: #e6e6e6;
+    --folio-fg-muted: #9a9a9a;
+    --folio-border: #3a3a3a;
+    --folio-border-strong: #555555;
+    --folio-hover: #2c2c2c;
+    --folio-hover-active: #353535;
+    --folio-selection: #484848;
+    --folio-primary: #d8d8d8;
+    --folio-primary-fg: #161616;
+    --folio-danger: #b0b0b0;
+    --folio-warning: #a8a8a8;
+    --folio-success: #b4b4b4;
+    --folio-info: #a0a0a0;
+    --folio-shadow: rgb(0 0 0 / 40%) 0 0 0 1px, rgb(0 0 0 / 45%) 0 3px 6px;
+}
