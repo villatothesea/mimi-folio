@@ -104,7 +104,12 @@
 }
 
 #sidebar-head {
-    padding: var(--folio-space-3) var(--folio-space-4);
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    /* 与 #page-head 同一公式同高，底线对齐成一条横线（验收反馈） */
+    min-height: calc(var(--folio-control-h) + 2 * var(--folio-space-2) + 1px);
+    padding: 0 var(--folio-space-4);
     border-bottom: 1px solid var(--folio-border);
     font-weight: 600;
 }
@@ -355,10 +360,11 @@
 #page-head {
     display: flex;
     align-items: center;
+    box-sizing: border-box;
     gap: var(--folio-space-2);
-    padding: var(--folio-space-1) var(--folio-space-3);
+    padding: 0 var(--folio-space-3);
     border-bottom: 1px solid var(--folio-border);
-    min-height: calc(var(--folio-control-h) + 2 * var(--folio-space-1));
+    min-height: calc(var(--folio-control-h) + 2 * var(--folio-space-2) + 1px);
 }
 
 /* 顶栏所有控件统一等高（验收反馈：星星过大） */
