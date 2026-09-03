@@ -22,4 +22,14 @@
     --folio-success: #b4b4b4;
     --folio-info: #a0a0a0;
     --folio-shadow: rgb(0 0 0 / 40%) 0 0 0 1px, rgb(0 0 0 / 45%) 0 3px 6px;
+
+    /* 标签色板（暗底加亮） */
+    --folio-tag-0: #d98da1;
+    --folio-tag-1: #d9a866;
+    --folio-tag-2: #b3c46b;
+    --folio-tag-3: #7fcfa4;
+    --folio-tag-4: #7fcfcf;
+    --folio-tag-5: #8fb0e0;
+    --folio-tag-6: #b495e0;
+    --folio-tag-7: #e08aab;
 }

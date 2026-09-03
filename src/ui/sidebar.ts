@@ -126,6 +126,7 @@ export function renderTagBar(
     files: FolioListItem[],
     activeTag: string | null,
     onToggle: (tag: string) => void,
+    applyColor?: (el: HTMLElement, tag: string) => void,
 ): void {
     const tags = new Set<string>();
     for (const file of files) for (const tag of file.tags ?? []) tags.add(tag);
@@ -140,6 +141,7 @@ export function renderTagBar(
         chip.textContent = tag;
         chip.dataset.tag = tag;
         if (tag === activeTag) chip.setAttribute('aria-pressed', 'true');
+        applyColor?.(chip, tag);
         chip.addEventListener('click', () => onToggle(tag));
         bar.append(chip);
     }

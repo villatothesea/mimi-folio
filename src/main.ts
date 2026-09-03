@@ -11,6 +11,7 @@ import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
+import { TAG_COLOR_COUNT, applyTagColor, setTagColor, tagColorIndex } from './ui/tagColors.ts';
 import type { FolioListItem } from './host/types.ts';
 
 /**
@@ -88,7 +89,18 @@ function renderProps(): void {
         propsEl.append(line);
     };
 
-    // tags 行：芯片 + ＋（始终给，方便新文档打标）
+    // 其余键按原顺序只读展示（tags 行固定在最下）
+    const { frontmatter } = splitFrontmatter(editor.getMarkdown());
+    for (const lineText of (frontmatter ?? '').split('\n')) {
+        const pair = lineText.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+        if (!pair || pair[1].toLowerCase() === 'tags') continue;
+        const v = document.createElement('span');
+        v.className = 'prop-value';
+        v.textContent = pair[2] || '—';
+        row(pair[1], v);
+    }
+
+    // tags 行：芯片（点击改名/换色）+ ＋，固定最下
     const tagsValue = document.createElement('span');
     tagsValue.className = 'prop-tags';
     const tags = allFiles.find((f) => f.path === openFile)?.tags ?? [];
@@ -96,6 +108,9 @@ function renderProps(): void {
         const chip = document.createElement('span');
         chip.className = 'doc-tag';
         chip.append(document.createTextNode(tag));
+        applyTagColor(chip, tag);
+        chip.title = '点击改名 / 换色';
+        chip.addEventListener('click', (event) => openTagPopover(tag, chip, event));
         const remove = document.createElement('button');
         remove.className = 'doc-tag-x';
         remove.type = 'button';
@@ -130,18 +145,95 @@ function renderProps(): void {
     });
     tagsValue.append(add);
     row('tags', tagsValue);
-
-    // 其余键按原顺序只读展示
-    const { frontmatter } = splitFrontmatter(editor.getMarkdown());
-    for (const lineText of (frontmatter ?? '').split('\n')) {
-        const pair = lineText.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
-        if (!pair || pair[1].toLowerCase() === 'tags') continue;
-        const v = document.createElement('span');
-        v.className = 'prop-value';
-        v.textContent = pair[2] || '—';
-        row(pair[1], v);
-    }
 }
+
+/** 标签芯片弹层：重命名 + 换色（色存 localStorage，属视图偏好不进 md）。 */
+let tagPopover: HTMLDivElement | null = null;
+
+function closeTagPopover(): void {
+    tagPopover?.remove();
+    tagPopover = null;
+}
+
+function openTagPopover(tag: string, chip: HTMLElement, event: MouseEvent): void {
+    event.stopPropagation();
+    closeTagPopover();
+    const tags = allFiles.find((f) => f.path === openFile)?.tags ?? [];
+
+    const pop = document.createElement('div');
+    pop.className = 'tag-pop';
+    tagPopover = pop;
+
+    const input = document.createElement('input');
+    input.className = 'doc-tag-input';
+    input.value = tag;
+    input.placeholder = '重命名';
+    pop.append(input);
+
+    const swatches = document.createElement('div');
+    swatches.className = 'tag-pop-colors';
+    for (let i = 0; i < TAG_COLOR_COUNT; i++) {
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'tag-dot';
+        if (tagColorIndex(tag) === i) dot.setAttribute('aria-pressed', 'true');
+        dot.style.setProperty('--tag-c', `var(--folio-tag-${i})`);
+        dot.title = `色 ${i + 1}`;
+        dot.addEventListener('click', () => {
+            setTagColor(tag, i);
+            closeTagPopover();
+            renderProps();
+            void refreshList();
+        });
+        swatches.append(dot);
+    }
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.className = 'tag-dot tag-dot-reset';
+    reset.title = '按名字散列（清除自定义色）';
+    reset.addEventListener('click', () => {
+        setTagColor(tag, null);
+        closeTagPopover();
+        renderProps();
+        void refreshList();
+    });
+    swatches.append(reset);
+    pop.append(swatches);
+
+    const rename = (next: string) => {
+        closeTagPopover();
+        if (next && next !== tag && !tags.includes(next)) {
+            const editor = currentEditor();
+            if (editor) {
+                editor.replaceContent(setTags(editor.getMarkdown(), tags.map((t) => (t === tag ? next : t))));
+                onEditorChange(editor.getMarkdown());
+            }
+        } else {
+            renderProps();
+        }
+    };
+    input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') rename(input.value.trim());
+        if (ev.key === 'Escape') closeTagPopover();
+    });
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.className = 'doc-tag-add';
+    ok.textContent = '改名';
+    ok.addEventListener('click', () => rename(input.value.trim()));
+    pop.append(ok);
+
+    const rect = chip.getBoundingClientRect();
+    pop.style.left = `${Math.min(rect.left, window.innerWidth - 240)}px`;
+    pop.style.top = `${rect.bottom + 6}px`;
+    document.body.append(pop);
+    input.focus();
+    input.select();
+}
+
+document.addEventListener('click', (event) => {
+    if (tagPopover && !tagPopover.contains(event.target as Node)) closeTagPopover();
+});
 
 async function refreshBacklinks(): Promise<void> {
     if (!openFile || !host.index) return;
@@ -276,7 +368,7 @@ async function refreshList(): Promise<void> {
             const hits = await host.search(searchQ);
             allFiles = await host.list();
             renderPills();
-            renderTagBar(tagbar, allFiles, null, () => undefined);
+            renderTagBar(tagbar, allFiles, null, () => undefined, applyTagColor);
             renderSidebar(nav, hits, { activePath: openFile, onOpen: (p) => void open(p) });
             renderStatusbar();
             return;
@@ -293,7 +385,7 @@ async function refreshList(): Promise<void> {
         renderTagBar(tagbar, files, activeTag, (tag) => {
             activeTag = activeTag === tag ? null : tag;
             void refreshList();
-        });
+        }, applyTagColor);
         renderStatusbar();
         if (view === 'memos') {
             renderMemoTimeline(nav, shown, {

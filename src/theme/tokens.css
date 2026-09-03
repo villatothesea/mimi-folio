@@ -37,6 +37,17 @@
     --folio-measure: 800px;
     --folio-font-size-code: 14px;
     --folio-shadow: rgb(0 0 0 / 5%) 0 0 0 1px, rgb(0 0 0 / 6%) 0 3px 6px;
+    --folio-control-h: 28px;
+
+    /* 标签色板（索引由 tagColors 分配，色值只在这里改） */
+    --folio-tag-0: #a54d62;
+    --folio-tag-1: #a36a28;
+    --folio-tag-2: #6f8029;
+    --folio-tag-3: #2a7d52;
+    --folio-tag-4: #2a7d7d;
+    --folio-tag-5: #3a5fa3;
+    --folio-tag-6: #6c47a3;
+    --folio-tag-7: #a33a6b;
 
     /* Muya 只吃下面这些，从 folio 映射，禁止在别处给 --mu-* 赋 hex */
     --mu-font-size: var(--folio-font-size);
