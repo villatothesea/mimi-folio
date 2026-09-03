@@ -6,8 +6,8 @@
 import { icon } from './icons';
 
 export type FmtSettings = {
-    numHead: 'none' | 'dot' | 'cjk';
-    numBody: 'none' | 'dot' | 'cjk';
+    numHead: 'none' | 'dot' | 'cjk' | 'paren';
+    numBody: 'none' | 'dot' | 'cjk' | 'paren';
     ul: ('disc' | 'circle' | 'square' | 'dash' | 'star' | 'plus')[];
 };
 
@@ -132,8 +132,8 @@ export function openSettings(): void {
     addSection('默认格式', () => {
         const fmt = readJSON(FMT_KEY, DEFAULT_FMT);
         const box = document.createElement('div');
-        const headOpts: Array<[string, string]> = [['none', '不编号'], ['dot', '1. / 1.1 / 1.1.1（点分层）'], ['cjk', '一、二、三（中文）']];
-        const bodyOpts: Array<[string, string]> = [['none', '默认（1. 2. 3.）'], ['dot', '1.1 多级（点分层）'], ['cjk', '一、二、三（中文）']];
+        const headOpts: Array<[string, string]> = [['none', '不编号'], ['dot', '1. / 1.1 / 1.1.1（点分层）'], ['paren', '（1）（1.1）括号'], ['cjk', '一、二、三（中文）']];
+        const bodyOpts: Array<[string, string]> = [['none', '默认（1. 2. 3.）'], ['dot', '1.1 多级（点分层）'], ['paren', '（1.1）括号'], ['cjk', '一、二、三（中文）']];
         const ulOpts: Array<[string, string]> = [['disc', '● 实心圆'], ['circle', '○ 空心圆'], ['square', '■ 方块'], ['dash', '– 短横'], ['star', '* 星号'], ['plus', '+ 加号']];
         box.append(select('有序编号 · 标题', headOpts, fmt.numHead, (v) => {
             fmt.numHead = v as FmtSettings['numHead'];

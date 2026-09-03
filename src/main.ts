@@ -55,6 +55,9 @@ async function saveNow(markdown: string): Promise<void> {
     if (markdown === lastSaved) return;
     try {
         await host.write(openFile, markdown, docMtime);
+        // 写成功后取新 mtime（响应头），否则下次 If-Match 拿旧值误报 409（bug3.6）
+        const fresh = await host.read(openFile).catch(() => null);
+        docMtime = fresh?.mtimeMs ?? docMtime;
         lastSaved = markdown;
         saySave(`已存 ${new Date().toLocaleTimeString()}`);
         void refreshList();
@@ -491,6 +494,22 @@ async function refreshList(): Promise<void> {
             renderSidebar(nav, shown.filter((f) => !f.favorite), {
                 activePath: openFile,
                 onOpen: (p) => void open(p),
+                onDir: (dir) => {
+                    dirFilter = dir;
+                    void refreshList();
+                },
+                onMove: (from, toDir) => void (async () => {
+                    if (!host.moveDoc) return;
+                    const name = from.split('/').pop()!;
+                    const to = `${toDir}/${name}`;
+                    if (to === from) return;
+                    try {
+                        await host.moveDoc(from, to);
+                        void refreshList();
+                    } catch (err) {
+                        saySave(`移动失败：${(err as Error).message}`);
+                    }
+                })(),
                 favorites,
             });
         }
@@ -807,10 +826,17 @@ nav.addEventListener('contextmenu', (event) => {
                 }
             }
         })() },
-        { ic: 'clipboard-text', label: '复制文档路径', run: () => {
-            void navigator.clipboard.writeText(path);
-            saySave('已复制文档路径');
-        } },
+        { ic: 'clipboard-text', label: '复制文档路径', run: () => void (async () => {
+            try {
+                const root = (await (await fetch('/folio/v1/root')).json()) as { root: string };
+                const abs = `${root.root.replace(/[\\/]+$/, '')}\\${path.replaceAll('/', '\\')}`;
+                await navigator.clipboard.writeText(abs);
+                saySave('已复制绝对路径');
+            } catch {
+                await navigator.clipboard.writeText(path);
+                saySave('已复制文档路径');
+            }
+        })() },
         { ic: 'robot', label: '添加到米米（合入后可用）', disabled: true },
         { sep: true },
         { ic: 'trash', label: '删除', danger: true, run: () => void (async () => {
@@ -912,6 +938,11 @@ function applyTheme(mode: 'light' | 'dark'): void {
     localStorage.setItem('folio-theme', mode);
 }
 applyTheme((localStorage.getItem('folio-theme') as 'light' | 'dark') ?? 'light');
+const applyZoom = (z: string) => {
+    document.documentElement.style.zoom = z;
+    localStorage.setItem('folio-zoom', z);
+};
+applyZoom(localStorage.getItem('folio-zoom') ?? '1');
 btnTheme.addEventListener('click', () => {
     applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 });
@@ -921,6 +952,7 @@ buildToolbar(
     document.querySelector<HTMLElement>('#toolbar')!,
     currentEditor,
     [{ ic: 'search', tip: '文内查找替换', run: () => (findbarEl.hidden ? findbarShow() : findbarHide()) }],
+    host,
 );
 
 // 三区折叠（验收清单 10.2）
@@ -953,10 +985,19 @@ window.addEventListener('keydown', (event) => {
     if (!event.altKey || event.ctrlKey || event.metaKey) return;
     const target = event.target as HTMLElement;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+    if (event.code === 'KeyM') {
+        event.preventDefault();
+        void todayMemo();
+        return;
+    }
     const level = /^Digit([1-6])$/.exec(event.code)?.[1];
     if (!level) return;
     event.preventDefault();
-    currentEditor()?.updateParagraph(`heading ${level}`);
+    try {
+        currentEditor()?.updateParagraph(`heading ${level}`);
+    } catch {
+        // muya 上游对部分段落转换抛 json1 数值键错误，静默（斜杠菜单可用）
+    }
 });
 
 // 左右栏拖宽窄（验收批）：边线拖拽，宽度持久化

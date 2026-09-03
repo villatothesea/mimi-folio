@@ -4,6 +4,7 @@
  */
 import type { Muya } from '@muyajs/core';
 import { icon } from './icons';
+import type { FolioHost } from '../host/types';
 
 type Tool =
     | { kind: 'format'; ic: string; tip: string; type: string }
@@ -12,7 +13,38 @@ type Tool =
     | { kind: 'custom'; ic: string; tip: string; run: () => void }
     | { kind: 'sep' };
 
-export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, extras: Array<{ ic: string; tip: string; run: () => void }>): void {
+/** 插入本机媒体（bug3.3）：文件选择 → 落盘 → 插入正文。 */
+async function insertMedia(host: FolioHost, getEditor: () => Muya | null, accept: string, kind: 'image' | 'audio' | 'video'): Promise<void> {
+    return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = accept;
+        input.addEventListener('cancel', () => resolve());
+        input.addEventListener('change', async () => {
+            const file = input.files?.[0];
+            if (!file) return resolve();
+            const editor = getEditor();
+            if (!editor) return resolve();
+            try {
+                const bytes = new Uint8Array(await file.arrayBuffer());
+                if (kind === 'image') {
+                    const { src } = await host.saveImage(bytes, file.name);
+                    editor.pasteImage(src);
+                } else if (host.saveFile) {
+                    const { src } = await host.saveFile(bytes, file.name);
+                    const html = kind === 'video' ? `<video src="${src}" controls></video>` : `<audio src="${src}" controls></audio>`;
+                    editor.insertParagraph('after', html);
+                }
+            } catch {
+                // 落盘失败静默
+            }
+            resolve();
+        });
+        input.click();
+    });
+}
+
+export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, extras: Array<{ ic: string; tip: string; run: () => void }>, host?: FolioHost): void {
     const tools: Tool[] = [
         { kind: 'format', ic: 'bold', tip: '加粗', type: 'strong' },
         { kind: 'format', ic: 'italic', tip: '斜体', type: 'em' },
@@ -20,9 +52,9 @@ export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, ext
         { kind: 'format', ic: 'code', tip: '行内代码', type: 'inline_code' },
         { kind: 'format', ic: 'link', tip: '链接', type: 'link' },
         { kind: 'sep' },
-        { kind: 'para', ic: 'heading', tip: '一级标题（Alt+1）', label: 'heading 1' },
-        { kind: 'para', ic: 'heading', tip: '二级标题（Alt+2）', label: 'heading 2' },
-        { kind: 'para', ic: 'heading', tip: '三级标题（Alt+3）', label: 'heading 3' },
+        { kind: 'para', ic: 'h1', tip: '一级标题（Alt+1）', label: 'heading 1' },
+        { kind: 'para', ic: 'h2', tip: '二级标题（Alt+2）', label: 'heading 2' },
+        { kind: 'para', ic: 'h3', tip: '三级标题（Alt+3）', label: 'heading 3' },
         { kind: 'sep' },
         { kind: 'para', ic: 'list', tip: '无序列表', label: 'ul-bullet' },
         { kind: 'para', ic: 'list-numbers', tip: '有序列表', label: 'ol-order' },
@@ -31,7 +63,11 @@ export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, ext
         { kind: 'sep' },
         { kind: 'para', ic: 'table', tip: '表格', label: 'table' },
         { kind: 'para', ic: 'minus', tip: '分割线', label: 'hr' },
-        { kind: 'para', ic: 'sigma', tip: '公式块', label: 'mathblock' },
+        { kind: 'para', ic: 'math-function', tip: '公式块', label: 'mathblock' },
+        { kind: 'sep' },
+        { kind: 'custom', ic: 'photo', tip: '插入图片', run: () => void (host ? insertMedia(host, getEditor, 'image/*', 'image') : undefined) },
+        { kind: 'custom', ic: 'microphone', tip: '插入音频', run: () => void (host ? insertMedia(host, getEditor, 'audio/*', 'audio') : undefined) },
+        { kind: 'custom', ic: 'video', tip: '插入视频', run: () => void (host ? insertMedia(host, getEditor, 'video/*', 'video') : undefined) },
     ];
     for (const extra of extras) tools.push({ kind: 'custom', ...extra });
 

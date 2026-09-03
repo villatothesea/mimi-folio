@@ -13,7 +13,7 @@ import { splitFrontmatter } from '../shared/frontmatter.ts';
 import { buildIndex, linksFor, type WikilinkIndex } from '../shared/wikilink.ts';
 
 const PREFIX = '/folio/v1/';
-const MD_RE = /\.md$/i;
+const DOC_RE = /\.(md|html)$/i; // 外链含 html（待评估 9.3）
 const MAX_BODY = 10 * 1024 * 1024;
 
 export function vaultRoot(): string {
@@ -84,7 +84,7 @@ function kindOf(rel: string): 'note' | 'memo' | undefined {
 async function linkOutside(root: string, absSource: string): Promise<string> {
     if (!path.isAbsolute(absSource)) throw new Error('必须是绝对路径');
     const resolved = path.resolve(absSource);
-    if (!MD_RE.test(resolved)) throw new Error('只链 .md 文件');
+    if (!DOC_RE.test(resolved)) throw new Error('只链 .md/.html 文件');
     if (!path.relative(root, resolved).startsWith('..')) {
         throw new Error('文件已在 vault 内，直接打开即可，不用链入');
     }
@@ -164,8 +164,8 @@ async function loadVault(root: string): Promise<VaultCache> {
                 await walk(abs);
                 continue;
             }
-            const isMdFile = entry.isFile() && MD_RE.test(entry.name);
-            const isMdLink = entry.isSymbolicLink() && MD_RE.test(entry.name);
+            const isMdFile = entry.isFile() && DOC_RE.test(entry.name);
+            const isMdLink = entry.isSymbolicLink() && DOC_RE.test(entry.name);
             if (!isMdFile && !isMdLink) continue;
             const stat = await fs.stat(abs).catch(() => null);
             if (!stat?.isFile()) continue;
@@ -268,6 +268,11 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
     const root = vaultRoot();
 
     try {
+        if (req.method === 'GET' && pathname === 'root') {
+            send(res, 200, { root });
+            return true;
+        }
+
         if (req.method === 'GET' && pathname === 'list') {
             const opts: FolioListOpts = {};
             const dir = query.get('dir');
@@ -283,7 +288,7 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
         if (req.method === 'GET' && pathname === 'doc') {
             const p = safeRel(query.get('path') ?? '');
             if (!p) return fail(res, 400, 'path 非法');
-            if (!MD_RE.test(p)) return fail(res, 400, '只读 .md');
+            if (!DOC_RE.test(p)) return fail(res, 400, '只读 .md/.html');
             const abs = path.join(root, p);
             const raw = await fs.readFile(abs, 'utf8');
             const stat = await fs.stat(abs);
@@ -296,7 +301,7 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
         if (req.method === 'PUT' && pathname === 'doc') {
             const body = JSON.parse((await readBody(req)).toString('utf8')) as { path?: string; markdown?: string };
             const p = safeRel(body.path ?? '');
-            if (!p || !MD_RE.test(p) || typeof body.markdown !== 'string') {
+            if (!p || !DOC_RE.test(p) || typeof body.markdown !== 'string') {
                 return fail(res, 400, '需要 {path: *.md, markdown}');
             }
             const abs = path.join(root, p);
@@ -319,7 +324,7 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
         if (req.method === 'POST' && (pathname === 'move' || pathname === 'copy' || pathname === 'delete')) {
             const body = JSON.parse((await readBody(req)).toString('utf8')) as { from?: string; to?: string };
             const from = safeRel(body.from ?? '');
-            if (!from || !MD_RE.test(from)) return fail(res, 400, 'from 非法');
+            if (!from || !DOC_RE.test(from)) return fail(res, 400, 'from 非法');
             const fromAbs = path.join(root, from);
             if (pathname === 'delete') {
                 await fs.rm(fromAbs, { force: true });
@@ -329,7 +334,7 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
                 return true;
             }
             const to = safeRel(body.to ?? '');
-            if (!to || !MD_RE.test(to)) return fail(res, 400, 'to 非法');
+            if (!to || !DOC_RE.test(to)) return fail(res, 400, 'to 非法');
             const toAbs = path.join(root, to);
             if (await fileExists(toAbs)) return fail(res, 400, '目标已存在');
             await fs.mkdir(path.dirname(toAbs), { recursive: true });

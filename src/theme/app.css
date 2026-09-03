@@ -225,7 +225,7 @@ body {
     color: var(--folio-fg);
 }
 
-.icon-btn[data-tip]:hover::after {
+[data-tip]:hover::after {
     content: attr(data-tip);
     position: absolute;
     bottom: calc(100% + 6px);
@@ -247,7 +247,7 @@ body {
 #toolbar .icon-btn[data-tip]:hover::after,
 #filterbar button[data-tip]:hover::after,
 #page-head .icon-btn[data-tip]:hover::after,
-#expand-hints .icon-btn[data-tip]:hover::after {
+#expand-hints [data-tip]:hover::after {
     top: calc(100% + 6px);
     bottom: auto;
 }
@@ -258,7 +258,7 @@ body {
     transform: none;
 }
 
-#bar-right .icon-btn[data-tip]:hover::after {
+#bar-right [data-tip]:hover::after {
     left: auto;
     right: 0;
     transform: none;
@@ -420,9 +420,17 @@ body {
     line-height: 1;
 }
 
+/* bug3.9：星星无边框、字号大一号；!important 压过 #page-head>button 的 font 简写 */
 #favorite-toggle {
+    border: 0 !important;
+    background: none !important;
+    font-size: var(--folio-font-size) !important;
+    line-height: 1;
     width: var(--folio-control-h);
     padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 #save-state {
@@ -455,16 +463,28 @@ body {
     flex: none;
 }
 
-/* 文内查找（顶栏内联） */
+/* 文内查找（bug3.11）：顶栏下方居中浮层，间距统一 */
 #findbar-wrap {
+    position: relative;
+    height: 0;
     flex: none;
+    z-index: 8;
 }
 
 #findbar {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
     gap: var(--folio-space-1);
-    padding: var(--folio-space-1) 0;
+    margin-top: 1px;
+    padding: var(--folio-space-1) var(--folio-space-2);
+    border: 1px solid var(--folio-border);
+    border-top: 0;
+    border-radius: 0 0 var(--folio-radius) var(--folio-radius);
+    background: var(--folio-bg);
+    box-shadow: var(--folio-shadow);
 }
 
 #findbar[hidden] {
@@ -496,7 +516,6 @@ body {
 #find-count {
     color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-sm);
-    min-width: 3em;
 }
 
 #findbar button {
@@ -550,7 +569,6 @@ body {
 
 #favorite-toggle[aria-pressed='true'] {
     color: var(--folio-fg);
-    border-color: var(--folio-border-strong);
 }
 
 /* ===== 属性面板（Obsidian 式） ===== */
@@ -818,6 +836,28 @@ span.mu-inline-image.folio-img-fixed {
 }
 
 /* ===== 全局搜索面板 ===== */
+@keyframes folio-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+#search-overlay,
+#settings-overlay,
+.folio-modal {
+    animation: folio-fade-in 0.15s ease-out;
+}
+
+.search-panel,
+.settings-panel,
+.folio-modal-box {
+    animation: folio-rise 0.15s ease-out;
+}
+
+@keyframes folio-rise {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: none; }
+}
+
 #search-overlay {
     position: fixed;
     inset: 0;
@@ -1488,7 +1528,7 @@ html[data-width='wide'] .mu-editor .mu-container {
 /* ===== 属性面板：折叠头/标题行/HEX 色板 ===== */
 .props-head {
     display: flex;
-    justify-content: flex-end;
+    justify-content: flex-start;
     min-height: 0;
 }
 
@@ -1496,8 +1536,7 @@ html[data-width='wide'] .mu-editor .mu-container {
 #props.collapsed {
     background: none;
     border-bottom: 0;
-    padding: 0;
-    padding-left: var(--folio-space-1);
+    padding: 0 var(--folio-space-1);
 }
 #props.collapsed .props-head {
     height: calc(var(--folio-control-h) - 4px);
@@ -1575,12 +1614,84 @@ html[data-width='wide'] .mu-editor .mu-container {
 }
 
 /* 出链/反链分段按钮（bug2.5） */
+.link-seg {
+    align-self: stretch;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--folio-space-1);
+}
+
 .link-seg:hover {
-    text-decoration: underline;
+    background: var(--folio-hover);
 }
 
 /* bug2.5 补：link-like 的 font 简写会盖掉 zone-text 字号，这里再钉一次 */
 #doc-meta,
 .link-seg {
     font-size: var(--folio-font-size-xs);
+}
+
+
+/* 括号编号（待评估 13.2） */
+html[data-num-h='paren'] .mu-editor {
+    counter-reset: folio-h1 folio-h2 folio-h3;
+}
+
+html[data-num-h='paren'] .mu-editor h1::before {
+    counter-increment: folio-h1;
+    counter-reset: folio-h2 folio-h3;
+    content: '(' counter(folio-h1) ') ';
+    color: var(--folio-fg-marker, var(--folio-fg-muted));
+    margin-right: var(--folio-space-1);
+}
+
+html[data-num-h='paren'] .mu-editor h2::before {
+    counter-increment: folio-h2;
+    counter-reset: folio-h3;
+    content: '(' counter(folio-h1) '.' counter(folio-h2) ') ';
+    color: var(--folio-fg-marker, var(--folio-fg-muted));
+    margin-right: var(--folio-space-1);
+}
+
+html[data-num-h='paren'] .mu-editor h3::before {
+    counter-increment: folio-h3;
+    content: '(' counter(folio-h3) ') ';
+    color: var(--folio-fg-marker, var(--folio-fg-muted));
+    margin-right: var(--folio-space-1);
+}
+
+html[data-num-b='paren'] .mu-editor ol {
+    list-style-type: none;
+    counter-reset: folio-ol;
+}
+
+html[data-num-b='paren'] .mu-editor li::before {
+    counter-increment: folio-ol;
+    content: '(' counters(folio-ol, '.') ') ';
+    color: var(--folio-fg-marker, var(--folio-fg-muted));
+    margin-right: var(--folio-space-2);
+}
+
+/* 速记时间线卡片化（待评估 9.2） */
+.memo-row {
+    flex-direction: column;
+    align-items: stretch;
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    padding: var(--folio-space-2) var(--folio-space-3);
+    margin-bottom: var(--folio-space-2);
+    background: var(--folio-bg);
+}
+
+.memo-row:hover {
+    border-color: var(--folio-border-strong);
+}
+
+.memo-row .memo-open {
+    font-weight: 600;
+}
+
+.memo-row[aria-current='true'] .memo-open,
+.memo-row:has([aria-current='true']) {
+    border-color: var(--folio-fg-muted);
 }
