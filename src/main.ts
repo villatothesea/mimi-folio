@@ -13,7 +13,7 @@ import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { TAG_COLOR_COUNT, applyTagColor, setTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
-import { icon, type IconName } from './ui/icons.ts';
+import { icon } from './ui/icons.ts';
 import type { FolioListItem } from './host/types.ts';
 
 /**
@@ -388,7 +388,7 @@ async function refreshList(): Promise<void> {
 }
 
 /** 筛选 pills（验收批）：全部/笔记/速记/外链，图标在文字左，带计数。 */
-const PILL_ICONS: Record<string, IconName> = { all: 'all', notes: 'note', memos: 'memo', links: 'link' };
+const PILL_ICONS: Record<string, string> = { all: 'all', notes: 'note', memos: 'memo', links: 'link' };
 
 function renderPills(): void {
     const counts = {
