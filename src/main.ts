@@ -7,6 +7,7 @@ import { attachImageFallback } from './ui/imageFallback.ts';
 import { renderMemoTimeline, renderSidebar, renderTagBar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
+import { setTags } from './shared/frontmatter.ts';
 import type { FolioListItem } from './host/types.ts';
 
 /**
@@ -49,16 +50,58 @@ async function saveNow(markdown: string): Promise<void> {
     }
 }
 
-/** 当前文档的标签芯片（点 1）：frontmatter 的 tags 以小芯片显示在正文上方。 */
+/** 当前文档的标签芯片（点 1）：编辑器里的 frontmatter 块收起，标签只在页头编辑。 */
 function renderDocTags(): void {
     const tags = allFiles.find((f) => f.path === openFile)?.tags ?? [];
     docTagsEl.replaceChildren();
+    if (!openFile || !currentEditor()) return;
+
+    const commit = (next: string[]) => {
+        const editor = currentEditor();
+        if (!editor || !openFile) return;
+        editor.replaceContent(setTags(editor.getMarkdown(), next));
+        // 走统一链路：改动中… → 防抖存盘 → 刷列表 → 芯片随 allFiles 更新
+        onEditorChange(editor.getMarkdown());
+    };
+
     for (const tag of tags) {
         const chip = document.createElement('span');
         chip.className = 'doc-tag';
-        chip.textContent = tag;
+        chip.append(Object.assign(document.createTextNode(tag)));
+        const remove = document.createElement('button');
+        remove.className = 'doc-tag-x';
+        remove.type = 'button';
+        remove.textContent = '×';
+        remove.title = `移除 ${tag}`;
+        remove.addEventListener('click', () => commit(tags.filter((t) => t !== tag)));
+        chip.append(remove);
         docTagsEl.append(chip);
     }
+
+    const add = document.createElement('button');
+    add.className = 'doc-tag-add';
+    add.type = 'button';
+    add.textContent = '＋';
+    add.title = '加标签';
+    add.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.className = 'doc-tag-input';
+        input.placeholder = '标签名';
+        add.replaceWith(input);
+        input.focus();
+        const done = (ok: boolean) => {
+            const value = input.value.trim();
+            input.remove();
+            if (ok && value && !tags.includes(value)) commit([...tags, value]);
+            else renderDocTags();
+        };
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') done(true);
+            if (event.key === 'Escape') done(false);
+        });
+        input.addEventListener('blur', () => done(input.value.trim() ? true : false));
+    });
+    docTagsEl.append(add);
 }
 
 async function refreshBacklinks(): Promise<void> {

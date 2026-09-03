@@ -8,7 +8,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 
 import type { FolioListItem, FolioListOpts } from '../host/types.ts';
-import { splitFrontmatter } from './frontmatter.ts';
+import { splitFrontmatter } from '../shared/frontmatter.ts';
 import { buildIndex, linksFor, type WikilinkIndex } from '../shared/wikilink.ts';
 
 const PREFIX = '/folio/v1/';

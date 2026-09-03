@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { parseTags, splitFrontmatter } from './frontmatter.ts';
+import { parseTags, setTags, splitFrontmatter } from './frontmatter.ts';
 
 test('tags: 行内数组写法', () => {
     assert.deepEqual(parseTags('title: x\ntags: [项目, 长文]\n'), ['项目', '长文']);
@@ -42,4 +42,23 @@ test('splitFrontmatter：正文里出现 --- 不算围栏', () => {
     const doc = '前言\n---\ntags: [x]\n---\n';
     const split = splitFrontmatter(doc);
     assert.deepEqual(split.tags, []);
+});
+
+test('setTags：有 frontmatter 时替换 tags 行，其余键保留', () => {
+    const doc = '---\ntitle: t\ntags: [旧]\n---\n# 正文\n';
+    assert.equal(setTags(doc, ['新', '标签']), '---\ntags: [新, 标签]\ntitle: t\n---\n# 正文\n');
+});
+
+test('setTags：吃掉旧 tags 的短横线续行', () => {
+    const doc = '---\ntags:\n  - a\n  - b\ntitle: t\n---\n正文\n';
+    assert.equal(setTags(doc, ['x']), '---\ntags: [x]\ntitle: t\n---\n正文\n');
+});
+
+test('setTags：没有 frontmatter 时新建一段', () => {
+    assert.equal(setTags('# 标题\n', ['a']), '---\ntags: [a]\n---\n# 标题\n');
+});
+
+test('setTags：空数组整段摘除', () => {
+    const doc = '---\ntags: [a]\ntitle: t\n---\n# 正文\n';
+    assert.equal(setTags(doc, []), '---\ntitle: t\n---\n# 正文\n');
 });

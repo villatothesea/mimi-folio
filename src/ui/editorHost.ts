@@ -51,7 +51,7 @@ function use(plugin: unknown, options: Record<string, unknown> = {}): void {
 use(EmojiSelector);
 use(FootnoteTool);
 use(InlineFormatToolbar);
-use(ImageEditTool, {});
+use(ImageEditTool, { imagePathPicker: pickImageFile });
 use(ImageToolBar);
 use(ImageResizeBar);
 use(CodeBlockLanguageSelector);
@@ -71,6 +71,30 @@ use(TableRowColumMenu);
 use(PreviewToolBar);
 
 let muya: TMuya | null = null;
+/** 图片选择器落盘用的 host（mountEditor 时更新）。 */
+let mediaHost: FolioHost | null = null;
+
+/** 浏览器文件选择框 → host.saveImage 落盘 → 回相对路径（muya 直接写进 md）。 */
+function pickImageFile(): Promise<string> {
+    return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.addEventListener('cancel', () => resolve(''));
+        input.addEventListener('change', async () => {
+            const file = input.files?.[0];
+            if (!file || !mediaHost) return resolve('');
+            try {
+                const bytes = new Uint8Array(await file.arrayBuffer());
+                const { src } = await mediaHost.saveImage(bytes, file.name);
+                resolve(src);
+            } catch {
+                resolve('');
+            }
+        });
+        input.click();
+    });
+}
 
 export function currentEditor(): TMuya | null {
     return muya;
@@ -78,6 +102,7 @@ export function currentEditor(): TMuya | null {
 
 /** 挂载一篇 markdown；muya 会替换传入元素，故每次重建壳元素。 */
 export function mountEditor(wrap: HTMLElement, markdown: string, host: FolioHost, onChange: (markdown: string) => void): void {
+    mediaHost = host;
     const fresh = document.createElement('div');
     wrap.replaceChildren(fresh);
     const editor = new Muya(fresh, {

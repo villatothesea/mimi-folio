@@ -177,16 +177,57 @@
 
 #doc-tags {
     display: inline-flex;
+    align-items: center;
     gap: var(--folio-space-1);
+    margin-left: auto;
 }
 
 .doc-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--folio-space-1);
     border: 1px solid var(--folio-border);
     border-radius: var(--folio-radius);
     background: var(--folio-bg-alt);
     color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-sm);
     padding: 0 var(--folio-space-2);
+    line-height: 1.8;
+}
+
+.doc-tag-x {
+    border: 0;
+    background: none;
+    color: var(--folio-fg-muted);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+}
+
+.doc-tag-x:hover {
+    color: var(--folio-fg);
+}
+
+.doc-tag-add,
+.doc-tag-input {
+    border: 1px dashed var(--folio-border-strong);
+    border-radius: var(--folio-radius);
+    background: none;
+    color: var(--folio-fg-muted);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-2);
+    line-height: 1.8;
+    width: 5em;
+    cursor: pointer;
+}
+
+.doc-tag-input {
+    border-style: solid;
+    cursor: text;
+    outline: none;
 }
 
 #backlinks {
