@@ -264,22 +264,20 @@ body {
     transform: none;
 }
 
-/* ===== 筛选 pills：纯图标 ===== */
+/* ===== 筛选 pills（bug4 2.4）：底栏靠右、无边框、方形满高高亮、toggle ===== */
 #filterbar {
     display: flex;
-    gap: var(--folio-space-1);
-    padding: var(--folio-space-2) var(--folio-space-3) 0;
+    margin-left: auto;
 }
 
 #filterbar button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: 1;
-    min-width: 0;
-    height: var(--folio-control-h);
-    border: 1px solid var(--folio-border);
-    border-radius: var(--folio-radius);
+    width: var(--folio-control-h);
+    align-self: stretch;
+    border: 0;
+    border-radius: 0;
     background: none;
     color: var(--folio-fg-muted);
     cursor: pointer;
@@ -291,16 +289,12 @@ body {
 }
 
 #filterbar button[aria-pressed='true'] {
-    background: var(--folio-primary);
-    color: var(--folio-primary-fg);
-    border-color: var(--folio-primary);
+    background: var(--folio-fg);
+    color: var(--folio-bg);
 }
 
 #dir-chip {
-    flex: 0 1 auto !important;
-    font-size: var(--folio-font-size-sm);
-    color: var(--folio-fg);
-    padding: 0 var(--folio-space-2) !important;
+    display: none !important;
 }
 
 /* ===== 文件清单 ===== */
@@ -541,9 +535,9 @@ body {
     align-items: center;
     gap: var(--folio-space-1);
     color: var(--folio-fg-muted);
-    font-size: var(--folio-font-size-sm);
+    font-size: var(--folio-font-size-xs);
     min-width: 0;
-    max-width: 26%;
+    flex: 1 1 0;
     overflow: hidden;
     white-space: nowrap;
 }
@@ -553,7 +547,7 @@ body {
     background: none;
     color: var(--folio-fg-muted);
     font: inherit;
-    font-size: var(--folio-font-size-sm);
+    font-size: var(--folio-font-size-xs);
     padding: 0;
     cursor: pointer;
 }
@@ -1694,4 +1688,210 @@ html[data-num-b='paren'] .mu-editor li::before {
 .memo-row[aria-current='true'] .memo-open,
 .memo-row:has([aria-current='true']) {
     border-color: var(--folio-fg-muted);
+}
+
+
+/* ===== bug4 2.1/2.3/2.5：清单行视觉 ===== */
+#files {
+    overflow-x: hidden;
+    padding: var(--folio-space-1) 0;
+}
+
+#files .tree-row {
+    display: flex;
+    align-items: stretch;
+}
+
+#files .row-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-2);
+    border: 0;
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    text-align: left;
+    padding: var(--folio-space-2) 10px;
+    cursor: pointer;
+}
+
+#files .row-main .file-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#files .row-main:hover {
+    background: var(--folio-hover);
+}
+
+/* 选中：右侧 5px 黑色块（bug4 2.1） */
+#files .row-main[aria-current='true'] {
+    background: var(--folio-hover);
+}
+
+#files .row-main[aria-current='true']::after {
+    content: '';
+    width: 5px;
+    align-self: stretch;
+    background: var(--folio-fg);
+    margin-right: -10px;
+}
+
+.row-star {
+    color: var(--folio-fg);
+    flex: none;
+}
+
+.folder-count {
+    margin-left: auto;
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+}
+
+.folder-toggle {
+    width: calc(var(--folio-control-h) - 6px);
+    height: auto;
+    align-self: stretch;
+}
+
+/* 层级引导线（bug4 2.3） */
+.tree-children {
+    margin-left: calc(10px + var(--folio-icon-size) / 2);
+    border-left: 1px solid var(--folio-border);
+}
+
+/* 标题栏三按钮紧凑小一号（bug4 2.7） */
+.head-actions .icon-btn {
+    width: calc(var(--folio-control-h) - 4px);
+    height: calc(var(--folio-control-h) - 4px);
+}
+
+.head-actions .icon-btn .folio-icon {
+    width: calc(var(--folio-icon-size) - 3px);
+    height: calc(var(--folio-icon-size) - 3px);
+}
+
+/* wikilink 芯片与自动补全（bug4 4.1/4.3） */
+.folio-wikilink {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2em;
+    background: var(--folio-bg-alt);
+    border-bottom: 1px solid var(--folio-border-strong);
+    border-radius: 2px;
+    padding: 0 2px;
+    cursor: pointer;
+}
+
+.folio-wikilink .folio-icon {
+    width: 1em;
+    height: 1em;
+    color: var(--folio-fg-muted);
+}
+
+.folio-wikilink-text {
+    white-space: nowrap;
+}
+
+.wiki-ac {
+    position: fixed;
+    z-index: 45;
+    display: flex;
+    flex-direction: column;
+    min-width: 260px;
+    max-width: 320px;
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid var(--folio-border-strong);
+    background: var(--folio-bg);
+    box-shadow: var(--folio-shadow);
+    padding: var(--folio-space-1);
+}
+
+.wiki-ac-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--folio-space-2);
+    border: 0;
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-1) var(--folio-space-2);
+    cursor: pointer;
+    text-align: left;
+}
+
+.wiki-ac-row.active,
+.wiki-ac-row:hover {
+    background: var(--folio-hover);
+}
+
+.wiki-ac-dir {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wiki-ac-empty {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-2);
+}
+
+/* 搜索框前置图标 + 标签行（bug4 4.5） */
+.search-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-input-wrap > .folio-icon {
+    position: absolute;
+    left: var(--folio-space-3);
+    color: var(--folio-fg-muted);
+    pointer-events: none;
+}
+
+.search-input-wrap .search-input {
+    padding-left: calc(var(--folio-space-3) + var(--folio-icon-size) + var(--folio-space-2));
+}
+
+.search-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--folio-space-1);
+    padding: var(--folio-space-2) var(--folio-space-4);
+    border-bottom: 1px solid var(--folio-border);
+}
+
+.search-tags .tag-chip {
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: none;
+    color: var(--folio-fg-muted);
+    font: inherit;
+    font-size: var(--folio-font-size-xs);
+    padding: 0 var(--folio-space-2);
+    line-height: 1.7;
+    cursor: pointer;
+}
+
+.search-tags .tag-chip:hover {
+    background: var(--folio-hover);
+}
+
+/* TOC 层级字重（bug4 4.6） */
+.toc-item[data-lvl='1'] {
+    font-weight: 600;
+    color: var(--folio-fg);
 }

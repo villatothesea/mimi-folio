@@ -44,6 +44,43 @@ async function insertMedia(host: FolioHost, getEditor: () => Muya | null, accept
     });
 }
 
+/** 高亮选色（bug4 4.4）：默认米米淡米色，选中后同时给选区上 mark。 */
+function showHighlightMenu(): void {
+    document.querySelector('#hl-pop')?.remove();
+    const pop = document.createElement('div');
+    pop.id = 'hl-pop';
+    pop.className = 'tag-pop';
+    const colors = ['#f2e3c8', '#f6d6d6', '#d6e8f6', '#ddeed6', '#eee4f6', '#f6ecd6'];
+    for (const c of colors) {
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'tag-dot';
+        dot.style.setProperty('--tag-c', c);
+        if (getComputedStyle(document.documentElement).getPropertyValue('--folio-highlight').trim() === c) {
+            dot.setAttribute('aria-pressed', 'true');
+        }
+        dot.addEventListener('click', () => {
+            document.documentElement.style.setProperty('--folio-highlight', c);
+            localStorage.setItem('folio-highlight', c);
+            pop.remove();
+        });
+        pop.append(dot);
+    }
+    document.body.append(pop);
+    const bar = document.querySelector('#toolbar')!.getBoundingClientRect();
+    pop.style.left = `${bar.left + 40}px`;
+    pop.style.top = `${bar.bottom + 4}px`;
+    setTimeout(() => {
+        const close = (e: MouseEvent) => {
+            if (!pop.contains(e.target as Node)) {
+                pop.remove();
+                document.removeEventListener('mousedown', close);
+            }
+        };
+        document.addEventListener('mousedown', close);
+    });
+}
+
 export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, extras: Array<{ ic: string; tip: string; run: () => void }>, host?: FolioHost): void {
     const tools: Tool[] = [
         { kind: 'format', ic: 'bold', tip: '加粗', type: 'strong' },
@@ -51,10 +88,14 @@ export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, ext
         { kind: 'format', ic: 'strikethrough', tip: '删除线', type: 'del' },
         { kind: 'format', ic: 'code', tip: '行内代码', type: 'inline_code' },
         { kind: 'format', ic: 'link', tip: '链接', type: 'link' },
+        { kind: 'custom', ic: 'color-swatch', tip: '高亮（==mark==），点击选色', run: () => showHighlightMenu() },
         { kind: 'sep' },
-        { kind: 'para', ic: 'h1', tip: '一级标题（Alt+1）', label: 'heading 1' },
-        { kind: 'para', ic: 'h2', tip: '二级标题（Alt+2）', label: 'heading 2' },
-        { kind: 'para', ic: 'h3', tip: '三级标题（Alt+3）', label: 'heading 3' },
+        { kind: 'para', ic: 'h-1', tip: '一级标题（Alt+1）', label: 'heading 1' },
+        { kind: 'para', ic: 'h-2', tip: '二级标题（Alt+2）', label: 'heading 2' },
+        { kind: 'para', ic: 'h-3', tip: '三级标题（Alt+3）', label: 'heading 3' },
+        { kind: 'para', ic: 'h-4', tip: '四级标题（Alt+4）', label: 'heading 4' },
+        { kind: 'para', ic: 'h-5', tip: '五级标题（Alt+5）', label: 'heading 5' },
+        { kind: 'para', ic: 'h-6', tip: '六级标题（Alt+6）', label: 'heading 6' },
         { kind: 'sep' },
         { kind: 'para', ic: 'list', tip: '无序列表', label: 'ul-bullet' },
         { kind: 'para', ic: 'list-numbers', tip: '有序列表', label: 'ol-order' },
@@ -66,7 +107,7 @@ export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, ext
         { kind: 'para', ic: 'math-function', tip: '公式块', label: 'mathblock' },
         { kind: 'sep' },
         { kind: 'custom', ic: 'photo', tip: '插入图片', run: () => void (host ? insertMedia(host, getEditor, 'image/*', 'image') : undefined) },
-        { kind: 'custom', ic: 'microphone', tip: '插入音频', run: () => void (host ? insertMedia(host, getEditor, 'audio/*', 'audio') : undefined) },
+        { kind: 'custom', ic: 'headphones', tip: '插入音频', run: () => void (host ? insertMedia(host, getEditor, 'audio/*', 'audio') : undefined) },
         { kind: 'custom', ic: 'video', tip: '插入视频', run: () => void (host ? insertMedia(host, getEditor, 'video/*', 'video') : undefined) },
     ];
     for (const extra of extras) tools.push({ kind: 'custom', ...extra });

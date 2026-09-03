@@ -6,13 +6,14 @@ import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
-import { renderMemoTimeline, renderSidebar } from './ui/sidebar.ts';
+import { renderSidebar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
+import { attachWikiAutocomplete, attachWikilinkDecor } from './ui/wikilinkDecor.ts';
 import { blockNativeContextMenu, showContextMenu } from './ui/contextMenu.ts';
 import { folioConfirm, folioPick, folioPrompt } from './ui/dialogs.ts';
 import { buildToolbar } from './ui/toolbar.ts';
@@ -43,8 +44,9 @@ let docCtime: number | undefined;
 let lastLinks: { outgoing: string[]; backlinks: string[] } = { outgoing: [], backlinks: [] };
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let allFiles: FolioListItem[] = [];
-let view: 'all' | 'notes' | 'memos' | 'links' | 'fav' = 'all';
-let dirFilter: string | null = null;
+/** 底栏五枚筛选按钮 = toggle 集合（bug4 2.4）：点开加滤、重点取消；全部=清空 */
+let activeFilters = new Set<string>();
+let selectedDir: string | null = null;
 
 function saySave(message: string): void {
     saveStateEl.textContent = message;
@@ -403,6 +405,7 @@ async function open(path: string): Promise<void> {
         renderProps();
         renderStatusbar(doc.markdown);
         renderToc(tocEl, currentEditor());
+        restoreScroll(doc.path);
         // bug3：打开即高亮清单当前项（列表渲染早于 openFile 赋值，这里直接补）
         nav.querySelectorAll<HTMLButtonElement>('button[data-path]').forEach((b) => {
             if (b.dataset.path === openFile) b.setAttribute('aria-current', 'true');
@@ -431,7 +434,7 @@ function renderBreadcrumb(): void {
             crumb.textContent = seg;
             const dir = segments.slice(0, i + 1).join('/');
             crumb.addEventListener('click', () => {
-                dirFilter = dir;
+                selectedDir = dir;
                 void refreshList();
             });
             const sep = document.createElement('span');
@@ -477,25 +480,21 @@ async function refreshList(): Promise<void> {
         const files = await host.list();
         allFiles = files;
         let shown = files;
-        if (dirFilter) shown = shown.filter((f) => f.path.startsWith(`${dirFilter}/`));
-        if (view === 'notes') shown = shown.filter((f) => f.kind === 'note');
-        if (view === 'memos') shown = shown.filter((f) => f.kind === 'memo');
-        if (view === 'links') shown = shown.filter((f) => f.linked);
-        if (view === 'fav') shown = shown.filter((f) => f.favorite);
+        for (const key of activeFilters) {
+            if (key === 'notes') shown = shown.filter((f) => f.kind === 'note');
+            if (key === 'memos') shown = shown.filter((f) => f.kind === 'memo');
+            if (key === 'links') shown = shown.filter((f) => f.linked);
+            if (key === 'fav') shown = shown.filter((f) => f.favorite);
+        }
         renderPills();
         renderStatusbar();
-        if (view === 'memos') {
-            renderMemoTimeline(nav, shown, {
+        {
+            renderSidebar(nav, shown, {
                 activePath: openFile,
                 onOpen: (p) => void open(p),
-            });
-        } else {
-            const favorites = shown.filter((f) => f.favorite);
-            renderSidebar(nav, shown.filter((f) => !f.favorite), {
-                activePath: openFile,
-                onOpen: (p) => void open(p),
-                onDir: (dir) => {
-                    dirFilter = dir;
+                selectedDir,
+                onDirSelect: (dir) => {
+                    selectedDir = dir;
                     void refreshList();
                 },
                 onMove: (from, toDir) => void (async () => {
@@ -510,7 +509,6 @@ async function refreshList(): Promise<void> {
                         saySave(`移动失败：${(err as Error).message}`);
                     }
                 })(),
-                favorites,
             });
         }
         renderProps();
@@ -522,6 +520,7 @@ async function refreshList(): Promise<void> {
 
 /** 筛选 pills（验收批）：全部/笔记/速记/外链，图标在文字左，带计数。 */
 const PILL_ICONS: Record<string, string> = { all: 'all', notes: 'note', memos: 'memo', links: 'link', fav: 'star' };
+const PILL_LABELS: Record<string, string> = { all: '全部', notes: '笔记', memos: '速记', links: '外链', fav: '星标' };
 
 function renderPills(): void {
     const counts: Record<string, number> = {
@@ -534,36 +533,23 @@ function renderPills(): void {
     filterbar.querySelectorAll<HTMLButtonElement>('button[data-view]').forEach((button) => {
         const key = button.dataset.view ?? 'all';
         button.innerHTML = icon(PILL_ICONS[key] ?? 'all');
-        button.dataset.tip = `${({ all: '全部', notes: '笔记', memos: '速记', links: '外链', fav: '星标' } as Record<string, string>)[key]} ${counts[key] ?? 0}`;
-        button.setAttribute('aria-pressed', String(view === key));
+        button.dataset.tip = `${PILL_LABELS[key] ?? ''} ${counts[key] ?? 0}`;
+        button.setAttribute('aria-pressed', String(key === 'all' ? activeFilters.size === 0 : activeFilters.has(key)));
     });
-    let chip = filterbar.querySelector<HTMLButtonElement>('#dir-chip');
-    if (dirFilter) {
-        if (!chip) {
-            chip = document.createElement('button');
-            chip.id = 'dir-chip';
-            chip.type = 'button';
-            chip.title = '清除目录过滤';
-            chip.addEventListener('click', () => {
-                dirFilter = null;
-                void refreshList();
-            });
-            filterbar.prepend(chip);
-        }
-        chip.textContent = `× ${dirFilter}`;
-    } else {
-        chip?.remove();
-    }
-}
-
-function setView(next: 'all' | 'notes' | 'memos' | 'links' | 'fav'): void {
-    view = next;
-    void refreshList();
 }
 
 filterbar.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-view]');
-    if (button) setView(button.dataset.view as 'all' | 'notes' | 'memos' | 'links' | 'fav');
+    if (!button) return;
+    const key = button.dataset.view ?? 'all';
+    if (key === 'all') {
+        activeFilters = new Set();
+    } else if (activeFilters.has(key)) {
+        activeFilters.delete(key);
+    } else {
+        activeFilters.add(key);
+    }
+    void refreshList();
 });
 
 function stamp(): string {
@@ -599,7 +585,7 @@ async function newFolder(): Promise<void> {
     const path = `notes/${safe}/未命名笔记.md`;
     try {
         await host.write(path, '# 未命名笔记\n');
-        dirFilter = `notes/${safe}`;
+        selectedDir = `notes/${safe}`;
         await open(path);
         void refreshList();
     } catch (err) {
@@ -633,6 +619,50 @@ async function linkOutside(): Promise<void> {
     }
 }
 
+/** 导入 md（bug4 2.8）：文件窗选择 → 拷贝入 vault（浏览器拿不到盘路径，只能拷贝）。 */
+async function importMdByPicker(): Promise<void> {
+    return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.md,.markdown,.html';
+        input.addEventListener('cancel', () => resolve());
+        input.addEventListener('change', async () => {
+            const file = input.files?.[0];
+            if (file) {
+                try {
+                    const bytes = new Uint8Array(await file.arrayBuffer());
+                    await host.write(`notes/${file.name}`, new TextDecoder().decode(bytes));
+                    await open(`notes/${file.name}`);
+                    void refreshList();
+                } catch (err) {
+                    saySave(`导入失败：${(err as Error).message}`);
+                }
+            }
+            resolve();
+        });
+        input.click();
+    });
+}
+
+/** 导入文件夹（bug4 2.8）：路径 → links/<原名>/ 逐文件链接，不拷贝。 */
+async function importFolderLink(): Promise<void> {
+    const source = await folioPrompt('要导入的文件夹绝对路径（逐文件链接，不拷贝）');
+    if (!source) return;
+    try {
+        const resp = await fetch('/folio/v1/folderlink', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: source.trim() }),
+        });
+        const out = (await resp.json()) as { dir?: string; count?: number; error?: string };
+        if (!resp.ok) throw new Error(out.error ?? `HTTP ${resp.status}`);
+        saySave(`已链接 ${out.count} 篇 → ${out.dir}`);
+        void refreshList();
+    } catch (err) {
+        saySave(`导入文件夹失败：${(err as Error).message}`);
+    }
+}
+
 /** 标题栏加号下拉（验收清单 7）。 */
 function openPlusMenu(anchor: HTMLElement): void {
     document.querySelector('#plus-menu')?.remove();
@@ -643,7 +673,9 @@ function openPlusMenu(anchor: HTMLElement): void {
         ['bolt', '新建速记', () => void newMemo()],
         ['calendar', '今日速记', () => void todayMemo()],
         ['folder-plus', '新建文件夹', () => void newFolder()],
-        ['external-link', '链入外部 md', () => void linkOutside()],
+        ['external-link', '链入外部 md（路径）', () => void linkOutside()],
+        ['file-export', '导入 md（文件窗）', () => void importMdByPicker()],
+        ['folders', '导入文件夹（链接）', () => void importFolderLink()],
     ];
     for (const [ic, label, run] of items) {
         const item = document.createElement('button');
@@ -744,6 +776,7 @@ document.querySelector<HTMLButtonElement>('#replace-all')!.addEventListener('cli
 const searchPalette = attachSearchPalette({
     search: async (q) => (host.search ? await host.search(q) : []),
     onOpen: (p) => void open(p),
+    getFiles: () => allFiles,
 });
 window.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
@@ -870,16 +903,10 @@ async function renameInline(button: HTMLButtonElement, path: string): Promise<vo
         if (!commit || !value) return;
         try {
             const doc = await host.read(path);
-            const editor = currentEditor();
             const next = setScalar(doc.markdown, 'title', value);
             await host.write(path, next, doc.mtimeMs);
-            if (openFile === path && editor) {
-                editor.replaceContent(next);
-                lastSaved = next;
-                const fresh = await host.read(path);
-                docMtime = fresh.mtimeMs;
-                renderProps();
-            }
+            // bug4 4.7：写盘后整篇重开，统一由一处（属性面板标题行）呈现标题
+            if (openFile === path) await open(path);
             void refreshList();
         } catch (err) {
             saySave(`重命名失败：${(err as Error).message}`);
@@ -921,6 +948,48 @@ wrap.addEventListener('contextmenu', (event) => {
     ]);
 });
 
+// bug4 1：外部修改实时可见（3s 轮询 mtime，编辑器干净时热更新）+ 打开位置书签
+setInterval(() => void (async () => {
+    if (!openFile || !currentEditor()) return;
+    if (currentEditor()!.getMarkdown() !== lastSaved) return; // 有未存改动不覆盖
+    const doc = await host.read(openFile).catch(() => null);
+    if (!doc || doc.mtimeMs === docMtime) return;
+    const top = wrap.scrollTop;
+    lastSaved = doc.markdown;
+    docMtime = doc.mtimeMs;
+    currentEditor()!.replaceContent(doc.markdown);
+    wrap.scrollTop = top;
+    renderProps();
+    renderToc(tocEl, currentEditor());
+    saySave('外部已修改，已同步');
+})(), 3000);
+
+// 书签：滚动位置记忆（bug4 1）
+const posKey = 'folio-pos';
+wrap.addEventListener('scroll', () => {
+    if (!openFile) return;
+    try {
+        const map = JSON.parse(localStorage.getItem(posKey) ?? '{}') as Record<string, number>;
+        map[openFile] = Math.round(wrap.scrollTop);
+        localStorage.setItem(posKey, JSON.stringify(map));
+    } catch {
+        // 忽略配额
+    }
+});
+
+function restoreScroll(path: string): void {
+    try {
+        const map = JSON.parse(localStorage.getItem(posKey) ?? '{}') as Record<string, number>;
+        if (typeof map[path] === 'number') wrap.scrollTop = map[path];
+    } catch {
+        // 忽略
+    }
+}
+
+// wikilink 芯片 + [[ 自动补全（bug4 4.1/4.3）
+attachWikilinkDecor(wrap);
+attachWikiAutocomplete(wrap, { getFiles: () => allFiles, getEditor: currentEditor });
+
 // 滚动时高亮 TOC 当前节（单元 12）
 let scrollTimer: ReturnType<typeof setTimeout> | undefined;
 wrap.addEventListener('scroll', () => {
@@ -943,6 +1012,8 @@ const applyZoom = (z: string) => {
     localStorage.setItem('folio-zoom', z);
 };
 applyZoom(localStorage.getItem('folio-zoom') ?? '1');
+const savedHl = localStorage.getItem('folio-highlight');
+if (savedHl) document.documentElement.style.setProperty('--folio-highlight', savedHl);
 btnTheme.addEventListener('click', () => {
     applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 });

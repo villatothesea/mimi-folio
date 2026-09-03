@@ -80,3 +80,31 @@
 .mu-editor .mu-paragraph:not(.mu-active) .mu-html-tag {
     display: none;
 }
+
+
+/* ==mark== 高亮：吃 --folio-highlight（bug4 4.4） */
+.mu-editor .mu-highlight,
+.mu-editor mark {
+    background: var(--folio-highlight);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+/* 网页链接芯片化（bug4 4.2）：图标用 mask 吃 currentColor，不写死色 */
+.mu-editor span.mu-inline-rule.mu-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2em;
+    border-bottom: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+}
+
+.mu-editor span.mu-inline-rule.mu-link::before {
+    content: '';
+    width: 1em;
+    height: 1em;
+    flex: none;
+    background: currentColor;
+    opacity: 0.7;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 14a4 4 0 005.7 0l3-3a4 4 0 10-5.7-5.7l-1.2 1.2'/%3E%3Cpath d='M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 105.7 5.7l1.2-1.2'/%3E%3C/svg%3E") center/contain no-repeat;
+}

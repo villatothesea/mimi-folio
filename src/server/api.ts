@@ -377,6 +377,36 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             return true;
         }
 
+        // 文件夹整体链入（bug4 2.8）：links/<原名>/ 下逐文件链接，不拷贝
+        if (req.method === 'POST' && pathname === 'folderlink') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { source?: string };
+            if (typeof body.source !== 'string' || !path.isAbsolute(body.source)) {
+                return fail(res, 400, '需要 {source: 文件夹绝对路径}');
+            }
+            const srcDir = path.resolve(body.source);
+            if (!path.relative(root, srcDir).startsWith('..')) return fail(res, 400, '文件夹已在 vault 内');
+            const stat = await fs.stat(srcDir).catch(() => null);
+            if (!stat?.isDirectory()) return fail(res, 400, '文件夹不存在');
+            const destDir = path.join(root, 'links', path.basename(srcDir));
+            if (await fileExists(destDir)) return fail(res, 400, `links/${path.basename(srcDir)} 已存在`);
+            await fs.mkdir(destDir, { recursive: true });
+            const linked: string[] = [];
+            for (const name of await fs.readdir(srcDir)) {
+                if (!DOC_RE.test(name)) continue;
+                try {
+                    const rel = await linkOutside(root, path.join(srcDir, name));
+                    // linkOutside 放 links/ 根，挪进子目录
+                    await fs.rename(path.join(root, rel), path.join(destDir, name));
+                    linked.push(`links/${path.basename(srcDir)}/${name}`);
+                } catch {
+                    // 单文件失败跳过，不整体回滚
+                }
+            }
+            invalidate(root);
+            send(res, 200, { dir: `links/${path.basename(srcDir)}`, count: linked.length, files: linked });
+            return true;
+        }
+
         if (req.method === 'POST' && pathname === 'link') {
             const body = JSON.parse((await readBody(req)).toString('utf8')) as { source?: string };
             if (typeof body.source !== 'string') return fail(res, 400, '需要 {source: 绝对路径}');

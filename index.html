@@ -17,29 +17,28 @@
         <aside id="sidebar">
           <header id="sidebar-head">
             <img id="app-icon" src="/favicon.svg" alt="米素" />
-            <span class="head-title">米素</span>
+            <span class="head-title">米素 Folio</span>
             <span class="head-actions">
               <button id="btn-settings" type="button" class="icon-btn" data-tip="设置"></button>
               <button id="btn-theme" type="button" class="icon-btn" data-tip="明暗切换"></button>
               <button id="btn-plus" type="button" class="icon-btn" data-tip="新建"></button>
             </span>
           </header>
-          <div id="filterbar" aria-label="筛选">
-            <button id="pill-all" type="button" data-view="all" data-tip="全部"></button>
-            <button id="pill-notes" type="button" data-view="notes" data-tip="笔记"></button>
-            <button id="pill-memos" type="button" data-view="memos" data-tip="速记"></button>
-            <button id="pill-links" type="button" data-view="links" data-tip="外链"></button>
-            <button id="pill-fav" type="button" data-view="fav" data-tip="星标"></button>
-          </div>
           <nav id="files" aria-label="文件列表"></nav>
           <footer class="zone-bar" id="bar-left">
             <button id="collapse-left" type="button" class="icon-btn" data-tip="收起侧栏"></button>
             <span id="stat-count" class="zone-text"></span>
+            <div id="filterbar" aria-label="筛选">
+              <button id="pill-all" type="button" data-view="all" data-tip="全部"></button>
+              <button id="pill-notes" type="button" data-view="notes" data-tip="笔记"></button>
+              <button id="pill-memos" type="button" data-view="memos" data-tip="速记"></button>
+              <button id="pill-links" type="button" data-view="links" data-tip="外链"></button>
+              <button id="pill-fav" type="button" data-view="fav" data-tip="星标"></button>
+            </div>
           </footer>
         </aside>
         <main id="page">
           <header id="page-head">
-            <nav id="breadcrumb" aria-label="路径">未打开</nav>
             <div id="toolbar" aria-label="格式工具栏"></div>
             <button id="favorite-toggle" type="button" title="收藏（frontmatter favorite）">☆</button>
             <span id="save-state" role="status"></span>
@@ -63,6 +62,7 @@
           <section id="props" aria-label="文档属性" hidden></section>
           <div id="editor-wrap"></div>
           <footer class="zone-bar" id="bar-center">
+            <nav id="breadcrumb" aria-label="路径">未打开</nav>
             <button id="doc-meta" type="button" class="zone-text link-like" data-tip="文档属性"></button>
             <span id="stat-words" class="zone-text"></span>
           </footer>

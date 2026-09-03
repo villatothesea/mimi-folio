@@ -8,12 +8,11 @@ import { icon } from './icons';
 export type SidebarOptions = {
     activePath: string | null;
     onOpen: (path: string, button: HTMLButtonElement) => void;
-    /** 点文件夹 = 清单过滤进该目录（bug3.7） */
-    onDir?: (dir: string) => void;
+    /** 点文件夹标题 = 选中该目录（bug4 2.2：只选中不过滤） */
+    selectedDir?: string | null;
+    onDirSelect?: (dir: string | null) => void;
     /** 拖拽移动文档（待评估 14） */
     onMove?: (from: string, toDir: string) => void;
-    /** 星标组（单元 13）：置顶单独一组 */
-    favorites?: FolioListItem[];
 };
 
 /** 文档类型图标：外链 > 速记 > 笔记。 */
@@ -41,64 +40,83 @@ function buildTree(files: FolioListItem[]): DirNode {
     return root;
 }
 
+/** 折叠状态（模块级，会话内保持） */
+const collapsedDirs = new Set<string>();
+
 /**
- * 清单 = 文件夹树（bug3.7）：文件夹是全局的一等行（图标+名称+缩进），
- * 点文件夹进目录；文件行可拖到文件夹行移动。memos/notes 不再是分割文字。
+ * 清单 = 文件夹树（bug4 2.1-2.6）：文件夹图标点击折叠/展开、标题点击只选中；
+ * 子级有 1px 层级引导线；计数右对齐；星标行内显示，不设星标组；无横向滚动。
  */
 export function renderSidebar(nav: HTMLElement, files: FolioListItem[], opts: SidebarOptions): void {
     nav.replaceChildren();
-
-    if (opts.favorites?.length) {
-        nav.append(renderGroup('★ 星标', opts.favorites, opts, 0));
-    }
     renderTree(nav, buildTree(files), 0, opts);
 }
 
 function renderTree(host: HTMLElement, node: DirNode, depth: number, opts: SidebarOptions): void {
     for (const dir of [...node.children.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh'))) {
         host.append(renderFolderRow(dir, depth, opts));
-        renderTree(host, dir, depth + 1, opts);
+        if (!collapsedDirs.has(dir.dir)) {
+            const children = document.createElement('div');
+            children.className = 'tree-children';
+            renderTree(children, dir, depth + 1, opts);
+            host.append(children);
+        }
     }
-    host.append(renderGroup('', node.files, opts, depth));
+    host.append(renderGroup(node.files, opts, depth));
 }
 
-function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTMLButtonElement {
+function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'tree-row folder-row';
+    if (depth > 0) row.style.marginLeft = `${depth * 0.9}em`;
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'icon-btn folder-toggle';
+    toggle.innerHTML = icon(collapsedDirs.has(dir.dir) ? 'chevron-right' : 'chevron-down');
+    toggle.title = collapsedDirs.has(dir.dir) ? '展开' : '折叠';
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (collapsedDirs.has(dir.dir)) collapsedDirs.delete(dir.dir);
+        else collapsedDirs.add(dir.dir);
+        opts.onDirSelect?.(opts.selectedDir ?? null); // 触发重渲染
+    });
+
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'folder-row';
-    button.style.marginLeft = `${depth * 0.9}em`;
+    button.className = 'row-main';
     const count = dir.files.length + [...dir.children.values()].reduce((sum, ch) => sum + ch.files.length, 0);
     button.innerHTML = `${icon('folders')}<span class="file-name">${dir.name}</span><span class="folder-count">${count}</span>`;
     button.title = dir.dir;
     button.dataset.dir = dir.dir;
-    button.addEventListener('click', () => opts.onDir?.(dir.dir));
-    // 拖文件到此文件夹 = 移动（待评估 14）
-    button.addEventListener('dragover', (e) => {
+    if (dir.dir === opts.selectedDir) button.setAttribute('aria-current', 'true');
+    button.addEventListener('click', () => opts.onDirSelect?.(dir.dir));
+
+    // 拖文件到此文件夹 = 移动
+    row.addEventListener('dragover', (e) => {
         e.preventDefault();
-        button.classList.add('drop-target');
+        row.classList.add('drop-target');
     });
-    button.addEventListener('dragleave', () => button.classList.remove('drop-target'));
-    button.addEventListener('drop', (e) => {
+    row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
+    row.addEventListener('drop', (e) => {
         e.preventDefault();
-        button.classList.remove('drop-target');
+        row.classList.remove('drop-target');
         const from = e.dataTransfer?.getData('text/folio-path');
         if (from) opts.onMove?.(from, dir.dir);
     });
-    return button;
+
+    row.append(toggle, button);
+    return row;
 }
 
-function renderGroup(label: string, files: FolioListItem[], opts: SidebarOptions, depth: number): DocumentFragment {
+function renderGroup(files: FolioListItem[], opts: SidebarOptions, _depth: number): DocumentFragment {
     const frag = document.createDocumentFragment();
-    if (label) {
-        const heading = document.createElement('div');
-        heading.className = 'side-group';
-        heading.textContent = label;
-        frag.append(heading);
-    }
     for (const file of files) {
+        const row = document.createElement('div');
+        row.className = 'tree-row';
         const button = document.createElement('button');
         button.type = 'button';
-        button.style.marginLeft = `${depth * 0.9}em`;
+        button.className = 'row-main';
         button.draggable = true;
         const ic = document.createElement('span');
         ic.className = 'file-icon';
@@ -107,6 +125,14 @@ function renderGroup(label: string, files: FolioListItem[], opts: SidebarOptions
         name.className = 'file-name';
         name.textContent = file.title;
         button.append(ic, name);
+        // bug4 2.6：星标行内靠右，不设星标组
+        if (file.favorite) {
+            const star = document.createElement('span');
+            star.className = 'row-star';
+            star.textContent = '★';
+            star.title = '已收藏';
+            button.append(star);
+        }
         if (file.linked) {
             const badge = document.createElement('span');
             badge.className = 'linked-badge';
@@ -122,13 +148,8 @@ function renderGroup(label: string, files: FolioListItem[], opts: SidebarOptions
             e.dataTransfer?.setData('text/folio-path', file.path);
             e.dataTransfer!.effectAllowed = 'move';
         });
-        frag.append(button);
-        if (file.snippet) {
-            const snippet = document.createElement('div');
-            snippet.className = 'file-snippet';
-            snippet.textContent = file.snippet;
-            frag.append(snippet);
-        }
+        row.append(button);
+        frag.append(row);
     }
     return frag;
 }

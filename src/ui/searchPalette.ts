@@ -3,12 +3,14 @@
  * 结果行 = [类型图标] 笔记标题（大）+ 命中上下文（小，<mark> 高亮）。
  * 键盘：↑↓ 选择、回车打开、Esc 关闭。
  */
-import type { FolioSearchItem } from '../host/types';
+import type { FolioListItem, FolioSearchItem } from '../host/types';
 import { icon } from './icons';
 
 export type SearchPaletteOptions = {
     search: (query: string) => Promise<FolioSearchItem[]>;
     onOpen: (path: string) => void;
+    /** 全部文件（标签行数据，bug4 4.5） */
+    getFiles: () => FolioListItem[];
 };
 
 function escapeHtml(text: string): string {
@@ -28,11 +30,40 @@ export function attachSearchPalette(opts: SearchPaletteOptions): { show: () => v
     const panel = document.createElement('div');
     panel.className = 'search-panel';
 
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'search-input-wrap';
+    inputWrap.innerHTML = icon('search');
     const input = document.createElement('input');
     input.type = 'text';
     input.placeholder = '搜索笔记、正文…';
     input.className = 'search-input';
-    panel.append(input);
+    inputWrap.append(input);
+    panel.append(inputWrap);
+
+    // 标签行（bug4 4.5）：全库标签平铺、A-Z 排序、点击即搜
+    const tagsRow = document.createElement('div');
+    tagsRow.className = 'search-tags';
+    panel.append(tagsRow);
+
+    function renderTags(): void {
+        const tags = new Set<string>();
+        for (const file of opts.getFiles()) for (const tag of file.tags ?? []) tags.add(tag);
+        tagsRow.replaceChildren(
+            ...[...tags].sort((a, b) => a.localeCompare(b, 'en'))
+                .map((tag) => {
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'tag-chip';
+                    chip.textContent = tag;
+                    chip.addEventListener('click', () => {
+                        input.value = tag;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                    });
+                    return chip;
+                }),
+        );
+    }
+    renderTags();
 
     const list = document.createElement('div');
     list.className = 'search-list';
