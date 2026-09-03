@@ -7,7 +7,7 @@ import { attachImageFallback } from './ui/imageFallback.ts';
 import { renderMemoTimeline, renderSidebar, renderTagBar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
-import { setTags } from './shared/frontmatter.ts';
+import { setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import type { FolioListItem } from './host/types.ts';
 
 /**
@@ -50,24 +50,45 @@ async function saveNow(markdown: string): Promise<void> {
     }
 }
 
-/** 当前文档的标签芯片（点 1）：编辑器里的 frontmatter 块收起，标签只在页头编辑。 */
-function renderDocTags(): void {
-    const tags = allFiles.find((f) => f.path === openFile)?.tags ?? [];
-    docTagsEl.replaceChildren();
-    if (!openFile || !currentEditor()) return;
+/**
+ * 文档属性面板（Obsidian 式）：文档顶部一行行 key-value；tags 行是芯片可增删，
+ * 其余键只读展示（md 里的 frontmatter 原样保留）。编辑器里的 frontmatter 块收起。
+ */
+function renderProps(): void {
+    const editor = currentEditor();
+    propsEl.replaceChildren();
+    if (!openFile || !editor) {
+        propsEl.hidden = true;
+        return;
+    }
+    propsEl.hidden = false;
 
     const commit = (next: string[]) => {
-        const editor = currentEditor();
-        if (!editor || !openFile) return;
-        editor.replaceContent(setTags(editor.getMarkdown(), next));
-        // 走统一链路：改动中… → 防抖存盘 → 刷列表 → 芯片随 allFiles 更新
-        onEditorChange(editor.getMarkdown());
+        const ed = currentEditor();
+        if (!ed || !openFile) return;
+        ed.replaceContent(setTags(ed.getMarkdown(), next));
+        // 走统一链路：改动中… → 防抖存盘 → 刷列表 → 面板随 allFiles 更新
+        onEditorChange(ed.getMarkdown());
     };
 
+    const row = (key: string, value: Node): void => {
+        const line = document.createElement('div');
+        line.className = 'prop-row';
+        const k = document.createElement('span');
+        k.className = 'prop-key';
+        k.textContent = key;
+        line.append(k, value);
+        propsEl.append(line);
+    };
+
+    // tags 行：芯片 + ＋（始终给，方便新文档打标）
+    const tagsValue = document.createElement('span');
+    tagsValue.className = 'prop-tags';
+    const tags = allFiles.find((f) => f.path === openFile)?.tags ?? [];
     for (const tag of tags) {
         const chip = document.createElement('span');
         chip.className = 'doc-tag';
-        chip.append(Object.assign(document.createTextNode(tag)));
+        chip.append(document.createTextNode(tag));
         const remove = document.createElement('button');
         remove.className = 'doc-tag-x';
         remove.type = 'button';
@@ -75,9 +96,8 @@ function renderDocTags(): void {
         remove.title = `移除 ${tag}`;
         remove.addEventListener('click', () => commit(tags.filter((t) => t !== tag)));
         chip.append(remove);
-        docTagsEl.append(chip);
+        tagsValue.append(chip);
     }
-
     const add = document.createElement('button');
     add.className = 'doc-tag-add';
     add.type = 'button';
@@ -93,15 +113,27 @@ function renderDocTags(): void {
             const value = input.value.trim();
             input.remove();
             if (ok && value && !tags.includes(value)) commit([...tags, value]);
-            else renderDocTags();
+            else renderProps();
         };
         input.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') done(true);
             if (event.key === 'Escape') done(false);
         });
-        input.addEventListener('blur', () => done(input.value.trim() ? true : false));
+        input.addEventListener('blur', () => done(Boolean(input.value.trim())));
     });
-    docTagsEl.append(add);
+    tagsValue.append(add);
+    row('tags', tagsValue);
+
+    // 其余键按原顺序只读展示
+    const { frontmatter } = splitFrontmatter(editor.getMarkdown());
+    for (const lineText of (frontmatter ?? '').split('\n')) {
+        const pair = lineText.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
+        if (!pair || pair[1].toLowerCase() === 'tags') continue;
+        const v = document.createElement('span');
+        v.className = 'prop-value';
+        v.textContent = pair[2] || '—';
+        row(pair[1], v);
+    }
 }
 
 async function refreshBacklinks(): Promise<void> {
@@ -143,7 +175,7 @@ async function open(path: string): Promise<void> {
         currentPathEl.textContent = doc.path;
         saySave('');
         mountEditor(wrap, doc.markdown, host, onEditorChange);
-        renderDocTags();
+        renderProps();
         void refreshBacklinks();
     } catch (err) {
         saySave(`读失败：${(err as Error).message}`);
@@ -151,7 +183,7 @@ async function open(path: string): Promise<void> {
 }
 
 const backlinksEl = document.querySelector<HTMLElement>('#backlinks')!;
-const docTagsEl = document.querySelector<HTMLElement>('#doc-tags')!;
+const propsEl = document.querySelector<HTMLElement>('#props')!;
 
 async function refreshList(): Promise<void> {
     try {
@@ -174,7 +206,7 @@ async function refreshList(): Promise<void> {
                 onOpen: (p) => void open(p),
             });
         }
-        renderDocTags();
+        renderProps();
     } catch (err) {
         saySave(`列目录失败：${(err as Error).message}`);
     }

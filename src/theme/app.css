@@ -175,11 +175,41 @@
     overflow-y: auto;
 }
 
-#doc-tags {
+/* 文档属性面板（Obsidian 式）：文档顶部 key-value 行 */
+#props {
+    border-bottom: 1px solid var(--folio-border);
+    background: var(--folio-panel);
+    padding: var(--folio-space-1) var(--folio-space-4);
+}
+
+.prop-row {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-3);
+    min-height: calc(var(--folio-font-size-sm) * 2);
+}
+
+.prop-key {
+    flex: none;
+    width: 6em;
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+    text-align: right;
+}
+
+.prop-value {
+    color: var(--folio-fg);
+    font-size: var(--folio-font-size-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.prop-tags {
     display: inline-flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--folio-space-1);
-    margin-left: auto;
 }
 
 .doc-tag {
@@ -188,7 +218,7 @@
     gap: var(--folio-space-1);
     border: 1px solid var(--folio-border);
     border-radius: var(--folio-radius);
-    background: var(--folio-bg-alt);
+    background: var(--folio-bg);
     color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-sm);
     padding: 0 var(--folio-space-2);
