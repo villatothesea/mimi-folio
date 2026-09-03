@@ -20,7 +20,7 @@
 
 1. **许可证**：禁 GPL/AGPL（Tolaria、Logseq 等只看交互）。Muya / 主题 CSS 是 MIT，抄要留版权头。新依赖先查 LICENSE。
 2. **只取 Muya**：用 `../Assets/marktext-develop/packages/muya`。不要 Electron 桌面、不要 `packages/website`、不要遗留 `muyajs`。
-3. **权威是文件**：编辑器状态不是真源；`getMarkdown()` 写回 host。不要自创库格式。分类只写在 md 里（目录 + frontmatter），不要第三种标签库。
+3. **权威是文件**：编辑器状态不是真源；`getMarkdown()` 写回 host。不要自创库格式。分类只写在 md 里（目录 + frontmatter），不要第三种标签库。库外篇经 `links/` 符号链接进来，写回原路径，禁止拷贝正文当「入库」。
 4. **合入只经 Host**：业务代码不许直接 `fetch` 米米、不许 import `mimi-core`、不许嵌 GPUI。独立阶段用 `StandaloneHost`；合入只换 `MimiHost`。
 5. **默认不出网**：PlantUML 公网关掉。开放 HTML 块不进斜杠。图/音/视频文件在本机附件。外链视频只播白名单站点，存的是链接不是任意 iframe。
 6. **出厂源码人改、模型不改**：合入后 UI 包在程序层；笔记在资产层。禁止模型改出厂 `app.js`。
