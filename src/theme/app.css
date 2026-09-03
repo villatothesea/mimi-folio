@@ -210,6 +210,18 @@
     background: var(--folio-bg-alt);
 }
 
+.folio-inline-img {
+    display: block;
+    max-width: 100%;
+    border-radius: var(--folio-radius);
+}
+
+.folio-img-fixed .mu-image-icon-success,
+.folio-img-fixed .mu-image-icon-fail,
+.folio-img-fixed .mu-empty-image {
+    display: none;
+}
+
 .bl-heading {
     color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-sm);

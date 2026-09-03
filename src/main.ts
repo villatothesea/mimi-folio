@@ -3,6 +3,7 @@ import './theme/tokens.css';
 import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
+import { attachImageFallback } from './ui/imageFallback.ts';
 import { renderMemoTimeline, renderSidebar, renderTagBar } from './ui/sidebar.ts';
 import { extractVideoLinks, renderEmbeds } from './ui/embeds.ts';
 import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
@@ -169,6 +170,9 @@ window.addEventListener('pagehide', () => {
 
 // 音视频/图片文件的粘贴与拖放落盘（单元 4）；外壳常驻，编辑器重建不受影响
 attachMediaHandlers(wrap, host, currentEditor);
+
+// muya 在浏览器里把相对图片路径转成 file:// 必然失败，宿主层兜底补同源 img
+attachImageFallback(wrap);
 
 // [[wikilink]] 点击芯片 / Ctrl+点击跳转（单元 7）
 attachWikilinkHandlers(wrap, {
