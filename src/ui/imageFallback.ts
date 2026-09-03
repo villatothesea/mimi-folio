@@ -1,8 +1,9 @@
 /**
- * 相对路径图片的浏览器兜底：muya 沿用桌面规则，把带扩展名的相对图片 src
- * 转成 file://（依赖 window.DIRNAME），在纯浏览器里必然失败。
- * 这里给失败态补同源 <img>；md 里的相对路径原样保留（权威是文件）。
- * 成功加载（http/data src）的图片 muya 自己会渲染，不动。
+ * 行内媒体兜底（浏览器宿主层）：
+ * 1. 相对路径图片：muya 沿用桌面规则把 src 转成 file://（依赖 window.DIRNAME），
+ *    纯浏览器必然失败——补同源 <img>；md 里的相对路径原样保留（权威是文件）。
+ * 2. 音视频 raw-html：muya 重建元素时丢 controls 属性，Chromium UA 样式
+ *    audio:not([controls]) 是 display:none!important，必须补回属性才能显示。
  */
 export function attachImageFallback(wrap: HTMLElement): void {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -29,6 +30,10 @@ export function attachImageFallback(wrap: HTMLElement): void {
             img.src = new URL(src, location.href).href;
             span.append(img);
             span.dataset.folioFixed = '1';
+        }
+
+        for (const el of wrap.querySelectorAll<HTMLAudioElement | HTMLVideoElement>('audio.mu-raw-html, video.mu-raw-html')) {
+            if (!el.hasAttribute('controls')) el.setAttribute('controls', '');
         }
     }
 

@@ -244,6 +244,15 @@ span.mu-inline-image.folio-img-fixed {
     background: none !important;
 }
 
+/* 音视频以行内 raw-html 进段落时默认 0×0，给足尺寸随正文列宽 */
+#editor-wrap audio.mu-raw-html,
+#editor-wrap video.mu-raw-html {
+    display: block;
+    width: 100%;
+    min-height: var(--folio-space-4);
+    margin: var(--folio-space-2) 0;
+}
+
 .bl-heading {
     color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-sm);
