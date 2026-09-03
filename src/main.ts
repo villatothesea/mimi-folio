@@ -9,7 +9,7 @@ import { attachImageFallback } from './ui/imageFallback.ts';
 import { renderMemoTimeline, renderSidebar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
-import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
+import { attachWikilinkHandlers } from './ui/wikilink.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
@@ -105,7 +105,11 @@ function renderProps(): void {
     });
     head.append(chevron);
     propsEl.append(head);
-    if (propsCollapsed) return;
+    if (propsCollapsed) {
+        propsEl.classList.add('collapsed');
+        return;
+    }
+    propsEl.classList.remove('collapsed');
 
     // 标题行（验收清单 12.3）：不是 H1，是 frontmatter title
     const { frontmatter } = splitFrontmatter(editor.getMarkdown());
@@ -280,32 +284,36 @@ async function refreshBacklinks(): Promise<void> {
     }
 }
 
-/** 中区底栏（验收清单 10.3）：修改时间 + 链接概况，点击上弹链接清单。 */
-function renderCenterBar(): void {
-    const meta = document.querySelector<HTMLElement>('#doc-meta');
-    if (!meta) return;
-    if (!openFile) {
-        meta.textContent = '';
-        return;
-    }
-    const fmt = (ms?: number) => (ms ? new Date(ms).toLocaleString('sv').slice(0, 16).replace('T', ' ') : '—');
-    meta.textContent = `创建 ${fmt(docCtime)} · 修改 ${fmt(docMtime)} · 出链 ${lastLinks.outgoing.length} · 反链 ${lastLinks.backlinks.length}`;
-}
-
-document.querySelector<HTMLElement>('#doc-meta')!.addEventListener('click', (event) => {
-    const anchor = event.currentTarget as HTMLElement;
+/** 链接弹层（bug2.5）：出链、反链各自弹自己的清单。 */
+function openLinksPop(anchor: HTMLElement, kind: 'outgoing' | 'backlinks'): void {
     document.querySelector('#links-pop')?.remove();
     const pop = document.createElement('div');
     pop.id = 'links-pop';
-    renderBacklinks(pop, lastLinks, {
-        titleOf: (p) => allFiles.find((f) => f.path === p)?.title ?? p.replace(/\.md$/i, ''),
-        onOpen: (p) => {
+    const paths = kind === 'outgoing' ? lastLinks.outgoing : lastLinks.backlinks;
+    const title = document.createElement('div');
+    title.className = 'bl-heading';
+    title.textContent = kind === 'outgoing' ? `出链 ${paths.length}` : `反链 ${paths.length}`;
+    pop.append(title);
+    if (paths.length === 0) {
+        const empty = document.createElement('span');
+        empty.className = 'bl-heading';
+        empty.textContent = '（无）';
+        pop.append(empty);
+    }
+    for (const path of paths) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'bl-chip';
+        chip.textContent = allFiles.find((f) => f.path === path)?.title ?? path.replace(/\.md$/i, '');
+        chip.title = path;
+        chip.addEventListener('click', () => {
             pop.remove();
-            void open(p);
-        },
-    });
+            void open(path);
+        });
+        pop.append(chip);
+    }
     const rect = anchor.getBoundingClientRect();
-    pop.style.left = `${rect.left}px`;
+    pop.style.left = `${Math.min(rect.left, window.innerWidth - 300)}px`;
     pop.style.bottom = `${window.innerHeight - rect.top + 6}px`;
     document.body.append(pop);
     setTimeout(() => {
@@ -317,7 +325,32 @@ document.querySelector<HTMLElement>('#doc-meta')!.addEventListener('click', (eve
         };
         document.addEventListener('mousedown', close);
     });
-});
+}
+
+/** 中区底栏（验收清单 10.3 + bug2.5）：时间 + 出链/反链各自按钮、各自弹层。 */
+function renderCenterBar(): void {
+    const meta = document.querySelector<HTMLElement>('#doc-meta');
+    if (!meta) return;
+    meta.textContent = '';
+    if (!openFile) return;
+    const fmt = (ms?: number) => (ms ? new Date(ms).toLocaleString('sv').slice(0, 16).replace('T', ' ') : '—');
+    meta.append(document.createTextNode(`创建 ${fmt(docCtime)} · 修改 ${fmt(docMtime)} · `));
+    const seg = (label: string, kind: 'outgoing' | 'backlinks'): void => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'zone-text link-like link-seg';
+        b.textContent = `${label} ${kind === 'outgoing' ? lastLinks.outgoing.length : lastLinks.backlinks.length}`;
+        b.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (document.querySelector('#links-pop')?.contains?.(document.activeElement)) return;
+            openLinksPop(b, kind);
+        });
+        meta.append(b);
+    };
+    seg('出链', 'outgoing');
+    meta.append(document.createTextNode(' · '));
+    seg('反链', 'backlinks');
+}
 
 /** 点击未命中的 wikilink → 在 notes/ 建页并打开（Foam 规则）。 */
 async function createAndOpen(path: string): Promise<void> {

@@ -3,11 +3,12 @@ html,
 body {
     margin: 0;
     overflow: hidden;
+    height: 100%;
 }
 
 #app {
     display: flex;
-    height: 100vh;
+    height: 100%;
 }
 
 #main-row {
@@ -69,7 +70,7 @@ body {
 
 .zone-text {
     color: var(--folio-fg-muted);
-    font-size: var(--folio-font-size-sm);
+    font-size: var(--folio-font-size-xs);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -93,6 +94,17 @@ body {
 
 #bar-right {
     justify-content: flex-end;
+}
+
+/* bug2.6：右栏的收起/展开箭头朝右 */
+#collapse-right .folio-icon,
+#expand-right .folio-icon {
+    transform: scaleX(-1);
+}
+
+/* bug2.1：hidden 属性被组件 display 覆盖，全局兜底 */
+[hidden] {
+    display: none !important;
 }
 
 /* 折叠与呼吸提示（验收清单 10.2） */
@@ -319,10 +331,10 @@ body {
     background: var(--folio-hover);
 }
 
+/* bug2.3：高亮比悬停深一点点即可 */
 #files button[aria-current='true'] {
-    background: var(--folio-selection);
+    background: var(--folio-hover-active);
     font-weight: 600;
-    box-shadow: inset 2px 0 0 var(--folio-primary);
 }
 
 .file-icon {
@@ -420,11 +432,12 @@ body {
     white-space: nowrap;
 }
 
-/* 工具栏绝对居中 */
+/* 工具栏绝对居中（bug2.7：top:50% 强制垂直居中，abspos 静态位在 flex 里不可靠） */
 #toolbar {
     position: absolute;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     display: inline-flex;
     align-items: center;
     gap: var(--folio-space-1);
@@ -1479,6 +1492,17 @@ html[data-width='wide'] .mu-editor .mu-container {
     min-height: 0;
 }
 
+/* bug2.4：完全折叠——只剩呼吸箭头，无底色无边线 */
+#props.collapsed {
+    background: none;
+    border-bottom: 0;
+    padding: 0;
+    padding-left: var(--folio-space-1);
+}
+#props.collapsed .props-head {
+    height: calc(var(--folio-control-h) - 4px);
+}
+
 .props-chevron {
     width: calc(var(--folio-control-h) - 6px);
     height: calc(var(--folio-control-h) - 6px);
@@ -1548,4 +1572,15 @@ html[data-width='wide'] .mu-editor .mu-container {
 .toc-empty {
     color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-sm);
+}
+
+/* 出链/反链分段按钮（bug2.5） */
+.link-seg:hover {
+    text-decoration: underline;
+}
+
+/* bug2.5 补：link-like 的 font 简写会盖掉 zone-text 字号，这里再钉一次 */
+#doc-meta,
+.link-seg {
+    font-size: var(--folio-font-size-xs);
 }
