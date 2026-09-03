@@ -48,23 +48,40 @@ export function splitFrontmatter(markdown: string): { frontmatter: string; body:
 
 /** 把 tags 写回 frontmatter（其余键原样保留）；tags 为空则整段摘除。 */
 export function setTags(markdown: string, tags: string[]): string {
+    return setScalarEntries(markdown, tags.length ? `tags: [${tags.join(', ')}]` : null, /^tags\s*:/i, /^\s+-\s/);
+}
+
+/**
+ * 写一个标量键（如 favorite: true）。value 为 null 时移除该键；
+ * 没有键余下且不新增时，frontmatter 整段摘除。
+ */
+export function setScalar(markdown: string, key: string, value: string | boolean | null): string {
+    if (!/^[A-Za-z_][\w-]*$/.test(key)) throw new Error(`键名非法：${key}`);
+    const line = value === null ? null : `${key}: ${typeof value === 'boolean' ? String(value) : value}`;
+    return setScalarEntries(markdown, line, new RegExp(`^${key}\\s*:`, 'i'));
+}
+
+function setScalarEntries(
+    markdown: string,
+    entry: string | null,
+    keyRe: RegExp,
+    tailRe?: RegExp,
+): string {
     const { frontmatter, body } = splitFrontmatter(markdown);
-    const tagsLine = tags.length ? `tags: [${tags.join(', ')}]` : '';
-    // splitFrontmatter 的正则已吞掉闭合 --- 后的一个换行，body 直接续上即可
-    if (!frontmatter) {
-        return tagsLine ? `---\n${tagsLine}\n---\n${body}` : markdown;
-    }
     const kept: string[] = [];
-    let skippingList = false;
-    for (const line of frontmatter.split('\n')) {
-        if (/^tags\s*:/i.test(line)) {
-            skippingList = true;
+    let skippingTail = false;
+    const source = frontmatter ? frontmatter.split('\n') : [];
+    for (const line of source) {
+        if (keyRe.test(line)) {
+            skippingTail = true;
             continue;
         }
-        if (skippingList && /^\s+-\s/.test(line)) continue; // tags 的短横线续行
-        skippingList = false;
+        if (skippingTail && tailRe && tailRe.test(line)) continue; // 数组键的续行
+        skippingTail = false;
         kept.push(line);
     }
-    if (tagsLine) kept.unshift(tagsLine);
+    if (entry) kept.push(entry);
+    // splitFrontmatter 的正则已吞掉闭合 --- 后的一个换行，body 直接续上即可
+    if (kept.length === 0) return entry ? `---\n${entry}\n---\n${body}` : body;
     return `---\n${kept.join('\n')}\n---\n${body}`;
 }

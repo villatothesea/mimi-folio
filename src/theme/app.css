@@ -104,15 +104,20 @@
 }
 
 #sidebar-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     padding: var(--folio-space-3) var(--folio-space-4);
     border-bottom: 1px solid var(--folio-border);
     font-weight: 600;
 }
 
-#view-switch button {
+/* 筛选 pills + 全文搜索（单元 13） */
+#filterbar {
+    display: flex;
+    gap: var(--folio-space-1);
+    padding: var(--folio-space-2) var(--folio-space-3) 0;
+}
+
+#filterbar button {
+    flex: 1;
     border: 1px solid var(--folio-border);
     border-radius: var(--folio-radius);
     background: none;
@@ -120,13 +125,92 @@
     font: inherit;
     font-size: var(--folio-font-size-sm);
     padding: 0 var(--folio-space-2);
+    line-height: 1.8;
     cursor: pointer;
 }
 
-#view-switch button[aria-pressed='true'] {
+#filterbar button[aria-pressed='true'] {
     background: var(--folio-primary);
     color: var(--folio-primary-fg);
     border-color: var(--folio-primary);
+}
+
+#list-search {
+    margin: var(--folio-space-2) var(--folio-space-3) 0;
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-2);
+    line-height: 1.8;
+}
+
+#list-search:focus {
+    outline: none;
+    border-color: var(--folio-border-strong);
+}
+
+/* 面包屑（单元 13） */
+#breadcrumb {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--folio-space-1);
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.crumb {
+    border: 0;
+    background: none;
+    color: var(--folio-fg-muted);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0;
+    cursor: pointer;
+}
+
+.crumb:hover {
+    color: var(--folio-fg);
+    text-decoration: underline;
+}
+
+.crumb-sep {
+    color: var(--folio-border-strong);
+}
+
+#favorite-toggle {
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: none;
+    color: var(--folio-fg-muted);
+    font: inherit;
+    padding: 0 var(--folio-space-2);
+    cursor: pointer;
+}
+
+#favorite-toggle[aria-pressed='true'] {
+    color: var(--folio-fg);
+    border-color: var(--folio-border-strong);
+}
+
+.file-snippet {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-3) var(--folio-space-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#files button .file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 #sidebar-foot {

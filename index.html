@@ -9,13 +9,13 @@
     <div id="app">
       <div id="main-row">
         <aside id="sidebar">
-          <header id="sidebar-head">
-            <span>米素</span>
-            <span id="view-switch">
-              <button id="view-notes" type="button" aria-pressed="true">笔记</button>
-              <button id="view-memos" type="button" aria-pressed="false">速记</button>
-            </span>
-          </header>
+          <header id="sidebar-head">米素</header>
+          <div id="filterbar" aria-label="筛选">
+            <button id="pill-all" type="button" data-view="all" aria-pressed="true">全部</button>
+            <button id="pill-notes" type="button" data-view="notes" aria-pressed="false">长文</button>
+            <button id="pill-memos" type="button" data-view="memos" aria-pressed="false">速记</button>
+          </div>
+          <input id="list-search" type="text" placeholder="搜全文…" />
           <div id="tagbar" aria-label="标签筛选"></div>
           <nav id="files" aria-label="文件列表"></nav>
           <footer id="sidebar-foot">
@@ -25,7 +25,8 @@
         </aside>
         <main id="page">
           <header id="page-head">
-            <span id="current-path">未打开</span>
+            <nav id="breadcrumb" aria-label="路径"></nav>
+            <button id="favorite-toggle" type="button" title="收藏（frontmatter favorite）">☆</button>
             <button id="find-toggle" type="button" title="查找替换（Ctrl+F）">查找</button>
             <span id="save-state" role="status"></span>
           </header>

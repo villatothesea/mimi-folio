@@ -132,10 +132,17 @@ async function listMarkdown(root: string, opts: FolioListOpts): Promise<FolioLis
             } else if (entry.isFile() && MD_RE.test(entry.name)) {
                 const rel = path.relative(root, abs).split(path.sep).join('/');
                 const markdown = await fs.readFile(abs, 'utf8');
-                const { tags } = splitFrontmatter(markdown);
+                const { frontmatter, tags } = splitFrontmatter(markdown);
                 // 硬链接没有目录项标记，links/ 目录下的都算链入
                 const linked = rel === 'links' || rel.startsWith('links/');
-                out.push({ path: rel, title: titleOf(rel, markdown), tags, kind: kindOf(rel), linked: linked || undefined });
+                out.push({
+                    path: rel,
+                    title: titleOf(rel, markdown),
+                    tags,
+                    kind: kindOf(rel),
+                    linked: linked || undefined,
+                    favorite: /^favorite\s*:\s*true/im.test(frontmatter) || undefined,
+                });
             }
         }
     }
@@ -261,6 +268,27 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             await fs.mkdir(path.dirname(abs), { recursive: true });
             await fs.writeFile(abs, body.markdown, 'utf8');
             send(res, 204);
+            return true;
+        }
+
+        if (req.method === 'GET' && pathname === 'search') {
+            const q = (query.get('q') ?? '').trim();
+            if (!q) {
+                send(res, 200, []);
+                return true;
+            }
+            const needle = q.toLowerCase();
+            const results: FolioListItem[] = [];
+            for (const item of await listMarkdown(root, {})) {
+                const markdown = await fs.readFile(path.join(root, item.path), 'utf8');
+                const hit = markdown.toLowerCase().indexOf(needle);
+                if (hit === -1) continue;
+                const lines = markdown.split('\n');
+                const lineNo = markdown.slice(0, hit).split('\n').length - 1;
+                results.push({ ...item, snippet: `…${(lines[lineNo] ?? '').trim().slice(0, 60)}` });
+                if (results.length >= 50) break;
+            }
+            send(res, 200, results);
             return true;
         }
 

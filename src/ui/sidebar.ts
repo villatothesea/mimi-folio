@@ -7,6 +7,8 @@ import type { FolioListItem } from '../host/types.ts';
 export type SidebarOptions = {
     activePath: string | null;
     onOpen: (path: string, button: HTMLButtonElement) => void;
+    /** 星标组（单元 13）：置顶单独一组 */
+    favorites?: FolioListItem[];
 };
 
 export function renderSidebar(nav: HTMLElement, files: FolioListItem[], opts: SidebarOptions): void {
@@ -19,32 +21,54 @@ export function renderSidebar(nav: HTMLElement, files: FolioListItem[], opts: Si
         list.push(file);
         groups.set(dir, list);
     }
-    const dirs = [...groups.keys()].sort((a, b) => a.localeCompare(b, 'zh'));
+    // 星标组插在最前（组名固定 ★）
+    if (opts.favorites?.length) {
+        groups.delete('');
+        const rest = [...groups.entries()];
+        nav.append(renderGroup('★ 星标', opts.favorites, opts));
+        for (const [dir, list] of rest) nav.append(renderGroup(dir || 'vault', list, opts));
+        return;
+    }
+    for (const dir of [...groups.keys()].sort((a, b) => a.localeCompare(b, 'zh'))) {
+        nav.append(renderGroup(dir || 'vault', groups.get(dir)!, opts));
+    }
+}
 
-    for (const dir of dirs) {
-        const heading = document.createElement('div');
-        heading.className = 'side-group';
-        heading.textContent = dir || 'vault';
-        nav.append(heading);
+function renderGroup(label: string, files: FolioListItem[], opts: SidebarOptions): DocumentFragment {
+    const frag = document.createDocumentFragment();
+    const heading = document.createElement('div');
+    heading.className = 'side-group';
+    heading.textContent = label;
+    frag.append(heading);
 
-        for (const file of groups.get(dir)!) {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.textContent = file.title;
-            if (file.linked) {
-                const badge = document.createElement('span');
-                badge.className = 'linked-badge';
-                badge.textContent = '⌗';
-                badge.title = '库外链入文档，读写回原文件';
-                button.append(document.createTextNode(file.title), badge);
-            }
-            button.title = file.path;
-            button.dataset.path = file.path;
-            if (file.path === opts.activePath) button.setAttribute('aria-current', 'true');
-            button.addEventListener('click', () => opts.onOpen(file.path, button));
-            nav.append(button);
+    for (const file of files) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        const name = document.createElement('span');
+        name.className = 'file-name';
+        name.textContent = file.title;
+        button.append(name);
+        if (file.linked) {
+            const badge = document.createElement('span');
+            badge.className = 'linked-badge';
+            badge.textContent = '⌗';
+            badge.title = '库外链入文档，读写回原文件';
+            button.append(badge);
+        }
+        button.title = file.path;
+        button.dataset.path = file.path;
+        if (file.path === opts.activePath) button.setAttribute('aria-current', 'true');
+        button.addEventListener('click', () => opts.onOpen(file.path, button));
+        frag.append(button);
+        // 搜索命中给一行上下文副标题（单元 13）
+        if (file.snippet) {
+            const snippet = document.createElement('div');
+            snippet.className = 'file-snippet';
+            snippet.textContent = file.snippet;
+            frag.append(snippet);
         }
     }
+    return frag;
 }
 
 export function markCurrent(nav: HTMLElement, path: string | null): void {

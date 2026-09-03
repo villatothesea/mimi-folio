@@ -84,4 +84,9 @@ export class StandaloneHost implements FolioHost {
         const out = await this.json<{ path: FolioPath }>(resp);
         return out.path;
     }
+
+    async search(query: string): Promise<FolioListItem[]> {
+        const resp = await fetch(this.url(`/folio/v1/search?q=${encodeURIComponent(query)}`));
+        return this.json<FolioListItem[]>(resp);
+    }
 }

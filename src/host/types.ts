@@ -20,6 +20,10 @@ export type FolioListItem = {
     kind?: 'note' | 'memo';
     /** links/ 下链入的库外文档（单元 10） */
     linked?: boolean;
+    /** frontmatter favorite: true（单元 13） */
+    favorite?: boolean;
+    /** 搜索命中时的上下文行（单元 13，仅 search 返回） */
+    snippet?: string;
 };
 
 /** list 的筛选（单元 6）。合入后 daemon 按同样语义扫资产层。 */
@@ -54,6 +58,8 @@ export interface FolioHost {
      * 读写穿透回原文件；**失败抛错，绝不拷贝正文**。合入后 daemon 同名实现。
      */
     linkOutside?(absSource: string): Promise<FolioPath>;
+    /** 全文搜索（单元 13）：标题或正文命中，回清单项 + 上下文行 */
+    search?(query: string): Promise<FolioListItem[]>;
     index?(path: FolioPath): Promise<FolioIndex>;
 }
 
