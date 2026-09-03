@@ -64,7 +64,10 @@ function fail(res: ServerResponse, status: number, message: string): boolean {
 }
 
 function titleOf(rel: string, markdown: string): string {
-    const { body } = splitFrontmatter(markdown);
+    const { frontmatter, body } = splitFrontmatter(markdown);
+    // bug5：frontmatter title 优先——左栏/搜索与属性面板标题行同源
+    const fmTitle = frontmatter.match(/^title\s*:\s*(.*)$/m)?.[1]?.trim();
+    if (fmTitle) return fmTitle;
     const heading = body.split('\n').find((line) => /^#{1,6}\s+\S/.test(line));
     if (heading) return heading.replace(/^#{1,6}\s+/, '').trim();
     return rel.replace(/\.md$/i, '');
@@ -323,23 +326,36 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
         // ---- 文档管理（验收清单 14：移动/复制/删除）----
         if (req.method === 'POST' && (pathname === 'move' || pathname === 'copy' || pathname === 'delete')) {
             const body = JSON.parse((await readBody(req)).toString('utf8')) as { from?: string; to?: string };
+            // 目录与文档通吃（bug5：文件夹右键菜单）：from/to 允许目录（无扩展名）
             const from = safeRel(body.from ?? '');
-            if (!from || !DOC_RE.test(from)) return fail(res, 400, 'from 非法');
+            if (!from) return fail(res, 400, 'from 非法');
             const fromAbs = path.join(root, from);
+            const fromStat = await fs.stat(fromAbs).catch(() => null);
+            if (!fromStat) return fail(res, 400, '源不存在');
             if (pathname === 'delete') {
-                await fs.rm(fromAbs, { force: true });
+                await fs.rm(fromAbs, { recursive: true, force: true });
                 await fs.rm(`${fromAbs}.bak`, { force: true }).catch(() => undefined);
                 invalidate(root);
                 send(res, 204);
                 return true;
             }
             const to = safeRel(body.to ?? '');
-            if (!to || !DOC_RE.test(to)) return fail(res, 400, 'to 非法');
+            if (!to) return fail(res, 400, 'to 非法');
             const toAbs = path.join(root, to);
             if (await fileExists(toAbs)) return fail(res, 400, '目标已存在');
             await fs.mkdir(path.dirname(toAbs), { recursive: true });
             if (pathname === 'move') await fs.rename(fromAbs, toAbs);
-            else await fs.copyFile(fromAbs, toAbs);
+            else if (fromStat.isDirectory()) {
+                // 目录递归拷贝
+                const copyDir = async (src: string, dest: string): Promise<void> => {
+                    await fs.mkdir(dest, { recursive: true });
+                    for (const entry of await fs.readdir(src, { withFileTypes: true })) {
+                        if (entry.isDirectory()) await copyDir(path.join(src, entry.name), path.join(dest, entry.name));
+                        else if (entry.isFile()) await fs.copyFile(path.join(src, entry.name), path.join(dest, entry.name));
+                    }
+                };
+                await copyDir(fromAbs, toAbs);
+            } else await fs.copyFile(fromAbs, toAbs);
             invalidate(root);
             send(res, 200, { path: to });
             return true;

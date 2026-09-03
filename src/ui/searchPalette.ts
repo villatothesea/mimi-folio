@@ -122,6 +122,7 @@ export function attachSearchPalette(opts: SearchPaletteOptions): { show: () => v
     }
 
     function show(): void {
+        renderTags(); // bug5：文件列表就绪后再渲染标签行
         overlay.hidden = false;
         input.focus();
         input.select();

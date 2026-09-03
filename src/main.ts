@@ -497,6 +497,7 @@ async function refreshList(): Promise<void> {
                     selectedDir = dir;
                     void refreshList();
                 },
+                onFolderContext: (dir, x, y) => folderContextMenu(dir, x, y),
                 onMove: (from, toDir) => void (async () => {
                     if (!host.moveDoc) return;
                     const name = from.split('/').pop()!;
@@ -873,19 +874,91 @@ nav.addEventListener('contextmenu', (event) => {
         { ic: 'robot', label: '添加到米米（合入后可用）', disabled: true },
         { sep: true },
         { ic: 'trash', label: '删除', danger: true, run: () => void (async () => {
-            if (await folioConfirm(`删除 ${item?.title ?? path}？`)) {
-                if (host.deleteDoc) await withDoc('delete', () => host.deleteDoc!(path), false);
-                if (openFile === path) {
-                    openFile = null;
-                    destroyEditor();
-                    breadcrumbEl.textContent = '未打开';
-                    propsEl.hidden = true;
-                    renderCenterBar();
-                }
+            if (!(await folioConfirm(`删除 ${item?.title ?? path}？`))) return;
+            // bug5：先关文档再删，避免轮询/自动保存对着已删文件空转
+            if (openFile === path) {
+                openFile = null;
+                destroyEditor();
+                breadcrumbEl.textContent = '未打开';
+                propsEl.hidden = true;
+                renderCenterBar();
             }
+            if (host.deleteDoc) await host.deleteDoc(path).catch((err: Error) => saySave(`删除失败：${err.message}`));
+            await refreshList();
         })() },
     ]);
 });
+
+/** 文件夹右键（bug5）：与文档同款 + 顶部"添加子文件夹"。 */
+function folderContextMenu(dir: string, x: number, y: number): void {
+    const dirsOf = () => {
+        const dirs = new Set<string>(['notes', 'memos']);
+        for (const f of allFiles) {
+            const d = f.path.split('/').slice(0, -1).join('/');
+            if (d) dirs.add(d);
+        }
+        return [...dirs].sort((a, b) => a.localeCompare(b, 'zh'));
+    };
+    showContextMenu(x, y, [
+        { ic: 'folder-plus', label: '添加子文件夹', run: () => void (async () => {
+            const name = await folioPrompt(`在 ${dir} 下新建文件夹`);
+            if (!name) return;
+            const safe = name.replace(/[\/:*?"<>|]/g, '_');
+            const p = `${dir}/${safe}/未命名笔记.md`;
+            try {
+                await host.write(p, '# 未命名笔记\n');
+                selectedDir = `${dir}/${safe}`;
+                await open(p);
+                void refreshList();
+            } catch (err) {
+                saySave(`建子文件夹失败：${(err as Error).message}`);
+            }
+        })() },
+        { ic: 'pencil', label: '重命名文件夹', run: () => void (async () => {
+            const name = await folioPrompt('文件夹新名', dir.split('/').pop() ?? '');
+            if (!name) return;
+            const parent = dir.split('/').slice(0, -1).join('/');
+            const to = `${parent ? `${parent}/` : ''}${name.replace(/[\/:*?"<>|]/g, '_')}`;
+            try {
+                if (host.moveDoc) await host.moveDoc(dir, to);
+                selectedDir = to;
+                void refreshList();
+            } catch (err) {
+                saySave(`重命名失败：${(err as Error).message}`);
+            }
+        })() },
+        { ic: 'arrow-move-up', label: '移动到…', run: () => void (async () => {
+            const target = await folioPick('移动文件夹到…', dirsOf().filter((d) => d !== dir && !d.startsWith(`${dir}/`)), dir);
+            if (!target || !host.moveDoc) return;
+            try {
+                await host.moveDoc(dir, `${target}/${dir.split('/').pop()}`);
+                selectedDir = `${target}/${dir.split('/').pop()}`;
+                void refreshList();
+            } catch (err) {
+                saySave(`移动失败：${(err as Error).message}`);
+            }
+        })() },
+        { ic: 'clipboard-text', label: '复制文件夹路径', run: () => {
+            void navigator.clipboard.writeText(dir);
+            saySave('已复制文件夹路径');
+        } },
+        { ic: 'robot', label: '添加到米米（合入后可用）', disabled: true },
+        { sep: true },
+        { ic: 'trash', label: '删除文件夹', danger: true, run: () => void (async () => {
+            if (!(await folioConfirm(`删除文件夹 ${dir}（含全部内容）？`))) return;
+            if (openFile?.startsWith(`${dir}/`)) {
+                openFile = null;
+                destroyEditor();
+                breadcrumbEl.textContent = '未打开';
+                propsEl.hidden = true;
+                renderCenterBar();
+            }
+            if (host.deleteDoc) await host.deleteDoc(dir).catch(() => undefined);
+            if (selectedDir === dir) selectedDir = null;
+            await refreshList();
+        })() },
+    ]);
+}
 
 /** 原地重命名（验收清单 5/14.1）：清单行内直接高亮编辑，写 frontmatter title。 */
 async function renameInline(button: HTMLButtonElement, path: string): Promise<void> {
@@ -905,8 +978,15 @@ async function renameInline(button: HTMLButtonElement, path: string): Promise<vo
             const doc = await host.read(path);
             const next = setScalar(doc.markdown, 'title', value);
             await host.write(path, next, doc.mtimeMs);
-            // bug4 4.7：写盘后整篇重开，统一由一处（属性面板标题行）呈现标题
-            if (openFile === path) await open(path);
+            // bug5 修复：先让编辑器与磁盘一致，open() 的"切篇前存盘"才不会把旧标题写回去
+            const ed = currentEditor();
+            if (openFile === path && ed) {
+                ed.replaceContent(next);
+                lastSaved = next;
+                const fresh = await host.read(path).catch(() => null);
+                docMtime = fresh?.mtimeMs ?? docMtime;
+                renderProps();
+            }
             void refreshList();
         } catch (err) {
             saySave(`重命名失败：${(err as Error).message}`);

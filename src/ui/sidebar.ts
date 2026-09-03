@@ -13,6 +13,8 @@ export type SidebarOptions = {
     onDirSelect?: (dir: string | null) => void;
     /** 拖拽移动文档（待评估 14） */
     onMove?: (from: string, toDir: string) => void;
+    /** 文件夹右键菜单（bug5） */
+    onFolderContext?: (dir: string, x: number, y: number) => void;
 };
 
 /** 文档类型图标：外链 > 速记 > 笔记。 */
@@ -91,6 +93,10 @@ function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTM
     button.dataset.dir = dir.dir;
     if (dir.dir === opts.selectedDir) button.setAttribute('aria-current', 'true');
     button.addEventListener('click', () => opts.onDirSelect?.(dir.dir));
+    row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        opts.onFolderContext?.(dir.dir, e.clientX, e.clientY);
+    });
 
     // 拖文件到此文件夹 = 移动
     row.addEventListener('dragover', (e) => {
