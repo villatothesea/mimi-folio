@@ -289,7 +289,7 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             const stat = await fs.stat(abs);
             // muya 的 lexer 只认 LF；Windows 盘上的 CRLF 在读出层统一掉，写回也是 LF。
             // mtimeMs 供 PUT If-Match 做写回冲突保护（米米建议 2）。
-            send(res, 200, { path: p, markdown: raw.replace(/\r\n?/g, '\n'), mtimeMs: stat.mtimeMs });
+            send(res, 200, { path: p, markdown: raw.replace(/\r\n?/g, '\n'), mtimeMs: stat.mtimeMs, ctimeMs: stat.birthtimeMs });
             return true;
         }
 

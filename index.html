@@ -7,6 +7,11 @@
     <title>米素</title>
   </head>
   <body>
+    <script>
+      window.__bootErrs = [];
+      window.addEventListener('error', (e) => window.__bootErrs.push(String(e.message) + '@' + (e.filename || '') + ':' + e.lineno));
+      window.addEventListener('unhandledrejection', (e) => window.__bootErrs.push('rej:' + String(e.reason)));
+    </script>
     <div id="app">
       <div id="main-row">
         <aside id="sidebar">
@@ -36,6 +41,7 @@
           <header id="page-head">
             <nav id="breadcrumb" aria-label="路径">未打开</nav>
             <div id="toolbar" aria-label="格式工具栏"></div>
+            <button id="favorite-toggle" type="button" title="收藏（frontmatter favorite）">☆</button>
             <span id="save-state" role="status"></span>
           </header>
           <div id="expand-hints">
