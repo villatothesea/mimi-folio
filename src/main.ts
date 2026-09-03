@@ -6,12 +6,14 @@ import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
-import { renderMemoTimeline, renderSidebar, renderTagBar } from './ui/sidebar.ts';
+import { renderMemoTimeline, renderSidebar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers, renderBacklinks } from './ui/wikilink.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { TAG_COLOR_COUNT, applyTagColor, setTagColor, tagColorIndex } from './ui/tagColors.ts';
+import { attachSearchPalette } from './ui/searchPalette.ts';
+import { icon, type IconName } from './ui/icons.ts';
 import type { FolioListItem } from './host/types.ts';
 
 /**
@@ -21,24 +23,20 @@ import type { FolioListItem } from './host/types.ts';
 const host = createHost();
 
 const nav = document.querySelector<HTMLElement>('#files')!;
-const tagbar = document.querySelector<HTMLElement>('#tagbar')!;
 const breadcrumbEl = document.querySelector<HTMLElement>('#breadcrumb')!;
 const favoriteBtn = document.querySelector<HTMLButtonElement>('#favorite-toggle')!;
-const listSearch = document.querySelector<HTMLInputElement>('#list-search')!;
 const filterbar = document.querySelector<HTMLElement>('#filterbar')!;
+const sidebarEl = document.querySelector<HTMLElement>('#sidebar')!;
+const tocEl = document.querySelector<HTMLElement>('#toc')!;
 const wrap = document.querySelector<HTMLElement>('#editor-wrap')!;
 const saveStateEl = document.querySelector<HTMLElement>('#save-state')!;
-const newMemoBtn = document.querySelector<HTMLButtonElement>('#new-memo')!;
 
 let openFile: string | null = null;
 let lastSaved = '';
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
-let activeTag: string | null = null;
 let allFiles: FolioListItem[] = [];
-let view: 'all' | 'notes' | 'memos' = 'all';
-let searchQ = '';
+let view: 'all' | 'notes' | 'memos' | 'links' = 'all';
 let dirFilter: string | null = null;
-let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 function saySave(message: string): void {
     saveStateEl.textContent = message;
@@ -317,8 +315,6 @@ function renderBreadcrumb(): void {
             const dir = segments.slice(0, i + 1).join('/');
             crumb.addEventListener('click', () => {
                 dirFilter = dir;
-                searchQ = '';
-                listSearch.value = '';
                 void refreshList();
             });
             const sep = document.createElement('span');
@@ -353,7 +349,6 @@ favoriteBtn.addEventListener('click', () => {
 
 const backlinksEl = document.querySelector<HTMLElement>('#backlinks')!;
 const propsEl = document.querySelector<HTMLElement>('#props')!;
-const tocEl = document.querySelector<HTMLElement>('#toc')!;
 const statCount = document.querySelector<HTMLElement>('#stat-count')!;
 const statWords = document.querySelector<HTMLElement>('#stat-words')!;
 const findbarEl = document.querySelector<HTMLElement>('#findbar')!;
@@ -363,29 +358,14 @@ const replaceInput = document.querySelector<HTMLInputElement>('#replace-input')!
 
 async function refreshList(): Promise<void> {
     try {
-        // 搜索态：全文搜索结果直接当清单（含上下文行）
-        if (searchQ && host.search) {
-            const hits = await host.search(searchQ);
-            allFiles = await host.list();
-            renderPills();
-            renderTagBar(tagbar, allFiles, null, () => undefined, applyTagColor);
-            renderSidebar(nav, hits, { activePath: openFile, onOpen: (p) => void open(p) });
-            renderStatusbar();
-            return;
-        }
         const files = await host.list();
         allFiles = files;
-        // 筛选走 host.list(opts)（单元 6 契约），标签并集来自全量
-        const tagged = activeTag ? await host.list({ tag: activeTag }) : files;
-        let shown = tagged;
+        let shown = files;
         if (dirFilter) shown = shown.filter((f) => f.path.startsWith(`${dirFilter}/`));
         if (view === 'notes') shown = shown.filter((f) => f.kind === 'note');
         if (view === 'memos') shown = shown.filter((f) => f.kind === 'memo');
+        if (view === 'links') shown = shown.filter((f) => f.linked);
         renderPills();
-        renderTagBar(tagbar, files, activeTag, (tag) => {
-            activeTag = activeTag === tag ? null : tag;
-            void refreshList();
-        }, applyTagColor);
         renderStatusbar();
         if (view === 'memos') {
             renderMemoTimeline(nav, shown, {
@@ -393,7 +373,7 @@ async function refreshList(): Promise<void> {
                 onOpen: (p) => void open(p),
             });
         } else {
-            const favorites = files.filter((f) => f.favorite && (!dirFilter || f.path.startsWith(`${dirFilter}/`)));
+            const favorites = shown.filter((f) => f.favorite);
             renderSidebar(nav, shown.filter((f) => !f.favorite), {
                 activePath: openFile,
                 onOpen: (p) => void open(p),
@@ -407,21 +387,25 @@ async function refreshList(): Promise<void> {
     }
 }
 
-/** 筛选 pills（单元 13）：全部/长文/速记 + 计数；目录过滤生效时给出口。 */
+/** 筛选 pills（验收批）：全部/笔记/速记/外链，图标在文字左，带计数。 */
+const PILL_ICONS: Record<string, IconName> = { all: 'all', notes: 'note', memos: 'memo', links: 'link' };
+
 function renderPills(): void {
     const counts = {
         all: allFiles.length,
         notes: allFiles.filter((f) => f.kind === 'note').length,
         memos: allFiles.filter((f) => f.kind === 'memo').length,
+        links: allFiles.filter((f) => f.linked).length,
     };
     const labels: Record<string, string> = {
         all: `全部 ${counts.all}`,
-        notes: `长文 ${counts.notes}`,
+        notes: `笔记 ${counts.notes}`,
         memos: `速记 ${counts.memos}`,
+        links: `外链 ${counts.links}`,
     };
     filterbar.querySelectorAll<HTMLButtonElement>('button[data-view]').forEach((button) => {
         const key = button.dataset.view as keyof typeof counts;
-        button.textContent = labels[key] ?? '';
+        button.innerHTML = `${icon(PILL_ICONS[key] ?? 'all')}<span>${labels[key] ?? ''}</span>`;
         button.setAttribute('aria-pressed', String(view === key));
     });
     let chip = filterbar.querySelector<HTMLButtonElement>('#dir-chip');
@@ -443,31 +427,25 @@ function renderPills(): void {
     }
 }
 
-function setView(next: 'all' | 'notes' | 'memos'): void {
+function setView(next: 'all' | 'notes' | 'memos' | 'links'): void {
     view = next;
-    newMemoBtn.hidden = next !== 'memos';
     void refreshList();
 }
 
 filterbar.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-view]');
-    if (button) setView(button.dataset.view as 'all' | 'notes' | 'memos');
+    if (button) setView(button.dataset.view as 'all' | 'notes' | 'memos' | 'links');
 });
 
-listSearch.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-        searchQ = listSearch.value.trim();
-        void refreshList();
-    }, 250);
-});
+function stamp(): string {
+    return new Date()
+        .toLocaleString('sv', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        .replace(/[\s:]/g, '-');
+}
 
 /** 新建速记：memos/<日期时间>.md，frontmatter 留好 tags（单元 8）。 */
 async function newMemo(): Promise<void> {
-    const stamp = new Date()
-        .toLocaleString('sv', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-        .replace(/[\s:]/g, '-');
-    const path = `memos/${stamp}.md`;
+    const path = `memos/${stamp()}.md`;
     try {
         await host.write(path, '---\ntags: []\n---\n\n');
         await open(path);
@@ -477,7 +455,35 @@ async function newMemo(): Promise<void> {
     }
 }
 
-newMemoBtn.addEventListener('click', () => void newMemo());
+/** 底部动作排（验收批）：图标 + 上弹 tooltip，链入外部沿用既有绑定。 */
+document.querySelector<HTMLButtonElement>('#add-note')!.innerHTML = icon('plus-note');
+document.querySelector<HTMLButtonElement>('#add-memo')!.innerHTML = icon('plus-memo');
+document.querySelector<HTMLButtonElement>('#add-folder')!.innerHTML = icon('plus-folder');
+document.querySelector<HTMLButtonElement>('#link-outside')!.innerHTML = icon('link');
+
+document.querySelector<HTMLButtonElement>('#add-note')!.addEventListener('click', () => void (async () => {
+    const path = `notes/${stamp()}.md`;
+    await host.write(path, '# 未命名笔记\n');
+    await open(path);
+    void refreshList();
+})());
+
+document.querySelector<HTMLButtonElement>('#add-memo')!.addEventListener('click', () => void newMemo());
+
+document.querySelector<HTMLButtonElement>('#add-folder')!.addEventListener('click', () => void (async () => {
+    const name = window.prompt('新文件夹名（建在 notes/ 下，内含一篇未命名笔记）：');
+    if (!name?.trim()) return;
+    const safe = name.trim().replace(/[\\/:*?"<>|]/g, '_');
+    const path = `notes/${safe}/未命名笔记.md`;
+    try {
+        await host.write(path, '# 未命名笔记\n');
+        dirFilter = `notes/${safe}`;
+        await open(path);
+        void refreshList();
+    } catch (err) {
+        saySave(`建文件夹失败：${(err as Error).message}`);
+    }
+})());
 
 /** 链入库外 md（单元 10）：只在 vault 里放链接，读写穿透回原文件。 */
 document.querySelector<HTMLButtonElement>('#link-outside')!.addEventListener('click', async () => {
@@ -558,10 +564,15 @@ document.querySelector<HTMLButtonElement>('#replace-all')!.addEventListener('cli
     currentEditor()?.replace(replaceInput.value, { isSingle: false, isRegexp: false });
     doSearch();
 });
+// Ctrl+F 归全局搜索面板（验收批）：取代浏览器原生搜索，任何状态都拦
+const searchPalette = attachSearchPalette({
+    search: async (q) => (host.search ? await host.search(q) : []),
+    onOpen: (p) => void open(p),
+});
 window.addEventListener('keydown', (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f' && openFile) {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault();
-        findbarShow();
+        searchPalette.show();
     }
 });
 
@@ -599,5 +610,34 @@ applyTheme((localStorage.getItem('folio-theme') as 'light' | 'dark') ?? 'light')
 themeToggle.addEventListener('click', () => {
     applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 });
+
+// 左右栏拖宽窄（验收批）：边线拖拽，宽度持久化
+function attachResizer(panel: HTMLElement, edge: 'left' | 'right', key: string, min: number, max: number): void {
+    const saved = Number(localStorage.getItem(key));
+    if (Number.isFinite(saved) && saved >= min && saved <= max) panel.style.width = `${saved}px`;
+    const handle = document.createElement('div');
+    handle.className = 'col-resize';
+    handle.style[edge] = '0';
+    handle.addEventListener('mousedown', (down) => {
+        down.preventDefault();
+        const startX = down.clientX;
+        const startW = panel.getBoundingClientRect().width;
+        const move = (moveEvent: MouseEvent) => {
+            const delta = edge === 'right' ? moveEvent.clientX - startX : startX - moveEvent.clientX;
+            const width = Math.min(max, Math.max(min, Math.round(startW + delta)));
+            panel.style.width = `${width}px`;
+            localStorage.setItem(key, String(width));
+        };
+        const up = () => {
+            document.removeEventListener('mousemove', move);
+            document.removeEventListener('mouseup', up);
+        };
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+    });
+    panel.append(handle);
+}
+attachResizer(sidebarEl, 'right', 'folio-w-sidebar', 180, 440);
+attachResizer(tocEl, 'left', 'folio-w-toc', 140, 380);
 
 void refreshList();

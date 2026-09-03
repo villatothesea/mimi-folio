@@ -41,6 +41,9 @@ export type FolioImage = {
 /** saveFile 与 saveImage 同形：都回 attachments/ 下的相对路径 */
 export type FolioAttachment = FolioImage;
 
+/** 搜索命中（单元 13/验收批）：text 为上下文行，start 是命中在 text 里的起点 */
+export type FolioSearchItem = FolioListItem & { matches: { text: string; start: number }[] };
+
 export type FolioIndex = {
     outgoing: FolioPath[];
     backlinks: FolioPath[];
@@ -59,7 +62,7 @@ export interface FolioHost {
      */
     linkOutside?(absSource: string): Promise<FolioPath>;
     /** 全文搜索（单元 13）：标题或正文命中，回清单项 + 上下文行 */
-    search?(query: string): Promise<FolioListItem[]>;
+    search?(query: string): Promise<FolioSearchItem[]>;
     index?(path: FolioPath): Promise<FolioIndex>;
 }
 

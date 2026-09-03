@@ -5,7 +5,10 @@
 import type { Muya } from '@muyajs/core';
 
 export function renderToc(el: HTMLElement, editor: Muya | null): void {
-    el.replaceChildren();
+    // 只清条目，保留宿主层挂在 #toc 里的其它元素（如拖宽窄把手）
+    for (const child of [...el.children]) {
+        if (child.classList.contains('toc-item') || child.classList.contains('toc-empty')) child.remove();
+    }
     if (!editor) return;
     const toc = editor.getTOC();
     if (toc.length === 0) {

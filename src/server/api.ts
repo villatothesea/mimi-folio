@@ -278,15 +278,25 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
                 return true;
             }
             const needle = q.toLowerCase();
-            const results: FolioListItem[] = [];
+            const results: (FolioListItem & { matches: { text: string; start: number }[] })[] = [];
             for (const item of await listMarkdown(root, {})) {
                 const markdown = await fs.readFile(path.join(root, item.path), 'utf8');
-                const hit = markdown.toLowerCase().indexOf(needle);
-                if (hit === -1) continue;
-                const lines = markdown.split('\n');
-                const lineNo = markdown.slice(0, hit).split('\n').length - 1;
-                results.push({ ...item, snippet: `…${(lines[lineNo] ?? '').trim().slice(0, 60)}` });
-                if (results.length >= 50) break;
+                const matches: { text: string; start: number }[] = [];
+                const titleHit = item.title.toLowerCase().indexOf(needle);
+                if (titleHit >= 0) matches.push({ text: item.title, start: titleHit });
+                const lower = markdown.toLowerCase();
+                let from = 0;
+                while (matches.length < 5) {
+                    const idx = lower.indexOf(needle, from);
+                    if (idx === -1) break;
+                    const lineNo = markdown.slice(0, idx).split('\n').length - 1;
+                    const line = (markdown.split('\n')[lineNo] ?? '').trim();
+                    const start = Math.max(0, line.toLowerCase().indexOf(needle));
+                    matches.push({ text: line.slice(0, 80), start });
+                    from = idx + needle.length;
+                }
+                if (matches.length > 0) results.push({ ...item, matches });
+                if (results.length >= 30) break;
             }
             send(res, 200, results);
             return true;

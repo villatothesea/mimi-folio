@@ -3,24 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>米素</title>
   </head>
   <body>
     <div id="app">
       <div id="main-row">
         <aside id="sidebar">
-          <header id="sidebar-head">米素</header>
+          <header id="sidebar-head">
+            <img id="app-icon" src="/favicon.svg" alt="米素" />
+            <span>米素</span>
+          </header>
           <div id="filterbar" aria-label="筛选">
             <button id="pill-all" type="button" data-view="all" aria-pressed="true">全部</button>
-            <button id="pill-notes" type="button" data-view="notes" aria-pressed="false">长文</button>
+            <button id="pill-notes" type="button" data-view="notes" aria-pressed="false">笔记</button>
             <button id="pill-memos" type="button" data-view="memos" aria-pressed="false">速记</button>
+            <button id="pill-links" type="button" data-view="links" aria-pressed="false">外链</button>
           </div>
-          <input id="list-search" type="text" placeholder="搜全文…" />
-          <div id="tagbar" aria-label="标签筛选"></div>
           <nav id="files" aria-label="文件列表"></nav>
           <footer id="sidebar-foot">
-            <button id="new-memo" type="button" hidden>新建速记</button>
-            <button id="link-outside" type="button" title="把 vault 外的 md 链进来（不拷贝）">链入外部 md</button>
+            <button id="add-note" type="button" class="icon-btn" data-tip="添加笔记"></button>
+            <button id="add-memo" type="button" class="icon-btn" data-tip="添加速记"></button>
+            <button id="add-folder" type="button" class="icon-btn" data-tip="添加文件夹"></button>
+            <button id="link-outside" type="button" class="icon-btn" data-tip="链入外部 md"></button>
           </footer>
         </aside>
         <main id="page">

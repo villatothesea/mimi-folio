@@ -206,6 +206,33 @@ describe('库外链入（单元 10）', () => {
     });
 });
 
+describe('全文搜索（单元 13/验收批）', () => {
+    it('正文多处命中给多条 match，start 指向行内偏移', async () => {
+        await fs.writeFile(
+            path.join(vault, 'notes', 's.md'),
+            '# 甲文\n\n第一处甲烷在这里。\n无关行。\n又一处甲烷。\n',
+            'utf8',
+        );
+        const res = await fetch(`${base}/folio/v1/search?q=${encodeURIComponent('甲烷')}`);
+        const results = (await res.json()) as { path: string; matches: { text: string; start: number }[] }[];
+        const hit = results.find((r) => r.path === 'notes/s.md')!;
+        assert.equal(hit.matches.length, 2);
+        assert.equal(hit.matches[0].text.indexOf('甲烷'), hit.matches[0].start);
+    });
+
+    it('标题命中排第一', async () => {
+        const res = await fetch(`${base}/folio/v1/search?q=${encodeURIComponent('速记')}`);
+        const results = (await res.json()) as { title: string; matches: { text: string }[] }[];
+        const memo = results.find((r) => r.title === '一条速记')!;
+        assert.equal(memo.matches[0].text, '一条速记');
+    });
+
+    it('空查询返回空数组', async () => {
+        const res = await fetch(`${base}/folio/v1/search`);
+        assert.deepEqual(await res.json(), []);
+    });
+});
+
 describe('附件（saveImage/saveFile）', () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02, 0x03]);
 
