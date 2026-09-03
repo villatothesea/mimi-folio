@@ -18,6 +18,8 @@ export type FolioListItem = {
     tags?: string[];
     /** notes/ 长文、memos/ 速记；其它目录不给 kind */
     kind?: 'note' | 'memo';
+    /** links/ 下链入的库外文档（单元 10） */
+    linked?: boolean;
 };
 
 /** list 的筛选（单元 6）。合入后 daemon 按同样语义扫资产层。 */
@@ -47,6 +49,11 @@ export interface FolioHost {
     saveImage(bytes: Uint8Array, hint: string): Promise<FolioImage>;
     /** 音视频等附件落盘（单元 4）；合入后由 daemon 提供同名能力 */
     saveFile?(bytes: Uint8Array, hint: string): Promise<FolioAttachment>;
+    /**
+     * 库外 md 链入 vault（单元 10）：在 vault/links/ 建指向库外文件的链接，
+     * 读写穿透回原文件；**失败抛错，绝不拷贝正文**。合入后 daemon 同名实现。
+     */
+    linkOutside?(absSource: string): Promise<FolioPath>;
     index?(path: FolioPath): Promise<FolioIndex>;
 }
 

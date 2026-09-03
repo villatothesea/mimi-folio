@@ -25,6 +25,10 @@ export class MimiHost implements FolioHost {
         throw new Error('MimiHost：合入前未接 daemon');
     }
 
+    async linkOutside(_absSource: string): Promise<FolioPath> {
+        throw new Error('MimiHost：合入前未接 daemon');
+    }
+
     async index(_path: FolioPath): Promise<FolioIndex> {
         throw new Error('MimiHost：合入前未接 daemon');
     }

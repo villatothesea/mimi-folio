@@ -24,6 +24,11 @@ await fs.writeFile(
 );
 await fs.writeFile(path.join(vault, 'notes', 'orphan.md'), '链向 [[m1]]\n', 'utf8');
 
+// 单元 10：vault 外的真源文件
+const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-outside-'));
+const outsideMd = path.join(outsideDir, '外部文档.md');
+await fs.writeFile(outsideMd, '# 外部文档\n\n真源在 vault 外。\n', 'utf8');
+
 const server = createAppServer();
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
 const port = (server.address() as { port: number }).port;
@@ -145,6 +150,58 @@ describe('GET /folio/v1/index', () => {
 
     it('index 缺 path 400', async () => {
         const res = await fetch(`${base}/folio/v1/index`);
+        assert.equal(res.status, 400);
+    });
+});
+
+describe('库外链入（单元 10）', () => {
+    it('链入后 list 标 linked，read 直达原文', async () => {
+        const res = await fetch(`${base}/folio/v1/link`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: outsideMd }),
+        });
+        assert.equal(res.status, 200);
+        const { path: rel } = (await res.json()) as { path: string };
+        assert.equal(rel, 'links/外部文档.md');
+
+        const list = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string; linked?: boolean }[];
+        const item = list.find((f) => f.path === rel)!;
+        assert.equal(item.linked, true);
+
+        const doc = (await (await fetch(`${base}/folio/v1/doc?path=${encodeURIComponent(rel)}`)).json()) as { markdown: string };
+        assert.ok(doc.markdown.includes('真源在 vault 外'));
+    });
+
+    it('write 穿透回原文件（盘上无第二份正文）', async () => {
+        const put = await fetch(`${base}/folio/v1/doc`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: 'links/外部文档.md', markdown: '# 外部文档\n\n改过了。\n' }),
+        });
+        assert.equal(put.status, 204);
+        // 原文件（vault 外路径）被同步修改
+        assert.equal(await fs.readFile(outsideMd, 'utf8'), '# 外部文档\n\n改过了。\n');
+    });
+
+    it('失败不落拷贝：不存在的源 400 且 links/ 不多文件', async () => {
+        const before = await fs.readdir(path.join(vault, 'links'));
+        const res = await fetch(`${base}/folio/v1/link`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: path.join(outsideDir, '没有这个.md') }),
+        });
+        assert.equal(res.status, 400);
+        const after = await fs.readdir(path.join(vault, 'links'));
+        assert.deepEqual(after, before);
+    });
+
+    it('vault 内的文件拒绝链入', async () => {
+        const res = await fetch(`${base}/folio/v1/link`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: path.join(vault, 'notes', 'a.md') }),
+        });
         assert.equal(res.status, 400);
     });
 });

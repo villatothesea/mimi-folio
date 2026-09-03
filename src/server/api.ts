@@ -75,6 +75,44 @@ function kindOf(rel: string): 'note' | 'memo' | undefined {
     return undefined;
 }
 
+/**
+ * 库外 md 链入 vault/links/（单元 10）。
+ * 链接优先级：符号链接 → 同卷硬链接（Windows 无特权时的等价物，同 inode 仍是
+ * 同一份正文）。两者都失败就抛错——**绝不拷贝正文当「入库」**。
+ */
+async function linkOutside(root: string, absSource: string): Promise<string> {
+    if (!path.isAbsolute(absSource)) throw new Error('必须是绝对路径');
+    const resolved = path.resolve(absSource);
+    if (!MD_RE.test(resolved)) throw new Error('只链 .md 文件');
+    if (!path.relative(root, resolved).startsWith('..')) {
+        throw new Error('文件已在 vault 内，直接打开即可，不用链入');
+    }
+    const stat = await fs.stat(resolved).catch(() => null);
+    if (!stat?.isFile()) throw new Error('文件不存在');
+
+    const linksDir = path.join(root, 'links');
+    await fs.mkdir(linksDir, { recursive: true });
+    const name = path.basename(resolved);
+    const dest = path.join(linksDir, name);
+    if (await fileExists(dest)) throw new Error(`links/${name} 已存在`);
+
+    try {
+        await fs.symlink(resolved, dest, 'file');
+    } catch {
+        // Windows 普通权限建不了符号链接；同卷硬链接是同一份磁盘数据（非拷贝）
+        try {
+            await fs.link(resolved, dest);
+        } catch (err) {
+            throw new Error(
+                `建不了链接（${(err as NodeJS.ErrnoException).code}）：`
+                + '符号链接需要开发者模式/管理员，硬链接需要与 vault 同一磁盘卷。'
+                + '按规矩不拷贝正文，未做任何写入。',
+            );
+        }
+    }
+    return `links/${name}`;
+}
+
 async function listMarkdown(root: string, opts: FolioListOpts): Promise<FolioListItem[]> {
     const out: FolioListItem[] = [];
     async function walk(dir: string): Promise<void> {
@@ -82,11 +120,22 @@ async function listMarkdown(root: string, opts: FolioListOpts): Promise<FolioLis
             if (entry.name.startsWith('.')) continue;
             const abs = path.join(dir, entry.name);
             if (entry.isDirectory()) await walk(abs);
-            else if (entry.isFile() && MD_RE.test(entry.name)) {
+            // 符号链接（目录项不是 file/dir）也跟进去：links/ 的链入文档要出现在清单
+            else if (entry.isSymbolicLink() && MD_RE.test(entry.name)) {
+                const stat = await fs.stat(abs).catch(() => null);
+                if (stat?.isFile()) {
+                    const rel = path.relative(root, abs).split(path.sep).join('/');
+                    const markdown = await fs.readFile(abs, 'utf8');
+                    const { tags } = splitFrontmatter(markdown);
+                    out.push({ path: rel, title: titleOf(rel, markdown), tags, linked: true });
+                }
+            } else if (entry.isFile() && MD_RE.test(entry.name)) {
                 const rel = path.relative(root, abs).split(path.sep).join('/');
                 const markdown = await fs.readFile(abs, 'utf8');
                 const { tags } = splitFrontmatter(markdown);
-                out.push({ path: rel, title: titleOf(rel, markdown), tags, kind: kindOf(rel) });
+                // 硬链接没有目录项标记，links/ 目录下的都算链入
+                const linked = rel === 'links' || rel.startsWith('links/');
+                out.push({ path: rel, title: titleOf(rel, markdown), tags, kind: kindOf(rel), linked: linked || undefined });
             }
         }
     }
@@ -213,6 +262,18 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             await fs.writeFile(abs, body.markdown, 'utf8');
             send(res, 204);
             return true;
+        }
+
+        if (req.method === 'POST' && pathname === 'link') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { source?: string };
+            if (typeof body.source !== 'string') return fail(res, 400, '需要 {source: 绝对路径}');
+            try {
+                const rel = await linkOutside(root, body.source);
+                send(res, 200, { path: rel });
+                return true;
+            } catch (err) {
+                return fail(res, 400, err instanceof Error ? err.message : String(err));
+            }
         }
 
         if (req.method === 'GET' && pathname === 'index') {

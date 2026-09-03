@@ -74,4 +74,14 @@ export class StandaloneHost implements FolioHost {
         const resp = await fetch(this.url(`/folio/v1/index?path=${encodeURIComponent(path)}`));
         return this.json<FolioIndex>(resp);
     }
+
+    async linkOutside(absSource: string): Promise<FolioPath> {
+        const resp = await fetch(this.url('/folio/v1/link'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: absSource }),
+        });
+        const out = await this.json<{ path: FolioPath }>(resp);
+        return out.path;
+    }
 }

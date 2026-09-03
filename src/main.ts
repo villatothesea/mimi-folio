@@ -243,6 +243,20 @@ viewNotesBtn.addEventListener('click', () => setView('notes'));
 viewMemosBtn.addEventListener('click', () => setView('memos'));
 newMemoBtn.addEventListener('click', () => void newMemo());
 
+/** 链入库外 md（单元 10）：只在 vault 里放链接，读写穿透回原文件。 */
+document.querySelector<HTMLButtonElement>('#link-outside')!.addEventListener('click', async () => {
+    if (!host.linkOutside) return;
+    const source = window.prompt('库外 md 的绝对路径（读写都会回这个文件，不拷贝）：');
+    if (!source) return;
+    try {
+        const path = await host.linkOutside(source.trim().replace(/^["']|["']$/g, ''));
+        await open(path);
+        void refreshList();
+    } catch (err) {
+        saySave(`链入失败：${(err as Error).message}`);
+    }
+});
+
 window.addEventListener('beforeunload', (event) => {
     if (openFile && currentEditor() && currentEditor()!.getMarkdown() !== lastSaved) {
         event.preventDefault();

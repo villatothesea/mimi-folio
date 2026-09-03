@@ -31,6 +31,13 @@ export function renderSidebar(nav: HTMLElement, files: FolioListItem[], opts: Si
             const button = document.createElement('button');
             button.type = 'button';
             button.textContent = file.title;
+            if (file.linked) {
+                const badge = document.createElement('span');
+                badge.className = 'linked-badge';
+                badge.textContent = '⌗';
+                badge.title = '库外链入文档，读写回原文件';
+                button.append(document.createTextNode(file.title), badge);
+            }
             button.title = file.path;
             button.dataset.path = file.path;
             if (file.path === opts.activePath) button.setAttribute('aria-current', 'true');

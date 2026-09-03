@@ -57,8 +57,35 @@
     cursor: pointer;
 }
 
-#new-memo:hover {
+#new-memo:hover,
+#link-outside:hover {
     background: var(--folio-hover);
+}
+
+#link-outside {
+    display: block;
+    width: 100%;
+    margin-top: var(--folio-space-2);
+    border: 1px dashed var(--folio-border-strong);
+    border-radius: var(--folio-radius);
+    background: var(--folio-bg);
+    color: var(--folio-fg-muted);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-1) var(--folio-space-2);
+    cursor: pointer;
+}
+
+#files button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--folio-space-2);
+}
+
+.linked-badge {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
 }
 
 .memo-row {
