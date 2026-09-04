@@ -1688,9 +1688,11 @@ html[data-num-b='paren'] .mu-editor li::before {
     font: inherit;
     font-size: var(--folio-font-size-sm);
     text-align: left;
-    padding: var(--folio-space-2) 10px;
+    padding: var(--folio-space-2) 4px var(--folio-space-2) 0;
     cursor: pointer;
 }
+
+
 
 #files .row-main .file-name {
     flex: 1;
@@ -1735,7 +1737,9 @@ html[data-num-b='paren'] .mu-editor li::before {
 }
 
 .folder-toggle {
-    width: calc(var(--folio-control-h) - 6px);
+    width: var(--tree-gutter, 20px);
+    box-sizing: border-box;
+    padding: 0;
     flex: none;
     align-self: stretch;
     height: auto;
@@ -1743,7 +1747,7 @@ html[data-num-b='paren'] .mu-editor li::before {
 
 /* 层级引导线：对准折叠三角中心（清单1 补充 2）；线是伪元素，行半透明高亮不遮线 */
 :root {
-    --tree-step: 18px;
+    --tree-step: 20px;
     /* 折叠钮中心 = 10(左距) + 11(钮半宽)，首层容器左缘 18 → 线在容器内 +3px */
     --tree-line-offset: 3px;
 }
@@ -1914,11 +1918,29 @@ html[data-num-b='paren'] .mu-editor li::before {
 }
 
 
-/* 行高亮半透明：层级竖线透出来不被盖住（清单1 补充 2） */
+/* 高亮挂整行（含折叠钮槽，贯穿左右），半透明不遮竖线（清单1 补充 2/3） */
 #files .row-main:hover {
     background: color-mix(in srgb, var(--folio-fg) 5%, transparent);
 }
 
 #files .row-main[aria-current='true'] {
     background: color-mix(in srgb, var(--folio-fg) 9%, transparent);
+}
+
+.folder-row:hover,
+.folder-row:hover .folder-toggle,
+.folder-row:hover .row-main {
+    background: color-mix(in srgb, var(--folio-fg) 5%, transparent);
+}
+
+.folder-row:has(> .row-main[aria-current='true']),
+.folder-row:has(> .row-main[aria-current='true']) .folder-toggle,
+.folder-row:has(> .row-main[aria-current='true']) .row-main {
+    background: color-mix(in srgb, var(--folio-fg) 9%, transparent);
+}
+
+
+/* 文件行预留折叠钮等宽槽：图标与同级文件夹图标对齐（清单1 补充 3） */
+.tree-row:not(.folder-row) .row-main {
+    padding-left: var(--tree-step);
 }
