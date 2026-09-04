@@ -156,3 +156,9 @@
     z-index: 2;
     pointer-events: none;
 }
+
+/* 待办勾选框：直角矩形（盖掉 Muya 出厂的圆形） */
+.mu-editor li.mu-task-list-item > input[type='checkbox']::before,
+.mu-editor li.mu-task-list-item > span.mu-task-list-checkbox::before {
+    border-radius: var(--folio-radius);
+}
