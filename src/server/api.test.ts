@@ -215,6 +215,43 @@ describe('库外链入（单元 10）', () => {
         });
         assert.equal(res.status, 400);
     });
+
+    it('文件夹链入后，源目录新 md 自动出现在 list，写回真源、不拷贝', async () => {
+        const src = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-folder-'));
+        await fs.writeFile(path.join(src, '先有.md'), '# 先有\n', 'utf8');
+        const res = await fetch(`${base}/folio/v1/folderlink`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: src }),
+        });
+        assert.equal(res.status, 200, await res.text());
+        const dirName = path.basename(src);
+        const first = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string; linked?: boolean }[];
+        const existing = first.find((f) => f.path === `links/${dirName}/先有.md`);
+        assert.ok(existing, '链入时应列出已有 md');
+        assert.equal(existing!.linked, true);
+
+        await fs.mkdir(path.join(src, '子夹'));
+        await fs.writeFile(path.join(src, '后加.md'), '# 后加\n真源\n', 'utf8');
+        await fs.writeFile(path.join(src, '子夹', '深.md'), '# 深\n', 'utf8');
+
+        const next = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string }[];
+        assert.ok(next.some((f) => f.path === `links/${dirName}/后加.md`), '源目录新文件应进清单');
+        assert.ok(next.some((f) => f.path === `links/${dirName}/子夹/深.md`), '源目录子文件夹新文件应进清单');
+
+        const put = await fetch(`${base}/folio/v1/doc`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: `links/${dirName}/后加.md`, markdown: '# 后加\n改过\n' }),
+        });
+        assert.equal(put.status, 204);
+        assert.equal(await fs.readFile(path.join(src, '后加.md'), 'utf8'), '# 后加\n改过\n');
+        assert.equal(
+            await fs.access(path.join(src, '.folio-origin')).then(() => true, () => false),
+            false,
+            '不得把 .folio-origin 写进源文件夹',
+        );
+    });
 });
 
 describe('全文搜索（单元 13/验收批）', () => {

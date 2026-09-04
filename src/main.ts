@@ -521,10 +521,21 @@ const findInput = document.querySelector<HTMLInputElement>('#find-input')!;
 const findCount = document.querySelector<HTMLElement>('#find-count')!;
 const replaceInput = document.querySelector<HTMLInputElement>('#replace-input')!;
 
+let lastListSig = '';
+
+function listSignature(files: { path: string; title: string; favorite?: boolean }[]): string {
+    return `${[...activeFilters].sort().join(',')}|${selectedDir ?? ''}|${openFile ?? ''}|`
+        + files.map((f) => `${f.path}\0${f.title}\0${f.favorite ? 1 : 0}`).join('\n');
+}
+
 async function refreshList(): Promise<void> {
     try {
         const files = await host.list();
         allFiles = files;
+        const sig = listSignature(files);
+        if (sig === lastListSig) return;
+        if (nav.querySelector('input:focus, textarea:focus') || titleEl.querySelector('input:focus')) return;
+        lastListSig = sig;
         let shown = files;
         for (const key of activeFilters) {
             if (key === 'notes') shown = shown.filter((f) => f.kind === 'note');
@@ -698,9 +709,9 @@ async function importMdByPicker(): Promise<void> {
     });
 }
 
-/** 导入文件夹（bug4 2.8）：路径 → links/<原名>/ 逐文件链接，不拷贝。 */
+/** 导入文件夹：路径 → links/<原名>/ 目录联接（失败则逐文件链接），不拷贝；源里新 md 会自动进来。 */
 async function importFolderLink(): Promise<void> {
-    const source = await folioPrompt('要导入的文件夹绝对路径（逐文件链接，不拷贝）');
+    const source = await folioPrompt('要导入的文件夹绝对路径（链入后源目录里的新 md 会自动进来，不拷贝）');
     if (!source) return;
     try {
         const resp = await fetch('/folio/v1/folderlink', {
@@ -1081,8 +1092,9 @@ wrap.addEventListener('contextmenu', (event) => {
     ]);
 });
 
-// bug4 1：外部修改实时可见（3s 轮询 mtime，编辑器干净时热更新）+ 打开位置书签
+// 外链文件夹里新文件、以及打开篇被外部改过：3s 轮询。清单未变则 refreshList 自己跳过重绘。
 setInterval(() => void (async () => {
+    void refreshList();
     if (!openFile || !currentEditor()) return;
     if (currentEditor()!.getMarkdown() !== lastSaved) return; // 有未存改动不覆盖
     const doc = await host.read(openFile).catch(() => null);

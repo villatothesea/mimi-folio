@@ -3,10 +3,12 @@
  * 路径与合入后 daemon 提供的一致（docs/计划.md §合入），合入只换实现不换接口。
  * 只放行 vault 内的 .md 与 attachments/；越界路径一律 4xx。
  */
+import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { watch as fsWatch, type FSWatcher } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 import type { FolioListItem, FolioListOpts } from '../host/types.ts';
 import { displayTitle } from '../shared/docTitle.ts';
@@ -74,6 +76,31 @@ function kindOf(rel: string): 'note' | 'memo' | undefined {
     return undefined;
 }
 
+const execFileP = promisify(execFile);
+const ORIGIN_FILE = '.folio-origin';
+
+function isOutsideVault(root: string, abs: string): boolean {
+    const rel = path.relative(root, abs);
+    return rel.startsWith('..') || path.isAbsolute(rel);
+}
+
+async function linkFileInto(srcFile: string, destFile: string): Promise<void> {
+    if (await fileExists(destFile)) return;
+    try {
+        await fs.symlink(srcFile, destFile, 'file');
+    } catch {
+        try {
+            await fs.link(srcFile, destFile);
+        } catch (err) {
+            throw new Error(
+                `建不了链接（${(err as NodeJS.ErrnoException).code}）：`
+                + '符号链接需要开发者模式/管理员，硬链接需要与 vault 同一磁盘卷。'
+                + '按规矩不拷贝正文，未做任何写入。',
+            );
+        }
+    }
+}
+
 /**
  * 库外 md 链入 vault/links/（单元 10）。
  * 链接优先级：符号链接 → 同卷硬链接（Windows 无特权时的等价物，同 inode 仍是
@@ -83,7 +110,7 @@ async function linkOutside(root: string, absSource: string): Promise<string> {
     if (!path.isAbsolute(absSource)) throw new Error('必须是绝对路径');
     const resolved = path.resolve(absSource);
     if (!DOC_RE.test(resolved)) throw new Error('只链 .md/.html 文件');
-    if (!path.relative(root, resolved).startsWith('..')) {
+    if (!isOutsideVault(root, resolved)) {
         throw new Error('文件已在 vault 内，直接打开即可，不用链入');
     }
     const stat = await fs.stat(resolved).catch(() => null);
@@ -95,22 +122,150 @@ async function linkOutside(root: string, absSource: string): Promise<string> {
     const dest = path.join(linksDir, name);
     if (await fileExists(dest)) throw new Error(`links/${name} 已存在`);
 
-    try {
-        await fs.symlink(resolved, dest, 'file');
-    } catch {
-        // Windows 普通权限建不了符号链接；同卷硬链接是同一份磁盘数据（非拷贝）
-        try {
-            await fs.link(resolved, dest);
-        } catch (err) {
-            throw new Error(
-                `建不了链接（${(err as NodeJS.ErrnoException).code}）：`
-                + '符号链接需要开发者模式/管理员，硬链接需要与 vault 同一磁盘卷。'
-                + '按规矩不拷贝正文，未做任何写入。',
-            );
-        }
-    }
+    await linkFileInto(resolved, dest);
     invalidate(root);
     return `links/${name}`;
+}
+
+async function writeOrigin(destDir: string, srcDir: string): Promise<void> {
+    await fs.writeFile(path.join(destDir, ORIGIN_FILE), `${srcDir}\n`, 'utf8');
+}
+
+async function readOrigin(destDir: string): Promise<string | null> {
+    const raw = await fs.readFile(path.join(destDir, ORIGIN_FILE), 'utf8').catch(() => '');
+    const line = raw.split(/\r?\n/).find((s) => s.trim());
+    return line ? path.resolve(line.trim()) : null;
+}
+
+async function listHardlinkPeers(abs: string): Promise<string[]> {
+    if (process.platform !== 'win32') return [];
+    try {
+        const { stdout } = await execFileP('fsutil', ['hardlink', 'list', abs], { timeout: 2000, windowsHide: true });
+        return String(stdout)
+            .split(/\r?\n/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
+function samePath(a: string, b: string): boolean {
+    const x = path.resolve(a);
+    const y = path.resolve(b);
+    return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+}
+
+async function inferSourceDir(destDir: string, root: string): Promise<string | null> {
+    for (const name of await fs.readdir(destDir)) {
+        if (name.startsWith('.') || !DOC_RE.test(name)) continue;
+        const abs = path.join(destDir, name);
+        const lst = await fs.lstat(abs).catch(() => null);
+        if (!lst) continue;
+        if (lst.isSymbolicLink()) {
+            const target = await fs.readlink(abs);
+            return path.dirname(path.resolve(destDir, target));
+        }
+        for (const peer of await listHardlinkPeers(abs)) {
+            const resolved = path.resolve(peer);
+            if (isOutsideVault(root, resolved)) return path.dirname(resolved);
+        }
+    }
+    return null;
+}
+
+async function linkDirOutside(root: string, srcDir: string): Promise<void> {
+    const dest = path.join(root, 'links', path.basename(srcDir));
+    try {
+        await fs.symlink(srcDir, dest, process.platform === 'win32' ? 'junction' : 'dir');
+    } catch {
+        await fs.symlink(srcDir, dest, 'dir');
+    }
+}
+
+/** 逐文件补链（目录联接失败时）：源里新 md 在 dest 建链接，不拷贝。 */
+async function syncDirFiles(srcDir: string, destDir: string): Promise<boolean> {
+    let added = false;
+    const names = await fs.readdir(srcDir).catch(() => [] as string[]);
+    for (const name of names) {
+        if (name.startsWith('.')) continue;
+        const src = path.join(srcDir, name);
+        const dest = path.join(destDir, name);
+        const st = await fs.stat(src).catch(() => null);
+        if (!st) continue;
+        if (st.isDirectory()) {
+            if (!await fileExists(dest)) await fs.mkdir(dest, { recursive: true });
+            if (await syncDirFiles(src, dest)) added = true;
+            continue;
+        }
+        if (!st.isFile() || !DOC_RE.test(name)) continue;
+        if (await fileExists(dest)) continue;
+        try {
+            await linkFileInto(src, dest);
+            added = true;
+        } catch {
+            // 单文件失败跳过
+        }
+    }
+    return added;
+}
+
+async function fingerprintDocs(dir: string): Promise<string> {
+    const rows: string[] = [];
+    async function walk(d: string, prefix: string): Promise<void> {
+        for (const name of await fs.readdir(d).catch(() => [] as string[])) {
+            if (name.startsWith('.')) continue;
+            const abs = path.join(d, name);
+            const st = await fs.stat(abs).catch(() => null);
+            if (st?.isDirectory()) {
+                await walk(abs, `${prefix}${name}/`);
+            } else if (st?.isFile() && DOC_RE.test(name)) {
+                rows.push(`${prefix}${name}:${st.mtimeMs}`);
+            }
+        }
+    }
+    await walk(dir, '');
+    return rows.sort().join('|');
+}
+
+/** dest 若解析到 vault 外的目录，就是目录联接/符号链接（不要往源里写 .folio-origin）。 */
+async function outsideDirTarget(dest: string, root: string): Promise<string | null> {
+    const real = await fs.realpath(dest).catch(() => dest);
+    return isOutsideVault(root, real) ? real : null;
+}
+
+/** 已链入的文件夹：补上源目录里新出现的 md（不拷贝），并盯着源目录。 */
+async function syncLinkedFolders(root: string): Promise<void> {
+    const linksDir = path.join(root, 'links');
+    if (!await fileExists(linksDir)) return;
+    let changed = false;
+    for (const name of await fs.readdir(linksDir)) {
+        if (name.startsWith('.')) continue;
+        const dest = path.join(linksDir, name);
+        const lst = await fs.lstat(dest).catch(() => null);
+        if (!lst) continue;
+        const destStat = await fs.stat(dest).catch(() => null);
+        if (!destStat?.isDirectory()) continue;
+        const junctionSrc = await outsideDirTarget(dest, root);
+        let srcDir: string | null = junctionSrc;
+        if (!srcDir && lst.isDirectory()) {
+            srcDir = await readOrigin(dest) ?? await inferSourceDir(dest, root);
+            if (srcDir && isOutsideVault(root, srcDir)) {
+                const prev = await readOrigin(dest);
+                if (!prev || !samePath(prev, srcDir)) await writeOrigin(dest, srcDir);
+            }
+        }
+        if (!srcDir || !isOutsideVault(root, srcDir)) continue;
+        watchOutside(srcDir, root);
+        if (!junctionSrc && lst.isDirectory()) {
+            if (await syncDirFiles(srcDir, dest)) changed = true;
+        }
+        const fp = await fingerprintDocs(srcDir);
+        const prevFp = sourceFp.get(srcDir);
+        if (prevFp !== undefined && prevFp !== fp) changed = true;
+        sourceFp.set(srcDir, fp);
+    }
+    if (changed) invalidate(root);
 }
 
 /**
@@ -125,9 +280,26 @@ type VaultCache = {
 const cacheByRoot = new Map<string, VaultCache>();
 let watcher: FSWatcher | null = null;
 let watchedRoot = '';
+const extraWatchers = new Map<string, FSWatcher>();
+const sourceFp = new Map<string, string>();
 
 function invalidate(root: string): void {
     cacheByRoot.delete(root);
+}
+
+function watchOutside(dir: string, root: string): void {
+    const key = path.resolve(dir);
+    if (extraWatchers.has(key)) return;
+    try {
+        const w = fsWatch(key, { recursive: true }, () => invalidate(root));
+        w.on('error', () => {
+            extraWatchers.delete(key);
+            w.close();
+        });
+        extraWatchers.set(key, w);
+    } catch {
+        // 源目录盯不住也不挡 list；下次 loadVault 还会再补链
+    }
 }
 
 /** 关闭常驻 watcher（测试收尾/进程退出用）。 */
@@ -135,6 +307,9 @@ export function closeVaultWatcher(): void {
     watcher?.close();
     watcher = null;
     watchedRoot = '';
+    for (const w of extraWatchers.values()) w.close();
+    extraWatchers.clear();
+    sourceFp.clear();
 }
 
 function ensureWatcher(root: string): void {
@@ -147,20 +322,28 @@ function ensureWatcher(root: string): void {
 
 async function loadVault(root: string): Promise<VaultCache> {
     ensureWatcher(root);
+    await syncLinkedFolders(root);
     const cached = cacheByRoot.get(root);
     if (cached) return cached;
 
     const list: FolioListItem[] = [];
     const contents = new Map<string, string>();
     const mtimes = new Map<string, number>();
+    const seen = new Set<string>();
     async function walk(dir: string): Promise<void> {
+        const real = await fs.realpath(dir).catch(() => dir);
+        if (seen.has(real)) return;
+        seen.add(real);
         for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
             if (entry.name.startsWith('.')) continue;
             const abs = path.join(dir, entry.name);
             const rel = path.relative(root, abs).split(path.sep).join('/');
-            if (entry.isDirectory()) {
-                await walk(abs);
-                continue;
+            if (entry.isDirectory() || entry.isSymbolicLink()) {
+                const st = await fs.stat(abs).catch(() => null);
+                if (st?.isDirectory()) {
+                    await walk(abs);
+                    continue;
+                }
             }
             const isMdFile = entry.isFile() && DOC_RE.test(entry.name);
             const isMdLink = entry.isSymbolicLink() && DOC_RE.test(entry.name);
@@ -388,31 +571,41 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             return true;
         }
 
-        // 文件夹整体链入（bug4 2.8）：links/<原名>/ 下逐文件链接，不拷贝
+        // 文件夹整体链入：优先目录联接（源里新文件自动可见）；不行再逐文件链接并记下源路径
         if (req.method === 'POST' && pathname === 'folderlink') {
             const body = JSON.parse((await readBody(req)).toString('utf8')) as { source?: string };
             if (typeof body.source !== 'string' || !path.isAbsolute(body.source)) {
                 return fail(res, 400, '需要 {source: 文件夹绝对路径}');
             }
             const srcDir = path.resolve(body.source);
-            if (!path.relative(root, srcDir).startsWith('..')) return fail(res, 400, '文件夹已在 vault 内');
+            if (!isOutsideVault(root, srcDir)) return fail(res, 400, '文件夹已在 vault 内');
             const stat = await fs.stat(srcDir).catch(() => null);
             if (!stat?.isDirectory()) return fail(res, 400, '文件夹不存在');
             const destDir = path.join(root, 'links', path.basename(srcDir));
             if (await fileExists(destDir)) return fail(res, 400, `links/${path.basename(srcDir)} 已存在`);
-            await fs.mkdir(destDir, { recursive: true });
-            const linked: string[] = [];
-            for (const name of await fs.readdir(srcDir)) {
-                if (!DOC_RE.test(name)) continue;
-                try {
-                    const rel = await linkOutside(root, path.join(srcDir, name));
-                    // linkOutside 放 links/ 根，挪进子目录
-                    await fs.rename(path.join(root, rel), path.join(destDir, name));
-                    linked.push(`links/${path.basename(srcDir)}/${name}`);
-                } catch {
-                    // 单文件失败跳过，不整体回滚
+            await fs.mkdir(path.join(root, 'links'), { recursive: true });
+            let linked: string[] = [];
+            try {
+                await linkDirOutside(root, srcDir);
+                watchOutside(srcDir, root);
+            } catch {
+                await fs.mkdir(destDir, { recursive: true });
+                await writeOrigin(destDir, srcDir);
+                watchOutside(srcDir, root);
+                await syncDirFiles(srcDir, destDir);
+            }
+            const prefix = `links/${path.basename(srcDir)}`;
+            async function collect(dir: string, rel: string): Promise<void> {
+                for (const name of await fs.readdir(dir).catch(() => [] as string[])) {
+                    if (name.startsWith('.')) continue;
+                    const abs = path.join(dir, name);
+                    const child = `${rel}/${name}`;
+                    const st = await fs.stat(abs).catch(() => null);
+                    if (st?.isDirectory()) await collect(abs, child);
+                    else if (st?.isFile() && DOC_RE.test(name)) linked.push(child);
                 }
             }
+            await collect(destDir, prefix);
             invalidate(root);
             send(res, 200, { dir: `links/${path.basename(srcDir)}`, count: linked.length, files: linked });
             return true;
