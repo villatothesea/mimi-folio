@@ -162,3 +162,31 @@
 .mu-editor li.mu-task-list-item > span.mu-task-list-checkbox::before {
     border-radius: var(--folio-radius);
 }
+
+/*
+ * 表格框选：透明浅灰铺在格子底，网格仍由 td::before 画。
+ * 去掉 Muya 的 ::before 实心填充和 --theme-color 黑边（会盖网格、淹字）。
+ */
+.mu-editor .mu-table-inner tr td.mu-table-cell-selected {
+    background: var(--folio-table-sel);
+}
+
+.mu-editor .mu-table-inner tr td.mu-table-cell-selected::before {
+    z-index: 0;
+    background: transparent;
+}
+
+.mu-editor .mu-table-inner tr td.mu-table-cell-border-top::before,
+.mu-editor .mu-table-inner tr td.mu-table-cell-border-right::before,
+.mu-editor .mu-table-inner tr td.mu-table-cell-border-bottom::before,
+.mu-editor .mu-table-inner tr td.mu-table-cell-border-left::before {
+    border-top-color: var(--folio-border);
+    border-right-color: var(--folio-border);
+    border-bottom-color: var(--folio-border);
+    border-left-color: var(--folio-border);
+}
+
+.mu-editor .mu-table-inner tr td.mu-table-cell-selected > .mu-table-cell-content {
+    position: relative;
+    z-index: 1;
+}
