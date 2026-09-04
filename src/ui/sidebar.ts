@@ -52,6 +52,21 @@ const collapsedDirs = new Set<string>();
 export function renderSidebar(nav: HTMLElement, files: FolioListItem[], opts: SidebarOptions): void {
     nav.replaceChildren();
     renderTree(nav, buildTree(files), 0, opts);
+    alignGuideLines(nav);
+}
+
+/** 竖线对准折叠三角中心（清单1 补充 2）：逐文件夹实测图标中心，写回容器 --line-o。 */
+function alignGuideLines(nav: HTMLElement): void {
+    requestAnimationFrame(() => {
+        for (const row of nav.querySelectorAll<HTMLElement>('.folder-row')) {
+            const svg = row.querySelector('.folder-toggle svg');
+            const children = row.nextElementSibling as HTMLElement | null;
+            if (!svg || !children?.classList.contains('tree-children')) continue;
+            const svgRect = svg.getBoundingClientRect();
+            const center = svgRect.left + svgRect.width / 2;
+            children.style.setProperty('--line-o', `${Math.round(center - children.getBoundingClientRect().left)}px`);
+        }
+    });
 }
 
 function renderTree(host: HTMLElement, node: DirNode, depth: number, opts: SidebarOptions): void {

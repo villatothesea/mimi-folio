@@ -1741,14 +1741,27 @@ html[data-num-b='paren'] .mu-editor li::before {
     height: auto;
 }
 
-/* 层级引导线（bug4 2.3）；缩进步长供行内负 margin 对齐（清单1 补充） */
+/* 层级引导线：对准折叠三角中心（清单1 补充 2）；线是伪元素，行半透明高亮不遮线 */
 :root {
     --tree-step: 18px;
+    /* 折叠钮中心 = 10(左距) + 11(钮半宽)，首层容器左缘 18 → 线在容器内 +3px */
+    --tree-line-offset: 3px;
 }
 
 .tree-children {
+    position: relative;
     margin-left: var(--tree-step);
-    border-left: 1px solid var(--folio-border);
+}
+
+.tree-children::before {
+    content: '';
+    position: absolute;
+    left: var(--line-o, var(--tree-line-offset));
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--folio-border);
+    pointer-events: none;
 }
 
 /* 标题栏三按钮紧凑小一号（bug4 2.7） */
@@ -1898,4 +1911,14 @@ html[data-num-b='paren'] .mu-editor li::before {
 .zone-bar #filterbar button,
 .zone-bar .link-seg {
     height: 100%;
+}
+
+
+/* 行高亮半透明：层级竖线透出来不被盖住（清单1 补充 2） */
+#files .row-main:hover {
+    background: color-mix(in srgb, var(--folio-fg) 5%, transparent);
+}
+
+#files .row-main[aria-current='true'] {
+    background: color-mix(in srgb, var(--folio-fg) 9%, transparent);
 }
