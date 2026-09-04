@@ -35,12 +35,21 @@
     --folio-space-3: 12px;
     --folio-space-4: 16px;
     --folio-radius: 0px;
+    /* 速记卡片圆角；出厂略圆以区分列表行。改脸只动这个值。 */
+    --folio-radius-card: 8px;
+    /* 文档标题栏：与正文字号同级、略加重——不做大号粗体。 */
+    --folio-title-size: var(--folio-font-size);
+    --folio-title-weight: 600;
     --folio-icon-size: 18px;
     --folio-icon-stroke: 1.5;
     --folio-measure: 800px;
     --folio-font-size-code: 14px;
     --folio-shadow: rgb(0 0 0 / 5%) 0 0 0 1px, rgb(0 0 0 / 6%) 0 3px 6px;
     --folio-control-h: 28px;
+
+    /* 网页链接色块：莫兰迪淡蓝，后面一起调这两个值即可 */
+    --folio-link-chip: #c5d4dc;
+    --folio-link-fg: #4a5e6b;
 
     /* 标签色板（索引由 tagColors 分配，色值只在这里改） */
     --folio-tag-0: #a54d62;

@@ -6,7 +6,7 @@ import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
-import { renderSidebar } from './ui/sidebar.ts';
+import { renderMemoTimeline, renderSidebar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
@@ -75,17 +75,55 @@ async function saveNow(markdown: string): Promise<void> {
 }
 
 /**
- * 文档属性面板（Obsidian 式）：文档顶部一行行 key-value；tags 行是芯片可增删，
- * 其余键只读展示（md 里的 frontmatter 原样保留）。编辑器里的 frontmatter 块收起。
+ * 文档头三段式：标题栏（非 md）→ frontmatter 属性 → 正文。
+ * 标题只写 frontmatter title，不碰正文 H1。
+ */
+function renderTitle(): void {
+    const editor = currentEditor();
+    titleEl.replaceChildren();
+    if (!openFile || !editor) {
+        titleEl.hidden = true;
+        return;
+    }
+    titleEl.hidden = false;
+
+    const { frontmatter } = splitFrontmatter(editor.getMarkdown());
+    const titleRow = document.createElement('div');
+    titleRow.className = 'doc-title-row';
+    const titleInput = document.createElement('input');
+    titleInput.className = 'doc-title-input';
+    titleInput.placeholder = '无标题';
+    const titleMatch = frontmatter.match(/^title\s*:\s*(.*)$/m);
+    titleInput.value = titleMatch?.[1]?.trim() ?? '';
+    titleInput.addEventListener('change', () => {
+        const ed = currentEditor();
+        if (!ed || !openFile) return;
+        ed.replaceContent(setScalar(ed.getMarkdown(), 'title', titleInput.value.trim() || null));
+        onEditorChange(ed.getMarkdown());
+        void refreshList();
+    });
+    titleRow.append(titleInput);
+    titleEl.append(titleRow);
+}
+
+function hideDocHead(): void {
+    titleEl.hidden = true;
+    propsEl.hidden = true;
+}
+
+/**
+ * 属性区（Ob 式文件头）：跟标题栏、正文同一列，不是独立灰面板。
+ * tags 行是芯片可增删，其余键只读展示；编辑器里的 frontmatter 块仍收起。
  */
 function renderProps(): void {
     const editor = currentEditor();
     propsEl.replaceChildren();
     if (!openFile || !editor) {
-        propsEl.hidden = true;
+        hideDocHead();
         return;
     }
     propsEl.hidden = false;
+    propsEl.classList.toggle('collapsed', propsCollapsed);
 
     const commit = (next: string[]) => {
         const ed = currentEditor();
@@ -94,7 +132,8 @@ function renderProps(): void {
         onEditorChange(ed.getMarkdown());
     };
 
-    // 折叠头：箭头呼吸提示（验收清单 12.1）
+    const { frontmatter } = splitFrontmatter(editor.getMarkdown());
+
     const head = document.createElement('div');
     head.className = 'props-head';
     const chevron = document.createElement('button');
@@ -106,36 +145,12 @@ function renderProps(): void {
     chevron.addEventListener('click', () => {
         propsCollapsed = !propsCollapsed;
         localStorage.setItem('folio-props-fold', String(propsCollapsed));
+        renderTitle();
         renderProps();
     });
     head.append(chevron);
     propsEl.append(head);
-    if (propsCollapsed) {
-        propsEl.classList.add('collapsed');
-        return;
-    }
-    propsEl.classList.remove('collapsed');
-
-    // 标题行（验收清单 12.3）：不是 H1，是 frontmatter title
-    const { frontmatter } = splitFrontmatter(editor.getMarkdown());
-    const titleRow = document.createElement('div');
-    titleRow.className = 'prop-row doc-title-row';
-    const titleKey = document.createElement('span');
-    titleKey.className = 'prop-key';
-    titleKey.textContent = '标题';
-    const titleInput = document.createElement('input');
-    titleInput.className = 'doc-title-input';
-    const titleMatch = frontmatter.match(/^title\s*:\s*(.*)$/m);
-    titleInput.value = titleMatch?.[1]?.trim() ?? allFiles.find((f) => f.path === openFile)?.title ?? '';
-    titleInput.addEventListener('change', () => {
-        const ed = currentEditor();
-        if (!ed || !openFile) return;
-        ed.replaceContent(setScalar(ed.getMarkdown(), 'title', titleInput.value.trim() || null));
-        onEditorChange(ed.getMarkdown());
-        void refreshList();
-    });
-    titleRow.append(titleKey, titleInput);
-    propsEl.append(titleRow);
+    if (propsCollapsed) return;
 
     const row = (key: string, value: Node): void => {
         const line = document.createElement('div');
@@ -251,6 +266,7 @@ function openTagPopover(tag: string, chip: HTMLElement, event: MouseEvent): void
     ok.addEventListener('click', () => {
         setTagColorHex(tag, color.value);
         closeTagPopover();
+        renderTitle();
         renderProps();
         void refreshList();
     });
@@ -262,6 +278,7 @@ function openTagPopover(tag: string, chip: HTMLElement, event: MouseEvent): void
     reset.addEventListener('click', () => {
         setTagColorHex(tag, null);
         closeTagPopover();
+        renderTitle();
         renderProps();
         void refreshList();
     });
@@ -407,6 +424,7 @@ async function open(path: string): Promise<void> {
         syncFavoriteBtn();
         saySave('');
         mountEditor(wrap, doc.markdown, host, onEditorChange);
+        renderTitle();
         renderProps();
         renderStatusbar(doc.markdown);
         renderToc(tocEl, currentEditor());
@@ -473,6 +491,7 @@ favoriteBtn.addEventListener('click', () => {
 });
 
 const propsEl = document.querySelector<HTMLElement>('#props')!;
+const titleEl = document.querySelector<HTMLElement>('#doc-title')!;
 const statCount = document.querySelector<HTMLElement>('#stat-count')!;
 const statWords = document.querySelector<HTMLElement>('#stat-words')!;
 const findbarEl = document.querySelector<HTMLElement>('#findbar')!;
@@ -493,13 +512,19 @@ async function refreshList(): Promise<void> {
         }
         renderPills();
         renderStatusbar();
-        {
-            renderSidebar(nav, shown, {
+        if (activeFilters.has('memos') && activeFilters.size === 1) {
+            renderMemoTimeline(nav, shown, {
                 activePath: openFile,
+                onOpen: (p) => void open(p),
+            });
+        } else {
+            renderSidebar(nav, shown, {
+                activePath: selectedDir ? null : openFile,
                 onOpen: (p) => void open(p),
                 selectedDir,
                 onDirSelect: (dir) => {
                     selectedDir = dir;
+                    nav.querySelectorAll('.row-main[data-path][aria-current]').forEach((b) => b.removeAttribute('aria-current'));
                     void refreshList();
                 },
                 onFolderContext: (dir, x, y) => folderContextMenu(dir, x, y),
@@ -517,6 +542,7 @@ async function refreshList(): Promise<void> {
                 })(),
             });
         }
+        renderTitle();
         renderProps();
         syncFavoriteBtn();
     } catch (err) {
@@ -885,7 +911,7 @@ nav.addEventListener('contextmenu', (event) => {
                 openFile = null;
                 destroyEditor();
                 breadcrumbEl.textContent = '未打开';
-                propsEl.hidden = true;
+                hideDocHead();
                 renderCenterBar();
             }
             if (host.deleteDoc) await host.deleteDoc(path).catch((err: Error) => saySave(`删除失败：${err.message}`));
@@ -955,7 +981,7 @@ function folderContextMenu(dir: string, x: number, y: number): void {
                 openFile = null;
                 destroyEditor();
                 breadcrumbEl.textContent = '未打开';
-                propsEl.hidden = true;
+                hideDocHead();
                 renderCenterBar();
             }
             if (host.deleteDoc) await host.deleteDoc(dir).catch(() => undefined);
@@ -990,6 +1016,7 @@ async function renameInline(button: HTMLButtonElement, path: string): Promise<vo
                 lastSaved = next;
                 const fresh = await host.read(path).catch(() => null);
                 docMtime = fresh?.mtimeMs ?? docMtime;
+                renderTitle();
                 renderProps();
             }
             void refreshList();
@@ -1044,6 +1071,7 @@ setInterval(() => void (async () => {
     docMtime = doc.mtimeMs;
     currentEditor()!.replaceContent(doc.markdown);
     wrap.scrollTop = top;
+    renderTitle();
     renderProps();
     renderToc(tocEl, currentEditor());
     saySave('外部已修改，已同步');

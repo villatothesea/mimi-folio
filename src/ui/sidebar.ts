@@ -4,6 +4,7 @@
  */
 import type { FolioListItem } from '../host/types.ts';
 import { icon } from './icons';
+import { applyTagColor } from './tagColors';
 
 export type SidebarOptions = {
     activePath: string | null;
@@ -83,12 +84,15 @@ function renderTree(host: HTMLElement, node: DirNode, depth: number, opts: Sideb
     host.append(renderGroup(node.files, opts, depth));
 }
 
+/** 缩进只垫内容，行本身满宽，高亮才能贴侧栏左右。 */
+function indentRow(row: HTMLElement, depth: number): void {
+    row.style.paddingLeft = `calc(var(--folio-space-1) + var(--tree-step) * ${depth})`;
+}
+
 function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTMLElement {
     const row = document.createElement('div');
     row.className = 'tree-row folder-row';
-    // 高亮贯穿左右：负 margin 抵消父级缩进；行内 padding 还原层级（清单1 补充）
-    row.style.marginLeft = `calc(-1 * var(--tree-step) * ${depth})`;
-    row.style.paddingLeft = `calc(6px + var(--tree-step) * ${depth})`;
+    indentRow(row, depth);
 
     const toggle = document.createElement('button');
     toggle.type = 'button';
@@ -138,8 +142,7 @@ function renderGroup(files: FolioListItem[], opts: SidebarOptions, _depth: numbe
     for (const file of files) {
         const row = document.createElement('div');
         row.className = 'tree-row';
-        row.style.marginLeft = `calc(-1 * var(--tree-step) * ${_depth})`;
-        row.style.paddingLeft = `calc(6px + var(--tree-step) * ${_depth})`;
+        indentRow(row, _depth);
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'row-main';
@@ -168,7 +171,7 @@ function renderGroup(files: FolioListItem[], opts: SidebarOptions, _depth: numbe
         }
         button.title = file.path;
         button.dataset.path = file.path;
-        if (file.path === opts.activePath) button.setAttribute('aria-current', 'true');
+        if (!opts.selectedDir && file.path === opts.activePath) button.setAttribute('aria-current', 'true');
         button.addEventListener('click', () => opts.onOpen(file.path, button));
         button.addEventListener('dragstart', (e) => {
             e.dataTransfer?.setData('text/folio-path', file.path);
@@ -218,8 +221,8 @@ export function renderTagBar(
 }
 
 /**
- * 速记时间线（单元 8）：memos/ 按文件名倒序（约定文件名带日期前缀），
- * 标题旁挂标签。是同一座 vault 的一种看法，不是嵌 memos。
+ * 速记时间线：日期分组头 + 卡片。卡片 = 标题 + 彩色标签（# 名）。
+ * 仍是同一座 vault 的看法，不是嵌 memos。
  */
 export function renderMemoTimeline(
     nav: HTMLElement,
@@ -228,9 +231,20 @@ export function renderMemoTimeline(
 ): void {
     nav.replaceChildren();
     const sorted = [...files].sort((a, b) => b.path.localeCompare(a.path, 'zh'));
+
+    let lastDay = '';
     for (const file of sorted) {
-        const row = document.createElement('div');
-        row.className = 'memo-row';
+        const day = /^\d{4}-\d{2}-\d{2}/.exec(file.path.split('/').pop() ?? '')?.[0] ?? '';
+        if (day && day !== lastDay) {
+            lastDay = day;
+            const head = document.createElement('div');
+            head.className = 'memo-day';
+            head.textContent = day;
+            nav.append(head);
+        }
+
+        const card = document.createElement('div');
+        card.className = 'memo-card';
 
         const button = document.createElement('button');
         button.type = 'button';
@@ -240,14 +254,20 @@ export function renderMemoTimeline(
         button.dataset.path = file.path;
         if (file.path === opts.activePath) button.setAttribute('aria-current', 'true');
         button.addEventListener('click', () => opts.onOpen(file.path, button));
-        row.append(button);
+        card.append(button);
 
-        const tags = document.createElement('span');
+        const tags = document.createElement('div');
         tags.className = 'memo-tags';
-        tags.textContent = file.tags?.length ? file.tags.join(' · ') : '';
-        row.append(tags);
+        for (const tag of file.tags ?? []) {
+            const chip = document.createElement('span');
+            chip.className = 'tag-chip';
+            chip.textContent = `# ${tag}`;
+            applyTagColor(chip, tag);
+            tags.append(chip);
+        }
+        card.append(tags);
 
-        nav.append(row);
+        nav.append(card);
     }
     if (sorted.length === 0) {
         const empty = document.createElement('div');

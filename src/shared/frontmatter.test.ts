@@ -76,3 +76,8 @@ test('setScalar：null 移除键', () => {
 test('setScalar：没有 frontmatter 时新建', () => {
     assert.equal(setScalar('# 标\n', 'favorite', true), '---\nfavorite: true\n---\n# 标\n');
 });
+
+test('setScalar：写 title 不改正文 H1', () => {
+    const doc = '---\ntags: [a]\n---\n# 正文标题\n';
+    assert.equal(setScalar(doc, 'title', '新名'), '---\ntags: [a]\ntitle: 新名\n---\n# 正文标题\n');
+});
