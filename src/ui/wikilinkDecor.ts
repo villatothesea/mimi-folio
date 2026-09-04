@@ -1,13 +1,14 @@
 /**
  * [[wikilink]] 可视化 + 自动补全（bug4 4.1/4.3）。
  * - 装饰：正文里的 [[目标]] 文本包成芯片（图标+着色），MutationObserver 幂等补挂
- * - 补全：输入 [[ 后弹文档菜单，键入即筛，↑↓ 选择，回车补全为 [[选中标题]]
+ * - 补全：菜单显示 H1，写入 `[[文件名]]` 或 `[[文件名|H1]]`（解析走文件名）
  */
 import type { Muya } from '@muyajs/core';
 import type { FolioListItem } from '../host/types';
+import { fileName, fileStem } from '../shared/docTitle.ts';
 import { icon } from './icons';
 
-const WIKI_RE = /\[\[([^\][|]+)(?:\|[^\]]+)?\]\]/g;
+const WIKI_RE = /\[\[([^\][|]+)(?:\|([^\]]+))?\]\]/g;
 
 /** 把段落里裸露的 [[..]] 文本包成芯片（不动 muya 的 vdom，只做展示层包裹）。 */
 function decorate(wrap: HTMLElement): void {
@@ -31,7 +32,12 @@ function decorate(wrap: HTMLElement): void {
         const chip = document.createElement('span');
         chip.className = 'folio-wikilink';
         chip.setAttribute('data-raw', match[0]);
-        chip.innerHTML = `${icon('arrows-double-sw-ne')}<span class="folio-wikilink-text">${match[1]}</span>`;
+        const label = (match[2] ?? match[1]).trim();
+        chip.innerHTML = icon('arrows-double-sw-ne');
+        const lab = document.createElement('span');
+        lab.className = 'folio-wikilink-text';
+        lab.textContent = label;
+        chip.append(lab);
         frag.append(chip);
         if (at + match[0].length < text.length) frag.append(text.slice(at + match[0].length));
         node.replaceWith(frag);
@@ -105,7 +111,7 @@ export function attachWikiAutocomplete(wrap: HTMLElement, opts: AutocompleteOpti
             label.textContent = file.title;
             const dir = document.createElement('span');
             dir.className = 'wiki-ac-dir';
-            dir.textContent = file.path.split('/').slice(0, -1).join('/');
+            dir.textContent = fileName(file.path);
             row.append(label, dir);
             row.addEventListener('mousedown', (e) => {
                 e.preventDefault();
@@ -124,8 +130,10 @@ export function attachWikiAutocomplete(wrap: HTMLElement, opts: AutocompleteOpti
         close();
         if (!editor) return;
         const typed = `[[${state.query}`;
+        const stem = fileStem(file.path);
+        const inner = file.title && file.title !== stem ? `${stem}|${file.title}` : stem;
         try {
-            editor.replaceCurrentWordInlineUnsafe(typed, `[[${file.title}]]`);
+            editor.replaceCurrentWordInlineUnsafe(typed, `[[${inner}]]`);
         } catch {
             // 边缘情况静默：手输 ]] 也能达成
         }

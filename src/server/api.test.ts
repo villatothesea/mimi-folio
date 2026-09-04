@@ -24,6 +24,11 @@ await fs.writeFile(
     'utf8',
 );
 await fs.writeFile(path.join(vault, 'notes', 'orphan.md'), '链向 [[m1]]\n', 'utf8');
+await fs.writeFile(
+    path.join(vault, 'notes', 'named.md'),
+    '---\ntitle: YAML标题\n---\n# 正文H1\n',
+    'utf8',
+);
 
 // 单元 10：vault 外的真源文件
 const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-outside-'));
@@ -44,7 +49,7 @@ describe('GET /folio/v1/*', () => {
     it('list 返回全部 md、标题、tags 与 kind', async () => {
         const res = await fetch(`${base}/folio/v1/list`);
         const files = (await res.json()) as { path: string; title: string; tags: string[]; kind: string }[];
-        assert.equal(files.length, 4);
+        assert.equal(files.length, 5);
         const tagged = files.find((f) => f.path === 'notes/tagged.md')!;
         assert.deepEqual(tagged.tags, ['项目', '长文']);
         assert.equal(tagged.kind, 'note');
@@ -71,10 +76,12 @@ describe('GET /folio/v1/*', () => {
         assert.deepEqual(files.map((f) => f.path), ['memos/m1.md']);
     });
 
-    it('标题取自 frontmatter 之后的正文', async () => {
+    it('标题取自正文第一个标题，不用 YAML title、不用文件名', async () => {
         const res = await fetch(`${base}/folio/v1/list`);
         const files = (await res.json()) as { path: string; title: string }[];
         assert.equal(files.find((f) => f.path === 'memos/m1.md')!.title, '一条速记');
+        assert.equal(files.find((f) => f.path === 'notes/named.md')!.title, '正文H1');
+        assert.equal(files.find((f) => f.path === 'notes/orphan.md')!.title, 'orphan.md');
     });
 
     it('read 出来的是 LF（muya 只认 LF）', async () => {

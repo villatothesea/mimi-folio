@@ -24,8 +24,10 @@
     --folio-info: #a0a0a0;
     --folio-shadow: rgb(0 0 0 / 40%) 0 0 0 1px, rgb(0 0 0 / 45%) 0 3px 6px;
 
-    --folio-link-chip: #3a4c58;
-    --folio-link-fg: #b7c8d1;
+    --folio-link-chip: #2a4f58;
+    --folio-link-fg: #b3dbe4;
+    --folio-graph-chip: #4a4330;
+    --folio-graph-fg: #e2d4a8;
 
     /* 标签色板（暗底加亮） */
     --folio-tag-0: #d98da1;

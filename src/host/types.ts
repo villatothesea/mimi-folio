@@ -17,6 +17,7 @@ export type FolioDoc = {
 
 export type FolioListItem = {
     path: FolioPath;
+    /** 人看的标题 = 正文首个标题；没有标题才露出操作系统文件名（含 .md）。 */
     title: string;
     /** frontmatter tags:（单元 6），无 frontmatter 时为空 */
     tags?: string[];

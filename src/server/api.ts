@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 
 import type { FolioListItem, FolioListOpts } from '../host/types.ts';
+import { displayTitle } from '../shared/docTitle.ts';
 import { splitFrontmatter } from '../shared/frontmatter.ts';
 import { buildIndex, linksFor, type WikilinkIndex } from '../shared/wikilink.ts';
 
@@ -64,13 +65,7 @@ function fail(res: ServerResponse, status: number, message: string): boolean {
 }
 
 function titleOf(rel: string, markdown: string): string {
-    const { frontmatter, body } = splitFrontmatter(markdown);
-    // bug5：frontmatter title 优先——左栏/搜索与属性面板标题行同源
-    const fmTitle = frontmatter.match(/^title\s*:\s*(.*)$/m)?.[1]?.trim();
-    if (fmTitle) return fmTitle;
-    const heading = body.split('\n').find((line) => /^#{1,6}\s+\S/.test(line));
-    if (heading) return heading.replace(/^#{1,6}\s+/, '').trim();
-    return rel.replace(/\.md$/i, '');
+    return displayTitle(rel, markdown);
 }
 
 function kindOf(rel: string): 'note' | 'memo' | undefined {

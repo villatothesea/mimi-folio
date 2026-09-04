@@ -59,12 +59,16 @@
               <button id="find-close" type="button" title="关闭（Esc）">×</button>
             </span>
           </section>
-          <section id="doc-title" aria-label="文档标题" hidden></section>
-          <section id="props" aria-label="文档属性" hidden></section>
-          <div id="editor-wrap"></div>
+          <div id="doc-scroll">
+            <header id="doc-head" hidden>
+              <section id="doc-title" aria-label="文档标题"></section>
+              <section id="props" aria-label="文档属性"></section>
+            </header>
+            <div id="editor-wrap"></div>
+          </div>
           <footer class="zone-bar" id="bar-center">
             <nav id="breadcrumb" aria-label="路径">未打开</nav>
-            <button id="doc-meta" type="button" class="zone-text link-like" data-tip="文档属性"></button>
+            <div id="doc-meta" class="zone-text"></div>
             <span id="stat-words" class="zone-text"></span>
           </footer>
         </main>

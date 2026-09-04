@@ -43,13 +43,24 @@
     --folio-icon-size: 18px;
     --folio-icon-stroke: 1.5;
     --folio-measure: 800px;
+    /* 与 muya .mu-container 左右内边距对齐，文档头才能跟正文一列 */
+    --folio-doc-pad: 50px;
     --folio-font-size-code: 14px;
     --folio-shadow: rgb(0 0 0 / 5%) 0 0 0 1px, rgb(0 0 0 / 6%) 0 3px 6px;
     --folio-control-h: 28px;
+    /* 清单选中右侧竖条，及数字/星星与竖条的间距 */
+    --folio-sel-bar: 5px;
+    --folio-sel-gap: 3px;
 
-    /* 网页链接色块：莫兰迪淡蓝，后面一起调这两个值即可 */
-    --folio-link-chip: #c5d4dc;
-    --folio-link-fg: #4a5e6b;
+    /* 色块贴文字：四边内边距；链接字号比正文小一号 */
+    --folio-chip-pad: 2px;
+    --folio-link-size: var(--folio-font-size-sm);
+    /* 网页链接色块：清凉浅蓝（莫兰迪，偏青不发灰） */
+    --folio-link-chip: #bde8f2;
+    --folio-link-fg: #3a6d78;
+    /* 出链/反链色块：同款几何，莫兰迪淡黄 */
+    --folio-graph-chip: #eee6c4;
+    --folio-graph-fg: #6a5e36;
 
     /* 标签色板（索引由 tagColors 分配，色值只在这里改） */
     --folio-tag-0: #a54d62;

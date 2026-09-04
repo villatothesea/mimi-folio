@@ -59,9 +59,10 @@ body {
 /* 三区底栏（zone bar）：同高细条，贴到窗口底 */
 .zone-bar {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: var(--folio-space-2);
     height: var(--folio-control-h);
+    box-sizing: border-box;
     flex: none;
     padding: 0 var(--folio-space-2);
     border-top: 1px solid var(--folio-border);
@@ -69,6 +70,9 @@ body {
 }
 
 .zone-text {
+    display: inline-flex;
+    align-items: center;
+    align-self: stretch;
     color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-xs);
     white-space: nowrap;
@@ -267,6 +271,8 @@ body {
 /* ===== 筛选 pills（bug4 2.4）：底栏靠右、无边框、方形满高高亮、toggle ===== */
 #filterbar {
     display: flex;
+    align-items: stretch;
+    align-self: stretch;
     margin-left: auto;
 }
 
@@ -517,31 +523,42 @@ body {
     color: var(--folio-border-strong);
 }
 
+.crumb-file {
+    font-family: var(--folio-font-mono);
+}
+
 #favorite-toggle[aria-pressed='true'] {
     color: var(--folio-fg);
 }
 
-/* ===== 文档头：标题栏 + 属性（Ob 式，与正文同列同底） ===== */
+/* ===== 文档列：标题 + 属性 + 正文同一滚动、同一列宽（Ob 式文件头） ===== */
+#doc-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    background: var(--folio-bg);
+}
+
+#doc-head {
+    box-sizing: border-box;
+    max-width: var(--folio-measure);
+    margin: 0 auto;
+    padding: var(--folio-space-3) var(--folio-doc-pad) var(--folio-space-2);
+    border-bottom: 1px solid var(--folio-border);
+    background: var(--folio-bg);
+}
+
 #doc-title,
 #props {
-    background: var(--folio-bg);
-    padding: 0 var(--folio-space-1);
+    background: transparent;
+    padding: 0;
+    border: 0;
 }
 
-#doc-title > *,
-#props > * {
-    max-width: var(--folio-measure);
-    margin-left: auto;
-    margin-right: auto;
-}
-
-#props {
-    border-bottom: 1px solid var(--folio-border);
-}
-
-html[data-width='wide'] #doc-title > *,
-html[data-width='wide'] #props > * {
+html[data-width='wide'] #doc-head {
     max-width: calc(100% - 20px);
+    padding-left: 10px;
+    padding-right: 10px;
 }
 
 .prop-row {
@@ -676,8 +693,6 @@ html[data-width='wide'] #props > * {
 
 /* ===== 编辑器区 ===== */
 #editor-wrap {
-    flex: 1;
-    overflow-y: auto;
     min-height: 0;
 }
 
@@ -1499,10 +1514,10 @@ html[data-width='wide'] .mu-editor .mu-container {
     align-items: center;
 }
 
-/* 折叠/展开共用同一头部位置（bug5）；折叠不另起灰条 */
+/* 折叠/展开共用同一头部位置（bug5）；折叠不另起通栏灰条 */
 #props.collapsed {
-    background: var(--folio-bg);
-    border-bottom: 1px solid var(--folio-border);
+    background: transparent;
+    border-bottom: 0;
 }
 #props.collapsed .props-head {
     height: calc(var(--folio-control-h) - 4px);
@@ -1584,22 +1599,34 @@ html[data-width='wide'] .mu-editor .mu-container {
     font-size: var(--folio-font-size-sm);
 }
 
-/* 出链/反链分段按钮（bug2.5） */
-.link-seg {
+/* 出链/反链底栏按钮：淡黄高亮，上下贴满底栏 */
+#doc-meta {
+    gap: var(--folio-chip-pad);
+    flex: none;
     align-self: stretch;
+}
+
+#doc-meta > span {
     display: inline-flex;
     align-items: center;
-    padding: 0 var(--folio-space-1);
+}
+
+.link-seg {
+    display: inline-flex;
+    align-items: center;
+    align-self: stretch;
+    box-sizing: border-box;
+    padding: 0 var(--folio-chip-pad);
+    line-height: 1;
+    font-size: var(--folio-link-size);
+    background: var(--folio-graph-chip);
+    color: var(--folio-graph-fg);
+    border-radius: 0;
 }
 
 .link-seg:hover {
-    background: var(--folio-hover);
-}
-
-/* bug2.5 补：link-like 的 font 简写会盖掉 zone-text 字号，这里再钉一次 */
-#doc-meta,
-.link-seg {
-    font-size: var(--folio-font-size-xs);
+    color: var(--folio-graph-fg);
+    background: color-mix(in srgb, var(--folio-fg) 8%, var(--folio-graph-chip));
 }
 
 
@@ -1738,7 +1765,7 @@ html[data-num-b='paren'] .mu-editor li::before {
     font: inherit;
     font-size: var(--folio-font-size-sm);
     text-align: left;
-    padding: var(--folio-space-2) 4px var(--folio-space-2) 0;
+    padding: var(--folio-space-2) calc(var(--folio-sel-bar) + var(--folio-sel-gap)) var(--folio-space-2) 0;
     cursor: pointer;
 }
 
@@ -1806,22 +1833,27 @@ html[data-num-b='paren'] .mu-editor li::before {
     height: calc(var(--folio-icon-size) - 3px);
 }
 
-/* wikilink 芯片与自动补全（bug4 4.1/4.3） */
+/* 正文双链：淡黄涂色，与网页链接同几何、字号小一号 */
 .folio-wikilink {
     display: inline-flex;
     align-items: center;
-    gap: 0.2em;
-    background: var(--folio-bg-alt);
-    border-bottom: 1px solid var(--folio-border-strong);
-    border-radius: 2px;
-    padding: 0 2px;
+    gap: var(--folio-chip-pad);
+    box-sizing: border-box;
+    background: var(--folio-graph-chip);
+    color: var(--folio-graph-fg);
+    border-bottom: 0;
+    border-radius: var(--folio-radius);
+    padding: var(--folio-chip-pad);
+    font-size: var(--folio-link-size);
+    line-height: 1;
+    vertical-align: middle;
     cursor: pointer;
 }
 
 .folio-wikilink .folio-icon {
     width: 1em;
     height: 1em;
-    color: var(--folio-fg-muted);
+    color: currentColor;
 }
 
 .folio-wikilink-text {
@@ -1933,11 +1965,16 @@ html[data-num-b='paren'] .mu-editor li::before {
     margin-bottom: var(--folio-space-1);
 }
 
-/* bug5：底栏所有按钮高亮高度 = 底栏高 */
+/* 底栏按钮高亮上下贴边，不与横线留缝 */
 .zone-bar .icon-btn,
 .zone-bar #filterbar button,
 .zone-bar .link-seg {
-    height: 100%;
+    height: auto;
+    align-self: stretch;
+    box-sizing: border-box;
+    border-top: 0;
+    border-bottom: 0;
+    border-radius: 0;
 }
 
 
@@ -1957,7 +1994,7 @@ html[data-num-b='paren'] .mu-editor li::before {
     bottom: 0;
     left: auto;
     right: 0;
-    width: 5px;
+    width: var(--folio-sel-bar);
     background: var(--folio-fg);
     pointer-events: none;
 }

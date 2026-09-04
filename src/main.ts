@@ -10,6 +10,7 @@ import { renderMemoTimeline, renderSidebar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
+import { firstHeading, setFirstHeading } from './shared/docTitle.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
@@ -34,6 +35,7 @@ const filterbar = document.querySelector<HTMLElement>('#filterbar')!;
 const sidebarEl = document.querySelector<HTMLElement>('#sidebar')!;
 const tocEl = document.querySelector<HTMLElement>('#toc-list')!;
 const wrap = document.querySelector<HTMLElement>('#editor-wrap')!;
+const docScroll = document.querySelector<HTMLElement>('#doc-scroll')!;
 const saveStateEl = document.querySelector<HTMLElement>('#save-state')!;
 
 let openFile: string | null = null;
@@ -76,29 +78,31 @@ async function saveNow(markdown: string): Promise<void> {
 
 /**
  * 文档头三段式：标题栏（非 md）→ frontmatter 属性 → 正文。
- * 标题只写 frontmatter title，不碰正文 H1。
+ * 标题栏 = 正文第一个标题；改它只改 H1，不写 title:、不改操作系统里的文件名。
  */
 function renderTitle(): void {
     const editor = currentEditor();
     titleEl.replaceChildren();
     if (!openFile || !editor) {
-        titleEl.hidden = true;
+        hideDocHead();
         return;
     }
     titleEl.hidden = false;
+    docHead.hidden = false;
 
-    const { frontmatter } = splitFrontmatter(editor.getMarkdown());
     const titleRow = document.createElement('div');
     titleRow.className = 'doc-title-row';
     const titleInput = document.createElement('input');
     titleInput.className = 'doc-title-input';
     titleInput.placeholder = '无标题';
-    const titleMatch = frontmatter.match(/^title\s*:\s*(.*)$/m);
-    titleInput.value = titleMatch?.[1]?.trim() ?? '';
+    titleInput.setAttribute('aria-label', '文档标题');
+    titleInput.value = firstHeading(editor.getMarkdown()) ?? '';
     titleInput.addEventListener('change', () => {
         const ed = currentEditor();
         if (!ed || !openFile) return;
-        ed.replaceContent(setScalar(ed.getMarkdown(), 'title', titleInput.value.trim() || null));
+        const next = titleInput.value.trim();
+        if (!next) return;
+        ed.replaceContent(setFirstHeading(ed.getMarkdown(), next));
         onEditorChange(ed.getMarkdown());
         void refreshList();
     });
@@ -106,7 +110,15 @@ function renderTitle(): void {
     titleEl.append(titleRow);
 }
 
+function syncTitleFromBody(markdown: string): void {
+    const input = titleEl.querySelector<HTMLInputElement>('.doc-title-input');
+    if (!input || document.activeElement === input) return;
+    const next = firstHeading(markdown) ?? '';
+    if (input.value !== next) input.value = next;
+}
+
 function hideDocHead(): void {
+    docHead.hidden = true;
     titleEl.hidden = true;
     propsEl.hidden = true;
 }
@@ -123,6 +135,7 @@ function renderProps(): void {
         return;
     }
     propsEl.hidden = false;
+    docHead.hidden = false;
     propsEl.classList.toggle('collapsed', propsCollapsed);
 
     const commit = (next: string[]) => {
@@ -353,14 +366,19 @@ function openLinksPop(anchor: HTMLElement, kind: 'outgoing' | 'backlinks'): void
 function renderCenterBar(): void {
     const meta = document.querySelector<HTMLElement>('#doc-meta');
     if (!meta) return;
-    meta.textContent = '';
+    meta.replaceChildren();
     if (!openFile) return;
     const fmt = (ms?: number) => (ms ? new Date(ms).toLocaleString('sv').slice(0, 16).replace('T', ' ') : '—');
-    meta.append(document.createTextNode(`创建 ${fmt(docCtime)} · 修改 ${fmt(docMtime)} · `));
+    const text = (s: string): HTMLSpanElement => {
+        const el = document.createElement('span');
+        el.textContent = s;
+        return el;
+    };
+    meta.append(text(`创建 ${fmt(docCtime)} · 修改 ${fmt(docMtime)} · `));
     const seg = (label: string, kind: 'outgoing' | 'backlinks'): void => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'zone-text link-like link-seg';
+        b.className = 'link-like link-seg';
         b.textContent = `${label} ${kind === 'outgoing' ? lastLinks.outgoing.length : lastLinks.backlinks.length}`;
         b.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -370,7 +388,7 @@ function renderCenterBar(): void {
         meta.append(b);
     };
     seg('出链', 'outgoing');
-    meta.append(document.createTextNode(' · '));
+    meta.append(text(' · '));
     seg('反链', 'backlinks');
 }
 
@@ -383,6 +401,7 @@ async function createAndOpen(path: string): Promise<void> {
 }
 
 function onEditorChange(markdown: string): void {
+    syncTitleFromBody(markdown);
     renderStatusbar(markdown);
     if (markdown === lastSaved) return;
     saySave('改动中…');
@@ -466,7 +485,9 @@ function renderBreadcrumb(): void {
             breadcrumbEl.append(crumb, sep);
         } else {
             const crumb = document.createElement('span');
+            crumb.className = 'crumb-file';
             crumb.textContent = seg;
+            crumb.title = '文件名';
             breadcrumbEl.append(crumb);
         }
     });
@@ -492,6 +513,7 @@ favoriteBtn.addEventListener('click', () => {
 
 const propsEl = document.querySelector<HTMLElement>('#props')!;
 const titleEl = document.querySelector<HTMLElement>('#doc-title')!;
+const docHead = document.querySelector<HTMLElement>('#doc-head')!;
 const statCount = document.querySelector<HTMLElement>('#stat-count')!;
 const statWords = document.querySelector<HTMLElement>('#stat-words')!;
 const findbarEl = document.querySelector<HTMLElement>('#findbar')!;
@@ -871,7 +893,7 @@ nav.addEventListener('contextmenu', (event) => {
     };
 
     showContextMenu(event.clientX, event.clientY, [
-        { ic: 'pencil', label: '重命名（改标题）', run: () => void renameInline(button, path) },
+        { ic: 'pencil', label: '改标题', run: () => void renameInline(button, path) },
         { ic: 'arrow-move-up', label: '移动到…', run: () => void (async () => {
             const to = await targetOf('移动');
             if (to && host.moveDoc) await withDoc('move', () => host.moveDoc!(path, to), true);
@@ -991,7 +1013,7 @@ function folderContextMenu(dir: string, x: number, y: number): void {
     ]);
 }
 
-/** 原地重命名（验收清单 5/14.1）：清单行内直接高亮编辑，写 frontmatter title。 */
+/** 改显示标题（验收清单 5/14.1）：只改正文第一个标题。不改操作系统文件名。 */
 async function renameInline(button: HTMLButtonElement, path: string): Promise<void> {
     const nameSpan = button.querySelector<HTMLElement>('.file-name');
     if (!nameSpan) return;
@@ -1007,9 +1029,8 @@ async function renameInline(button: HTMLButtonElement, path: string): Promise<vo
         if (!commit || !value) return;
         try {
             const doc = await host.read(path);
-            const next = setScalar(doc.markdown, 'title', value);
+            const next = setFirstHeading(doc.markdown, value);
             await host.write(path, next, doc.mtimeMs);
-            // bug5 修复：先让编辑器与磁盘一致，open() 的"切篇前存盘"才不会把旧标题写回去
             const ed = currentEditor();
             if (openFile === path && ed) {
                 ed.replaceContent(next);
@@ -1066,11 +1087,11 @@ setInterval(() => void (async () => {
     if (currentEditor()!.getMarkdown() !== lastSaved) return; // 有未存改动不覆盖
     const doc = await host.read(openFile).catch(() => null);
     if (!doc || doc.mtimeMs === docMtime) return;
-    const top = wrap.scrollTop;
+    const top = docScroll.scrollTop;
     lastSaved = doc.markdown;
     docMtime = doc.mtimeMs;
     currentEditor()!.replaceContent(doc.markdown);
-    wrap.scrollTop = top;
+    docScroll.scrollTop = top;
     renderTitle();
     renderProps();
     renderToc(tocEl, currentEditor());
@@ -1079,11 +1100,11 @@ setInterval(() => void (async () => {
 
 // 书签：滚动位置记忆（bug4 1）
 const posKey = 'folio-pos';
-wrap.addEventListener('scroll', () => {
+docScroll.addEventListener('scroll', () => {
     if (!openFile) return;
     try {
         const map = JSON.parse(localStorage.getItem(posKey) ?? '{}') as Record<string, number>;
-        map[openFile] = Math.round(wrap.scrollTop);
+        map[openFile] = Math.round(docScroll.scrollTop);
         localStorage.setItem(posKey, JSON.stringify(map));
     } catch {
         // 忽略配额
@@ -1093,7 +1114,7 @@ wrap.addEventListener('scroll', () => {
 function restoreScroll(path: string): void {
     try {
         const map = JSON.parse(localStorage.getItem(posKey) ?? '{}') as Record<string, number>;
-        if (typeof map[path] === 'number') wrap.scrollTop = map[path];
+        if (typeof map[path] === 'number') docScroll.scrollTop = map[path];
     } catch {
         // 忽略
     }
@@ -1105,7 +1126,7 @@ attachWikiAutocomplete(wrap, { getFiles: () => allFiles, getEditor: currentEdito
 
 // 滚动时高亮 TOC 当前节（单元 12）
 let scrollTimer: ReturnType<typeof setTimeout> | undefined;
-wrap.addEventListener('scroll', () => {
+docScroll.addEventListener('scroll', () => {
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(() => highlightActive(document.querySelector<HTMLElement>('#toc-list')!), 150);
 });
