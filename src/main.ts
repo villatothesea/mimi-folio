@@ -394,6 +394,11 @@ async function open(path: string): Promise<void> {
         clearTimeout(saveTimer);
         const doc = await host.read(path);
         openFile = doc.path;
+        // 清单第 1 条：打开文档即取消文件夹选中——高亮只在文件夹被选中时出现
+        if (selectedDir !== null) {
+            selectedDir = null;
+            nav.querySelectorAll('.row-main[aria-current][data-dir]').forEach((b) => b.removeAttribute('aria-current'));
+        }
         lastSaved = doc.markdown;
         docMtime = doc.mtimeMs;
         docCtime = doc.ctimeMs;
