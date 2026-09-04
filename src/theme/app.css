@@ -1599,7 +1599,7 @@ html[data-width='wide'] .mu-editor .mu-container {
     font-size: var(--folio-font-size-sm);
 }
 
-/* 出链/反链底栏按钮：淡黄高亮，上下贴满底栏 */
+/* 出链/反链底栏按钮：平时不涂色，悬停浅灰 */
 #doc-meta {
     gap: var(--folio-chip-pad);
     flex: none;
@@ -1619,14 +1619,14 @@ html[data-width='wide'] .mu-editor .mu-container {
     padding: 0 var(--folio-chip-pad);
     line-height: 1;
     font-size: var(--folio-link-size);
-    background: var(--folio-graph-chip);
-    color: var(--folio-graph-fg);
+    background: transparent;
+    color: inherit;
     border-radius: 0;
 }
 
 .link-seg:hover {
-    color: var(--folio-graph-fg);
-    background: color-mix(in srgb, var(--folio-fg) 8%, var(--folio-graph-chip));
+    color: inherit;
+    background: var(--folio-hover);
 }
 
 
