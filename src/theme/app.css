@@ -342,6 +342,26 @@ body {
     white-space: nowrap;
 }
 
+/* 速记时间线 */
+.memo-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--folio-space-2);
+}
+
+.memo-open {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-2);
+}
+
+.memo-tags {
+    flex: none;
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+    padding-right: var(--folio-space-2);
+}
+
 /* ===== 顶栏：面包屑 | 居中工具栏 | 保存状态 ===== */
 #page-head {
     display: flex;
@@ -524,7 +544,7 @@ body {
 #props {
     border-bottom: 1px solid var(--folio-border);
     background: var(--folio-panel);
-    padding: 0 var(--folio-space-4);
+    padding: 0 var(--folio-space-1);
 }
 
 .prop-row {
@@ -1503,7 +1523,7 @@ html[data-width='wide'] .mu-editor .mu-container {
     background: none;
     color: var(--folio-fg);
     font: inherit;
-    font-size: var(--folio-font-size-sm);
+    font-size: var(--folio-font-size);
     padding: var(--folio-space-1) 0;
     outline: none;
 }
@@ -1620,41 +1640,45 @@ html[data-num-b='paren'] .mu-editor li::before {
     margin-right: var(--folio-space-2);
 }
 
-/* 速记时间线（bug6.5，usememos 卡片风） */
-.memo-day {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background: var(--folio-panel);
-    color: var(--folio-fg-muted);
-    font-size: var(--folio-font-size-xs);
-    font-weight: 600;
-    padding: var(--folio-space-2) var(--folio-space-2) var(--folio-space-1);
-    border-bottom: 1px solid var(--folio-border);
-}
-
-.memo-card {
-    margin: var(--folio-space-2);
-    border: 1px solid var(--folio-border);
-    border-radius: 8px;
-    background: var(--folio-bg);
-    padding: var(--folio-space-3);
-    display: flex;
+/* 速记时间线卡片化（待评估 9.2） */
+.memo-row {
     flex-direction: column;
-    gap: var(--folio-space-2);
+    align-items: stretch;
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    padding: var(--folio-space-2) var(--folio-space-3);
+    margin-bottom: var(--folio-space-2);
+    background: var(--folio-bg);
 }
 
-.memo-card:hover {
+.memo-row:hover {
     border-color: var(--folio-border-strong);
-    box-shadow: var(--folio-shadow);
 }
 
-.memo-card[aria-current='true'] {
+.memo-row .memo-open {
+    font-weight: 600;
+}
+
+.memo-row[aria-current='true'] .memo-open,
+.memo-row:has([aria-current='true']) {
     border-color: var(--folio-fg-muted);
-    box-shadow: var(--folio-shadow);
 }
 
-.memo-open {
+
+/* ===== bug4 2.1/2.3/2.5：清单行视觉 ===== */
+#files {
+    overflow-x: hidden;
+    padding: var(--folio-space-1) 0;
+}
+
+#files .tree-row {
+    display: flex;
+    align-items: stretch;
+}
+
+#files .row-main {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: var(--folio-space-2);
@@ -1663,13 +1687,12 @@ html[data-num-b='paren'] .mu-editor li::before {
     color: var(--folio-fg);
     font: inherit;
     font-size: var(--folio-font-size-sm);
-    font-weight: 600;
     text-align: left;
-    padding: 0;
+    padding: var(--folio-space-2) 10px;
     cursor: pointer;
 }
 
-.memo-open .file-name {
+#files .row-main .file-name {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -1677,20 +1700,62 @@ html[data-num-b='paren'] .mu-editor li::before {
     white-space: nowrap;
 }
 
-.memo-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--folio-space-1);
+#files .row-main:hover {
+    background: var(--folio-hover);
 }
 
-.memo-tags .tag-chip {
-    border: 1px solid color-mix(in srgb, var(--tag-c) 55%, transparent);
-    background: color-mix(in srgb, var(--tag-c) 12%, transparent);
-    color: var(--tag-c);
+/* 选中：右侧 5px 黑色块，与悬停底同高（bug5） */
+#files .row-main {
+    position: relative;
+}
+
+#files .row-main[aria-current='true'] {
+    background: var(--folio-hover);
+}
+
+#files .row-main[aria-current='true']::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 5px;
+    background: var(--folio-fg);
+}
+
+.row-star {
+    color: var(--folio-fg);
+    flex: none;
+}
+
+.folder-count {
+    margin-left: auto;
+    color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-xs);
-    padding: 0 var(--folio-space-2);
-    line-height: 1.7;
-    border-radius: 999px;
+}
+
+.folder-toggle {
+    width: calc(var(--folio-control-h) - 6px);
+    flex: none;
+    align-self: stretch;
+    height: auto;
+}
+
+/* 层级引导线（bug4 2.3） */
+.tree-children {
+    margin-left: calc(10px + var(--folio-icon-size) / 2);
+    border-left: 1px solid var(--folio-border);
+}
+
+/* 标题栏三按钮紧凑小一号（bug4 2.7） */
+.head-actions .icon-btn {
+    width: calc(var(--folio-control-h) - 4px);
+    height: calc(var(--folio-control-h) - 4px);
+}
+
+.head-actions .icon-btn .folio-icon {
+    width: calc(var(--folio-icon-size) - 3px);
+    height: calc(var(--folio-icon-size) - 3px);
 }
 
 /* wikilink 芯片与自动补全（bug4 4.1/4.3） */
@@ -1791,7 +1856,10 @@ html[data-num-b='paren'] .mu-editor li::before {
 }
 
 .search-tags .tag-chip {
+    border: 1px solid var(--folio-border);
     border-radius: var(--folio-radius);
+    background: none;
+    color: var(--folio-fg-muted);
     font: inherit;
     font-size: var(--folio-font-size-xs);
     padding: 0 var(--folio-space-2);

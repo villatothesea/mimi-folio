@@ -6,7 +6,7 @@ import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
-import { renderMemoTimeline, renderSidebar } from './ui/sidebar.ts';
+import { renderSidebar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
@@ -116,7 +116,7 @@ function renderProps(): void {
     }
     propsEl.classList.remove('collapsed');
 
-    // 标题行（恢复原样：属性行之一，非大标题）
+    // 标题行（验收清单 12.3）：不是 H1，是 frontmatter title
     const { frontmatter } = splitFrontmatter(editor.getMarkdown());
     const titleRow = document.createElement('div');
     titleRow.className = 'prop-row doc-title-row';
@@ -394,8 +394,6 @@ async function open(path: string): Promise<void> {
         clearTimeout(saveTimer);
         const doc = await host.read(path);
         openFile = doc.path;
-        selectedDir = null; // bug6.1：打开文档即取消文件夹高亮
-        nav.querySelectorAll('.row-main[aria-current][data-dir]').forEach((b) => b.removeAttribute('aria-current'));
         lastSaved = doc.markdown;
         docMtime = doc.mtimeMs;
         docCtime = doc.ctimeMs;
@@ -490,12 +488,7 @@ async function refreshList(): Promise<void> {
         }
         renderPills();
         renderStatusbar();
-        if (activeFilters.has('memos') && activeFilters.size === 1) {
-            renderMemoTimeline(nav, shown, {
-                activePath: openFile,
-                onOpen: (p) => void open(p),
-            });
-        } else {
+        {
             renderSidebar(nav, shown, {
                 activePath: openFile,
                 onOpen: (p) => void open(p),
