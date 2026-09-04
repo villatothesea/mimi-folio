@@ -1741,9 +1741,13 @@ html[data-num-b='paren'] .mu-editor li::before {
     height: auto;
 }
 
-/* 层级引导线（bug4 2.3） */
+/* 层级引导线（bug4 2.3）；缩进步长供行内负 margin 对齐（清单1 补充） */
+:root {
+    --tree-step: 18px;
+}
+
 .tree-children {
-    margin-left: calc(10px + var(--folio-icon-size) / 2);
+    margin-left: var(--tree-step);
     border-left: 1px solid var(--folio-border);
 }
 

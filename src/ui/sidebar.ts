@@ -70,11 +70,14 @@ function renderTree(host: HTMLElement, node: DirNode, depth: number, opts: Sideb
 function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTMLElement {
     const row = document.createElement('div');
     row.className = 'tree-row folder-row';
-    if (depth > 0) row.style.marginLeft = `${depth * 0.9}em`;
+    // 高亮贯穿左右：负 margin 抵消父级缩进，内容用 padding 还原层级（清单1 补充）
+    row.style.marginLeft = `calc(-1 * var(--tree-step) * ${depth})`;
+    const pad = `calc(10px + var(--tree-step) * ${depth})`;
 
     const toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.className = 'icon-btn folder-toggle';
+    toggle.style.paddingLeft = pad;
     toggle.innerHTML = icon(collapsedDirs.has(dir.dir) ? 'chevron-right' : 'chevron-down');
     toggle.title = collapsedDirs.has(dir.dir) ? '展开' : '折叠';
     toggle.addEventListener('click', (e) => {
@@ -87,6 +90,7 @@ function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTM
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'row-main';
+    button.style.paddingLeft = `calc(var(--tree-step) + ${pad})`;
     const count = dir.files.length + [...dir.children.values()].reduce((sum, ch) => sum + ch.files.length, 0);
     button.innerHTML = `${icon('folders')}<span class="file-name">${dir.name}</span><span class="folder-count">${count}</span>`;
     button.title = dir.dir;
@@ -120,9 +124,11 @@ function renderGroup(files: FolioListItem[], opts: SidebarOptions, _depth: numbe
     for (const file of files) {
         const row = document.createElement('div');
         row.className = 'tree-row';
+        row.style.marginLeft = `calc(-1 * var(--tree-step) * ${_depth})`;
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'row-main';
+        button.style.paddingLeft = `calc(10px + var(--tree-step) * ${_depth})`;
         button.draggable = true;
         const ic = document.createElement('span');
         ic.className = 'file-icon';
