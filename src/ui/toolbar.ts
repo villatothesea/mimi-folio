@@ -3,6 +3,7 @@
  * mousedown preventDefault 保住编辑器选区，点击即作用于当前选区/段落。
  */
 import type { Muya } from '@muyajs/core';
+import { applyTextScale, formatTextScale, readTextScale, stepTextScale, TEXT_SCALE_DEFAULT } from '../shared/textScale.ts';
 import { icon } from './icons';
 import type { FolioHost } from '../host/types';
 
@@ -111,6 +112,7 @@ export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, ext
         { kind: 'custom', ic: 'video', tip: '插入视频', run: () => void (host ? insertMedia(host, getEditor, 'video/*', 'video') : undefined) },
     ];
     for (const extra of extras) tools.push({ kind: 'custom', ...extra });
+    tools.push({ kind: 'sep' });
 
     for (const tool of tools) {
         if (tool.kind === 'sep') {
@@ -137,4 +139,57 @@ export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, ext
         });
         bar.append(button);
     }
+
+    appendTextScale(bar);
+}
+
+function appendTextScale(bar: HTMLElement): void {
+    const wrap = document.createElement('span');
+    wrap.className = 'tool-zoom';
+    wrap.setAttribute('role', 'group');
+    wrap.setAttribute('aria-label', '文字大小');
+
+    const smaller = document.createElement('button');
+    smaller.type = 'button';
+    smaller.className = 'icon-btn tool-btn';
+    smaller.dataset.tip = '缩小文字';
+    smaller.innerHTML = icon('minus');
+
+    const value = document.createElement('button');
+    value.type = 'button';
+    value.className = 'tool-zoom-val';
+    value.dataset.tip = '恢复 100%';
+
+    const bigger = document.createElement('button');
+    bigger.type = 'button';
+    bigger.className = 'icon-btn tool-btn';
+    bigger.dataset.tip = '放大文字';
+    bigger.innerHTML = icon('plus');
+
+    const paint = (): void => {
+        value.textContent = formatTextScale(readTextScale());
+    };
+    paint();
+
+    const holdFocus = (event: MouseEvent): void => {
+        event.preventDefault();
+    };
+    smaller.addEventListener('mousedown', holdFocus);
+    value.addEventListener('mousedown', holdFocus);
+    bigger.addEventListener('mousedown', holdFocus);
+    smaller.addEventListener('click', () => {
+        stepTextScale(-1);
+        paint();
+    });
+    bigger.addEventListener('click', () => {
+        stepTextScale(1);
+        paint();
+    });
+    value.addEventListener('click', () => {
+        applyTextScale(TEXT_SCALE_DEFAULT);
+        paint();
+    });
+
+    wrap.append(smaller, value, bigger);
+    bar.append(wrap);
 }

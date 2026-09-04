@@ -2,6 +2,7 @@ import './theme/app.css';
 import './theme/tokens.css';
 import './theme/tokens-dark.css';
 import { wordCount } from '@muyajs/core';
+import { applyTextScale, readTextScale } from './shared/textScale.ts';
 import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
@@ -1173,11 +1174,7 @@ function applyTheme(mode: 'light' | 'dark'): void {
     localStorage.setItem('folio-theme', mode);
 }
 applyTheme((localStorage.getItem('folio-theme') as 'light' | 'dark') ?? 'light');
-const applyZoom = (z: string) => {
-    document.documentElement.style.zoom = z;
-    localStorage.setItem('folio-zoom', z);
-};
-applyZoom(localStorage.getItem('folio-zoom') ?? '1');
+applyTextScale(readTextScale());
 const savedHl = localStorage.getItem('folio-highlight');
 if (savedHl) document.documentElement.style.setProperty('--folio-highlight', savedHl);
 btnTheme.addEventListener('click', () => {

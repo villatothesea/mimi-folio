@@ -249,6 +249,7 @@ body {
 /* bug2：上方的按钮 tooltip 向下弹 */
 #sidebar-head .icon-btn[data-tip]:hover::after,
 #toolbar .icon-btn[data-tip]:hover::after,
+#toolbar .tool-zoom-val[data-tip]:hover::after,
 #filterbar button[data-tip]:hover::after,
 #page-head .icon-btn[data-tip]:hover::after,
 #expand-hints [data-tip]:hover::after {
@@ -419,6 +420,30 @@ body {
     flex: none;
 }
 
+.tool-zoom {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+}
+
+.tool-zoom-val {
+    position: relative;
+    min-width: 4.5ch;
+    height: var(--folio-control-h);
+    border: 0;
+    background: none;
+    color: var(--folio-fg-muted);
+    font: inherit;
+    font-size: var(--folio-font-size-xs);
+    line-height: 1;
+    padding: 0 var(--folio-space-1);
+    cursor: pointer;
+}
+
+.tool-zoom-val:hover {
+    color: var(--folio-fg);
+}
+
 /* 文内查找（bug3.11）：顶栏下方居中浮层，间距统一 */
 #findbar-wrap {
     position: relative;
@@ -537,6 +562,7 @@ body {
     min-height: 0;
     overflow-y: auto;
     background: var(--folio-bg);
+    zoom: var(--folio-text-scale);
 }
 
 #doc-head {
@@ -1248,21 +1274,26 @@ html[data-num-h='cjk'] .mu-editor h3::before {
 }
 
 /* 正文有序编号：中文 */
-html[data-num-b='cjk'] .mu-editor ol {
+html[data-num-b='cjk'] .mu-editor ol.mu-order-list {
     list-style-type: cjk-decimal;
 }
 
-/* 正文有序编号：1.1 多级（counters 拼接） */
-html[data-num-b='dot'] .mu-editor ol {
+/* 正文有序编号：1.1 多级。必须走 ::marker（不要 li::before）：
+ * Muya 的 li 里是块级段落，::before 会独占一行，文字掉到下一行；
+ * counters() 末级也没有点，看起来像「1」而不是「1.」。 */
+html[data-num-b='dot'] .mu-editor ol.mu-order-list {
     list-style-type: none;
-    counter-reset: folio-ol;
+    /* start 写在 ol 的 --folio-ol-start（Muya meta.start）；默认 1。 */
+    counter-reset: folio-ol calc(var(--folio-ol-start, 1) - 1);
 }
 
-html[data-num-b='dot'] .mu-editor li::before {
+html[data-num-b='dot'] .mu-editor ol.mu-order-list > li.mu-list-item {
     counter-increment: folio-ol;
-    content: counters(folio-ol, '.') ' ';
+}
+
+html[data-num-b='dot'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
+    content: counters(folio-ol, '.') '. ';
     color: var(--folio-fg-marker, var(--folio-fg-muted));
-    margin-right: var(--folio-space-2);
 }
 
 /* 无序编号按层级（data-ul-1/2/3） */
@@ -1658,16 +1689,18 @@ html[data-num-h='paren'] .mu-editor h3::before {
     margin-right: var(--folio-space-1);
 }
 
-html[data-num-b='paren'] .mu-editor ol {
+html[data-num-b='paren'] .mu-editor ol.mu-order-list {
     list-style-type: none;
-    counter-reset: folio-ol;
+    counter-reset: folio-ol calc(var(--folio-ol-start, 1) - 1);
 }
 
-html[data-num-b='paren'] .mu-editor li::before {
+html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item {
     counter-increment: folio-ol;
+}
+
+html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
     content: '(' counters(folio-ol, '.') ') ';
     color: var(--folio-fg-marker, var(--folio-fg-muted));
-    margin-right: var(--folio-space-2);
 }
 
 /* 速记时间线（日期头 + 卡片） */

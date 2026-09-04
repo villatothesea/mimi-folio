@@ -50,6 +50,8 @@
     --folio-font-size-code: 14px;
     --folio-shadow: rgb(0 0 0 / 5%) 0 0 0 1px, rgb(0 0 0 / 6%) 0 3px 6px;
     --folio-control-h: 28px;
+    /* 正文显示比例，工具栏 100%；只作用在 #doc-scroll */
+    --folio-text-scale: 1;
     /* 清单选中右侧竖条，及数字/星星与竖条的间距 */
     --folio-sel-bar: 5px;
     --folio-sel-gap: 3px;
