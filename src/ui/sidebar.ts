@@ -4,6 +4,7 @@
  */
 import type { FolioListItem } from '../host/types.ts';
 import { icon } from './icons';
+import { applyTagColor } from './tagColors';
 
 export type SidebarOptions = {
     activePath: string | null;
@@ -198,8 +199,8 @@ export function renderTagBar(
 }
 
 /**
- * 速记时间线（单元 8）：memos/ 按文件名倒序（约定文件名带日期前缀），
- * 标题旁挂标签。是同一座 vault 的一种看法，不是嵌 memos。
+ * 速记时间线（bug6.5，usememos 风格）：日期分组头 + 卡片。
+ * 卡片 = 圆角白卡（标题/时间/彩色标签），日期头粘性；仍是同一座 vault 的看法。
  */
 export function renderMemoTimeline(
     nav: HTMLElement,
@@ -207,10 +208,22 @@ export function renderMemoTimeline(
     opts: SidebarOptions,
 ): void {
     nav.replaceChildren();
-    const sorted = [...files].sort((a, b) => b.path.localeCompare(a.path, 'zh'));
+    const sorted = [...files].sort((a, b) => b.path.localeCompare(b.path && a.path, 'zh'));
+
+    let lastDay = '';
     for (const file of sorted) {
-        const row = document.createElement('div');
-        row.className = 'memo-row';
+        const day = /^\d{4}-\d{2}-\d{2}/.exec(file.path.split('/').pop() ?? '')?.[0] ?? '';
+        if (day && day !== lastDay) {
+            lastDay = day;
+            const head = document.createElement('div');
+            head.className = 'memo-day';
+            head.textContent = day;
+            nav.append(head);
+        }
+
+        const card = document.createElement('div');
+        card.className = 'memo-card';
+        if (file.path === opts.activePath) card.setAttribute('aria-current', 'true');
 
         const button = document.createElement('button');
         button.type = 'button';
@@ -218,16 +231,21 @@ export function renderMemoTimeline(
         button.innerHTML = `<span class="file-icon">${fileIcon(file)}</span><span class="file-name">${file.title}</span>`;
         button.title = file.path;
         button.dataset.path = file.path;
-        if (file.path === opts.activePath) button.setAttribute('aria-current', 'true');
         button.addEventListener('click', () => opts.onOpen(file.path, button));
-        row.append(button);
+        card.append(button);
 
-        const tags = document.createElement('span');
+        const tags = document.createElement('div');
         tags.className = 'memo-tags';
-        tags.textContent = file.tags?.length ? file.tags.join(' · ') : '';
-        row.append(tags);
+        for (const tag of file.tags ?? []) {
+            const chip = document.createElement('span');
+            chip.className = 'tag-chip';
+            chip.textContent = '# ' + tag;
+            applyTagColor(chip, tag);
+            tags.append(chip);
+        }
+        card.append(tags);
 
-        nav.append(row);
+        nav.append(card);
     }
     if (sorted.length === 0) {
         const empty = document.createElement('div');

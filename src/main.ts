@@ -6,7 +6,7 @@ import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
-import { renderSidebar } from './ui/sidebar.ts';
+import { renderMemoTimeline, renderSidebar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
@@ -116,15 +116,13 @@ function renderProps(): void {
     }
     propsEl.classList.remove('collapsed');
 
-    // 标题行（验收清单 12.3）：不是 H1，是 frontmatter title
+    // 标题栏（bug6.4）：文档第一行，无层级、不属于任何格式
     const { frontmatter } = splitFrontmatter(editor.getMarkdown());
     const titleRow = document.createElement('div');
-    titleRow.className = 'prop-row doc-title-row';
-    const titleKey = document.createElement('span');
-    titleKey.className = 'prop-key';
-    titleKey.textContent = '标题';
+    titleRow.className = 'doc-title-row';
     const titleInput = document.createElement('input');
     titleInput.className = 'doc-title-input';
+    titleInput.placeholder = '无标题';
     const titleMatch = frontmatter.match(/^title\s*:\s*(.*)$/m);
     titleInput.value = titleMatch?.[1]?.trim() ?? allFiles.find((f) => f.path === openFile)?.title ?? '';
     titleInput.addEventListener('change', () => {
@@ -134,7 +132,7 @@ function renderProps(): void {
         onEditorChange(ed.getMarkdown());
         void refreshList();
     });
-    titleRow.append(titleKey, titleInput);
+    titleRow.append(titleInput);
     propsEl.append(titleRow);
 
     const row = (key: string, value: Node): void => {
@@ -394,6 +392,8 @@ async function open(path: string): Promise<void> {
         clearTimeout(saveTimer);
         const doc = await host.read(path);
         openFile = doc.path;
+        selectedDir = null; // bug6.1：打开文档即取消文件夹高亮
+        nav.querySelectorAll('.row-main[aria-current][data-dir]').forEach((b) => b.removeAttribute('aria-current'));
         lastSaved = doc.markdown;
         docMtime = doc.mtimeMs;
         docCtime = doc.ctimeMs;
@@ -488,7 +488,12 @@ async function refreshList(): Promise<void> {
         }
         renderPills();
         renderStatusbar();
-        {
+        if (activeFilters.has('memos') && activeFilters.size === 1) {
+            renderMemoTimeline(nav, shown, {
+                activePath: openFile,
+                onOpen: (p) => void open(p),
+            });
+        } else {
             renderSidebar(nav, shown, {
                 activePath: openFile,
                 onOpen: (p) => void open(p),

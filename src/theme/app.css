@@ -342,26 +342,6 @@ body {
     white-space: nowrap;
 }
 
-/* 速记时间线 */
-.memo-row {
-    display: flex;
-    align-items: baseline;
-    gap: var(--folio-space-2);
-}
-
-.memo-open {
-    display: flex;
-    align-items: center;
-    gap: var(--folio-space-2);
-}
-
-.memo-tags {
-    flex: none;
-    color: var(--folio-fg-muted);
-    font-size: var(--folio-font-size-sm);
-    padding-right: var(--folio-space-2);
-}
-
 /* ===== 顶栏：面包屑 | 居中工具栏 | 保存状态 ===== */
 #page-head {
     display: flex;
@@ -541,10 +521,17 @@ body {
 }
 
 /* ===== 属性面板（Obsidian 式） ===== */
+/* bug6.3：文档头并入正文列（Ob 式）——同宽、同背景、随内容 */
 #props {
     border-bottom: 1px solid var(--folio-border);
-    background: var(--folio-panel);
+    background: var(--folio-bg);
     padding: 0 var(--folio-space-1);
+}
+
+#props > * {
+    max-width: var(--folio-measure);
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .prop-row {
@@ -1516,15 +1503,21 @@ html[data-width='wide'] .mu-editor .mu-container {
     height: calc(var(--folio-control-h) - 6px);
 }
 
+.doc-title-row {
+    padding: var(--folio-space-3) 0 0;
+}
+
 .doc-title-input {
-    flex: 1;
-    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
     border: 0;
     background: none;
     color: var(--folio-fg);
     font: inherit;
-    font-size: var(--folio-font-size);
-    padding: var(--folio-space-1) 0;
+    font-size: calc(var(--folio-font-size) * 1.5);
+    font-weight: 700;
+    line-height: 1.3;
+    padding: 0 0 var(--folio-space-2);
     outline: none;
 }
 
@@ -1640,45 +1633,41 @@ html[data-num-b='paren'] .mu-editor li::before {
     margin-right: var(--folio-space-2);
 }
 
-/* 速记时间线卡片化（待评估 9.2） */
-.memo-row {
-    flex-direction: column;
-    align-items: stretch;
-    border: 1px solid var(--folio-border);
-    border-radius: var(--folio-radius);
-    padding: var(--folio-space-2) var(--folio-space-3);
-    margin-bottom: var(--folio-space-2);
-    background: var(--folio-bg);
-}
-
-.memo-row:hover {
-    border-color: var(--folio-border-strong);
-}
-
-.memo-row .memo-open {
+/* 速记时间线（bug6.5，usememos 卡片风） */
+.memo-day {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--folio-panel);
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
     font-weight: 600;
+    padding: var(--folio-space-2) var(--folio-space-2) var(--folio-space-1);
+    border-bottom: 1px solid var(--folio-border);
 }
 
-.memo-row[aria-current='true'] .memo-open,
-.memo-row:has([aria-current='true']) {
-    border-color: var(--folio-fg-muted);
-}
-
-
-/* ===== bug4 2.1/2.3/2.5：清单行视觉 ===== */
-#files {
-    overflow-x: hidden;
-    padding: var(--folio-space-1) 0;
-}
-
-#files .tree-row {
+.memo-card {
+    margin: var(--folio-space-2);
+    border: 1px solid var(--folio-border);
+    border-radius: 8px;
+    background: var(--folio-bg);
+    padding: var(--folio-space-3);
     display: flex;
-    align-items: stretch;
+    flex-direction: column;
+    gap: var(--folio-space-2);
 }
 
-#files .row-main {
-    flex: 1;
-    min-width: 0;
+.memo-card:hover {
+    border-color: var(--folio-border-strong);
+    box-shadow: var(--folio-shadow);
+}
+
+.memo-card[aria-current='true'] {
+    border-color: var(--folio-fg-muted);
+    box-shadow: var(--folio-shadow);
+}
+
+.memo-open {
     display: flex;
     align-items: center;
     gap: var(--folio-space-2);
@@ -1687,12 +1676,13 @@ html[data-num-b='paren'] .mu-editor li::before {
     color: var(--folio-fg);
     font: inherit;
     font-size: var(--folio-font-size-sm);
+    font-weight: 600;
     text-align: left;
-    padding: var(--folio-space-2) 10px;
+    padding: 0;
     cursor: pointer;
 }
 
-#files .row-main .file-name {
+.memo-open .file-name {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -1700,62 +1690,20 @@ html[data-num-b='paren'] .mu-editor li::before {
     white-space: nowrap;
 }
 
-#files .row-main:hover {
-    background: var(--folio-hover);
+.memo-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--folio-space-1);
 }
 
-/* 选中：右侧 5px 黑色块，与悬停底同高（bug5） */
-#files .row-main {
-    position: relative;
-}
-
-#files .row-main[aria-current='true'] {
-    background: var(--folio-hover);
-}
-
-#files .row-main[aria-current='true']::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    width: 5px;
-    background: var(--folio-fg);
-}
-
-.row-star {
-    color: var(--folio-fg);
-    flex: none;
-}
-
-.folder-count {
-    margin-left: auto;
-    color: var(--folio-fg-muted);
+.memo-tags .tag-chip {
+    border: 1px solid color-mix(in srgb, var(--tag-c) 55%, transparent);
+    background: color-mix(in srgb, var(--tag-c) 12%, transparent);
+    color: var(--tag-c);
     font-size: var(--folio-font-size-xs);
-}
-
-.folder-toggle {
-    width: calc(var(--folio-control-h) - 6px);
-    flex: none;
-    align-self: stretch;
-    height: auto;
-}
-
-/* 层级引导线（bug4 2.3） */
-.tree-children {
-    margin-left: calc(10px + var(--folio-icon-size) / 2);
-    border-left: 1px solid var(--folio-border);
-}
-
-/* 标题栏三按钮紧凑小一号（bug4 2.7） */
-.head-actions .icon-btn {
-    width: calc(var(--folio-control-h) - 4px);
-    height: calc(var(--folio-control-h) - 4px);
-}
-
-.head-actions .icon-btn .folio-icon {
-    width: calc(var(--folio-icon-size) - 3px);
-    height: calc(var(--folio-icon-size) - 3px);
+    padding: 0 var(--folio-space-2);
+    line-height: 1.7;
+    border-radius: 999px;
 }
 
 /* wikilink 芯片与自动补全（bug4 4.1/4.3） */
@@ -1856,10 +1804,7 @@ html[data-num-b='paren'] .mu-editor li::before {
 }
 
 .search-tags .tag-chip {
-    border: 1px solid var(--folio-border);
     border-radius: var(--folio-radius);
-    background: none;
-    color: var(--folio-fg-muted);
     font: inherit;
     font-size: var(--folio-font-size-xs);
     padding: 0 var(--folio-space-2);

@@ -5,6 +5,7 @@
  */
 import type { FolioListItem, FolioSearchItem } from '../host/types';
 import { icon } from './icons';
+import { applyTagColor } from './tagColors';
 
 export type SearchPaletteOptions = {
     search: (query: string) => Promise<FolioSearchItem[]>;
@@ -55,6 +56,7 @@ export function attachSearchPalette(opts: SearchPaletteOptions): { show: () => v
                     chip.type = 'button';
                     chip.className = 'tag-chip';
                     chip.textContent = tag;
+                    applyTagColor(chip, tag);
                     chip.addEventListener('click', () => {
                         input.value = tag;
                         input.dispatchEvent(new Event('input', { bubbles: true }));
