@@ -709,22 +709,37 @@ async function importMdByPicker(): Promise<void> {
     });
 }
 
-/** 导入文件夹：路径 → links/<原名>/ 目录联接（失败则逐文件链接），不拷贝；源里新 md 会自动进来。 */
+/** 导入文件夹：系统选文件夹窗 → links/<原名>/ 链入，不拷贝。 */
 async function importFolderLink(): Promise<void> {
-    const source = await folioPrompt('要导入的文件夹绝对路径（链入后源目录里的新 md 会自动进来，不拷贝）');
+    if (!host.pickFolder || !host.linkFolder) return;
+    const source = await host.pickFolder();
     if (!source) return;
     try {
-        const resp = await fetch('/folio/v1/folderlink', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ source: source.trim() }),
-        });
-        const out = (await resp.json()) as { dir?: string; count?: number; error?: string };
-        if (!resp.ok) throw new Error(out.error ?? `HTTP ${resp.status}`);
+        const out = await host.linkFolder(source);
         saySave(`已链接 ${out.count} 篇 → ${out.dir}`);
         void refreshList();
     } catch (err) {
         saySave(`导入文件夹失败：${(err as Error).message}`);
+    }
+}
+
+async function relinkFolder(dir: string): Promise<void> {
+    if (!host.pickFolder || !host.relinkFolder) return;
+    const source = await host.pickFolder();
+    if (!source) return;
+    try {
+        const out = await host.relinkFolder(dir, source);
+        saySave(`已更换路径 → ${out.dir}`);
+        await refreshList();
+        if (openFile?.startsWith(`${dir}/`) && !allFiles.some((f) => f.path === openFile)) {
+            openFile = null;
+            destroyEditor();
+            breadcrumbEl.textContent = '未打开';
+            hideDocHead();
+            renderCenterBar();
+        }
+    } catch (err) {
+        saySave(`更换路径失败：${(err as Error).message}`);
     }
 }
 
@@ -964,6 +979,11 @@ function folderContextMenu(dir: string, x: number, y: number): void {
         return [...dirs].sort((a, b) => a.localeCompare(b, 'zh'));
     };
     showContextMenu(x, y, [
+        ...(dir.split('/').length === 2 && dir.startsWith('links/') ? [{
+            ic: 'external-link',
+            label: '更换路径',
+            run: () => void relinkFolder(dir),
+        }] : []),
         { ic: 'folder-plus', label: '添加子文件夹', run: () => void (async () => {
             const name = await folioPrompt(`在 ${dir} 下新建文件夹`);
             if (!name) return;

@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { watch as fsWatch, type FSWatcher } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -174,12 +175,153 @@ async function inferSourceDir(destDir: string, root: string): Promise<string | n
     return null;
 }
 
-async function linkDirOutside(root: string, srcDir: string): Promise<void> {
-    const dest = path.join(root, 'links', path.basename(srcDir));
+async function linkDirAt(srcDir: string, dest: string): Promise<void> {
     try {
         await fs.symlink(srcDir, dest, process.platform === 'win32' ? 'junction' : 'dir');
     } catch {
         await fs.symlink(srcDir, dest, 'dir');
+    }
+}
+
+/** 目录联接优先；失败则逐文件链接并记下源路径。不拷贝正文。 */
+async function attachOutsideDir(srcDir: string, dest: string): Promise<void> {
+    try {
+        await linkDirAt(srcDir, dest);
+    } catch {
+        await fs.mkdir(dest, { recursive: true });
+        await writeOrigin(dest, srcDir);
+        await syncDirFiles(srcDir, dest);
+    }
+}
+
+async function collectDocs(dir: string, prefix: string): Promise<string[]> {
+    const linked: string[] = [];
+    async function walk(absDir: string, rel: string): Promise<void> {
+        for (const name of await fs.readdir(absDir).catch(() => [] as string[])) {
+            if (name.startsWith('.')) continue;
+            const abs = path.join(absDir, name);
+            const child = `${rel}/${name}`;
+            const st = await fs.stat(abs).catch(() => null);
+            if (st?.isDirectory()) await walk(abs, child);
+            else if (st?.isFile() && DOC_RE.test(name)) linked.push(child);
+        }
+    }
+    await walk(dir, prefix);
+    return linked;
+}
+
+function isTopLinkDir(rel: string): boolean {
+    const segs = rel.split('/');
+    return segs.length === 2 && segs[0] === 'links' && Boolean(segs[1]);
+}
+
+async function emptyLinkedDir(dest: string): Promise<void> {
+    for (const name of await fs.readdir(dest)) {
+        const abs = path.join(dest, name);
+        const lst = await fs.lstat(abs);
+        if (lst.isSymbolicLink()) await fs.unlink(abs);
+        else if (lst.isDirectory()) {
+            await emptyLinkedDir(abs);
+            await fs.rmdir(abs);
+        } else {
+            await fs.unlink(abs);
+        }
+    }
+}
+
+/** 拆掉 vault 里的外链文件夹槽。联接只摘槽，绝不走进源目录删文件。 */
+async function detachLinkedDir(dest: string, root: string): Promise<void> {
+    const lst = await fs.lstat(dest);
+    const outside = await outsideDirTarget(dest, root);
+    if (outside || lst.isSymbolicLink()) {
+        await fs.unlink(dest);
+        return;
+    }
+    await emptyLinkedDir(dest);
+    await fs.rmdir(dest);
+}
+
+async function resolveOutsideDir(root: string, srcDir: string): Promise<string> {
+    const resolved = path.resolve(srcDir);
+    if (!isOutsideVault(root, resolved)) throw new Error('文件夹已在 vault 内');
+    const stat = await fs.stat(resolved).catch(() => null);
+    if (!stat?.isDirectory()) throw new Error('文件夹不存在');
+    return resolved;
+}
+
+async function relinkFolderDir(root: string, vaultRel: string, srcDir: string): Promise<string[]> {
+    if (!isTopLinkDir(vaultRel)) throw new Error('只能更换顶层外链文件夹的路径');
+    const dest = path.join(root, ...vaultRel.split('/'));
+    if (!await fileExists(dest)) throw new Error(`${vaultRel} 不存在`);
+    const oldSrc = await outsideDirTarget(dest, root)
+        ?? await readOrigin(dest)
+        ?? await inferSourceDir(dest, root);
+    if (oldSrc) {
+        unwatchOutside(oldSrc);
+        sourceFp.delete(oldSrc);
+    }
+    await detachLinkedDir(dest, root);
+    await attachOutsideDir(srcDir, dest);
+    watchOutside(srcDir, root);
+    invalidate(root);
+    return collectDocs(dest, vaultRel);
+}
+
+/** 系统选文件夹窗（独立模式）。取消回 null。 */
+async function pickFolderNative(): Promise<string | null> {
+    if (process.platform === 'win32') {
+        const scriptPath = path.join(os.tmpdir(), `folio-pick-${process.pid}-${Date.now()}.ps1`);
+        const script = [
+            'Add-Type -AssemblyName System.Windows.Forms',
+            '$hostForm = New-Object System.Windows.Forms.Form',
+            '$hostForm.TopMost = $true',
+            '$hostForm.ShowInTaskbar = $false',
+            '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
+            "$dialog.Description = '选择文件夹'",
+            '$dialog.ShowNewFolderButton = $false',
+            '$result = $dialog.ShowDialog($hostForm)',
+            '$path = if ($result -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath } else { \'\' }',
+            '$hostForm.Dispose()',
+            '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+            'Write-Output $path',
+        ].join('\n');
+        await fs.writeFile(scriptPath, `\uFEFF${script}`, 'utf8');
+        try {
+            const { stdout } = await execFileP(
+                'powershell.exe',
+                ['-STA', '-NoProfile', '-NonInteractive', '-File', scriptPath],
+                { timeout: 10 * 60 * 1000, windowsHide: false },
+            );
+            const line = String(stdout).split(/\r?\n/).map((s) => s.trim()).filter(Boolean).pop() ?? '';
+            return line || null;
+        } finally {
+            await fs.unlink(scriptPath).catch(() => undefined);
+        }
+    }
+    if (process.platform === 'darwin') {
+        try {
+            const { stdout } = await execFileP('osascript', ['-e', 'POSIX path of (choose folder)'], {
+                timeout: 10 * 60 * 1000,
+            });
+            return String(stdout).trim().replace(/\/$/, '') || null;
+        } catch {
+            return null;
+        }
+    }
+    try {
+        const { stdout } = await execFileP('zenity', ['--file-selection', '--directory', '--title=选择文件夹'], {
+            timeout: 10 * 60 * 1000,
+        });
+        return String(stdout).trim() || null;
+    } catch {
+        try {
+            const { stdout } = await execFileP('kdialog', ['--getexistingdirectory', '.', '选择文件夹'], {
+                timeout: 10 * 60 * 1000,
+            });
+            return String(stdout).trim() || null;
+        } catch {
+            throw new Error('打不开系统选文件夹窗');
+        }
     }
 }
 
@@ -300,6 +442,14 @@ function watchOutside(dir: string, root: string): void {
     } catch {
         // 源目录盯不住也不挡 list；下次 loadVault 还会再补链
     }
+}
+
+function unwatchOutside(dir: string): void {
+    const key = path.resolve(dir);
+    const w = extraWatchers.get(key);
+    if (!w) return;
+    w.close();
+    extraWatchers.delete(key);
 }
 
 /** 关闭常驻 watcher（测试收尾/进程退出用）。 */
@@ -571,44 +721,59 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             return true;
         }
 
+        // 系统选文件夹窗（独立模式；合入后由宿主原生对话框提供）
+        if (req.method === 'POST' && pathname === 'pick-folder') {
+            try {
+                const picked = await pickFolderNative();
+                if (!picked) {
+                    res.statusCode = 204;
+                    res.end();
+                    return true;
+                }
+                send(res, 200, { path: picked });
+                return true;
+            } catch (err) {
+                return fail(res, 400, err instanceof Error ? err.message : String(err));
+            }
+        }
+
         // 文件夹整体链入：优先目录联接（源里新文件自动可见）；不行再逐文件链接并记下源路径
         if (req.method === 'POST' && pathname === 'folderlink') {
             const body = JSON.parse((await readBody(req)).toString('utf8')) as { source?: string };
             if (typeof body.source !== 'string' || !path.isAbsolute(body.source)) {
                 return fail(res, 400, '需要 {source: 文件夹绝对路径}');
             }
-            const srcDir = path.resolve(body.source);
-            if (!isOutsideVault(root, srcDir)) return fail(res, 400, '文件夹已在 vault 内');
-            const stat = await fs.stat(srcDir).catch(() => null);
-            if (!stat?.isDirectory()) return fail(res, 400, '文件夹不存在');
-            const destDir = path.join(root, 'links', path.basename(srcDir));
-            if (await fileExists(destDir)) return fail(res, 400, `links/${path.basename(srcDir)} 已存在`);
-            await fs.mkdir(path.join(root, 'links'), { recursive: true });
-            let linked: string[] = [];
             try {
-                await linkDirOutside(root, srcDir);
+                const srcDir = await resolveOutsideDir(root, body.source);
+                const destDir = path.join(root, 'links', path.basename(srcDir));
+                if (await fileExists(destDir)) return fail(res, 400, `links/${path.basename(srcDir)} 已存在`);
+                await fs.mkdir(path.join(root, 'links'), { recursive: true });
+                await attachOutsideDir(srcDir, destDir);
                 watchOutside(srcDir, root);
-            } catch {
-                await fs.mkdir(destDir, { recursive: true });
-                await writeOrigin(destDir, srcDir);
-                watchOutside(srcDir, root);
-                await syncDirFiles(srcDir, destDir);
+                const prefix = `links/${path.basename(srcDir)}`;
+                const linked = await collectDocs(destDir, prefix);
+                invalidate(root);
+                send(res, 200, { dir: prefix, count: linked.length, files: linked });
+                return true;
+            } catch (err) {
+                return fail(res, 400, err instanceof Error ? err.message : String(err));
             }
-            const prefix = `links/${path.basename(srcDir)}`;
-            async function collect(dir: string, rel: string): Promise<void> {
-                for (const name of await fs.readdir(dir).catch(() => [] as string[])) {
-                    if (name.startsWith('.')) continue;
-                    const abs = path.join(dir, name);
-                    const child = `${rel}/${name}`;
-                    const st = await fs.stat(abs).catch(() => null);
-                    if (st?.isDirectory()) await collect(abs, child);
-                    else if (st?.isFile() && DOC_RE.test(name)) linked.push(child);
-                }
+        }
+
+        if (req.method === 'POST' && pathname === 'folderrelink') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { dir?: string; source?: string };
+            const rel = typeof body.dir === 'string' ? safeRel(body.dir) : null;
+            if (!rel || typeof body.source !== 'string' || !path.isAbsolute(body.source)) {
+                return fail(res, 400, '需要 {dir: links/名称, source: 文件夹绝对路径}');
             }
-            await collect(destDir, prefix);
-            invalidate(root);
-            send(res, 200, { dir: `links/${path.basename(srcDir)}`, count: linked.length, files: linked });
-            return true;
+            try {
+                const srcDir = await resolveOutsideDir(root, body.source);
+                const files = await relinkFolderDir(root, rel, srcDir);
+                send(res, 200, { dir: rel, count: files.length, files });
+                return true;
+            } catch (err) {
+                return fail(res, 400, err instanceof Error ? err.message : String(err));
+            }
         }
 
         if (req.method === 'POST' && pathname === 'link') {

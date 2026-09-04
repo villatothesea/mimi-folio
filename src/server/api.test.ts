@@ -252,6 +252,42 @@ describe('库外链入（单元 10）', () => {
             '不得把 .folio-origin 写进源文件夹',
         );
     });
+
+    it('更换外链文件夹路径后 list 换成新源，写回新真源、不拷贝', async () => {
+        const srcA = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-relink-a-'));
+        const srcB = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-relink-b-'));
+        await fs.writeFile(path.join(srcA, '甲.md'), '# 甲\n', 'utf8');
+        await fs.writeFile(path.join(srcB, '乙.md'), '# 乙\n真源B\n', 'utf8');
+        const linked = await fetch(`${base}/folio/v1/folderlink`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: srcA }),
+        });
+        assert.equal(linked.status, 200, await linked.text());
+        const dir = `links/${path.basename(srcA)}`;
+        const res = await fetch(`${base}/folio/v1/folderrelink`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ dir, source: srcB }),
+        });
+        assert.equal(res.status, 200, await res.text());
+        const list = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string }[];
+        assert.ok(list.some((f) => f.path === `${dir}/乙.md`), '应列出新源里的 md');
+        assert.ok(!list.some((f) => f.path === `${dir}/甲.md`), '旧源文件不应再出现');
+        const put = await fetch(`${base}/folio/v1/doc`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: `${dir}/乙.md`, markdown: '# 乙\n改过B\n' }),
+        });
+        assert.equal(put.status, 204);
+        assert.equal(await fs.readFile(path.join(srcB, '乙.md'), 'utf8'), '# 乙\n改过B\n');
+        assert.equal(await fs.readFile(path.join(srcA, '甲.md'), 'utf8'), '# 甲\n');
+        assert.equal(
+            await fs.access(path.join(srcB, '.folio-origin')).then(() => true, () => false),
+            false,
+            '不得把 .folio-origin 写进新源',
+        );
+    });
 });
 
 describe('全文搜索（单元 13/验收批）', () => {

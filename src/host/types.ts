@@ -67,6 +67,12 @@ export interface FolioHost {
      * 读写穿透回原文件；**失败抛错，绝不拷贝正文**。合入后 daemon 同名实现。
      */
     linkOutside?(absSource: string): Promise<FolioPath>;
+    /** 系统选文件夹窗；取消回 null。合入后由宿主原生对话框提供。 */
+    pickFolder?(): Promise<string | null>;
+    /** 文件夹整体链入 vault/links/<原名>/，不拷贝。 */
+    linkFolder?(absSource: string): Promise<{ dir: FolioPath; count: number }>;
+    /** 更换顶层外链文件夹的源路径，vault 槽位名不变。 */
+    relinkFolder?(dir: FolioPath, absSource: string): Promise<{ dir: FolioPath; count: number }>;
     /** 文档管理（验收清单 14）；合入后 daemon 同名实现 */
     moveDoc?(from: FolioPath, to: FolioPath): Promise<FolioPath>;
     copyDoc?(from: FolioPath, to: FolioPath): Promise<FolioPath>;

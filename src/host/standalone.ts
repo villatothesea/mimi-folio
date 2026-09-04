@@ -85,6 +85,31 @@ export class StandaloneHost implements FolioHost {
         return out.path;
     }
 
+    async pickFolder(): Promise<string | null> {
+        const resp = await fetch(this.url('/folio/v1/pick-folder'), { method: 'POST' });
+        if (resp.status === 204) return null;
+        const out = await this.json<{ path: string }>(resp);
+        return out.path;
+    }
+
+    async linkFolder(absSource: string): Promise<{ dir: FolioPath; count: number }> {
+        const resp = await fetch(this.url('/folio/v1/folderlink'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: absSource }),
+        });
+        return this.json<{ dir: FolioPath; count: number }>(resp);
+    }
+
+    async relinkFolder(dir: FolioPath, absSource: string): Promise<{ dir: FolioPath; count: number }> {
+        const resp = await fetch(this.url('/folio/v1/folderrelink'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ dir, source: absSource }),
+        });
+        return this.json<{ dir: FolioPath; count: number }>(resp);
+    }
+
     async postDocOp(op: 'move' | 'copy' | 'delete', from: FolioPath, to?: FolioPath): Promise<FolioPath | void> {
         const resp = await fetch(this.url(`/folio/v1/${op}`), {
             method: 'POST',
