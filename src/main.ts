@@ -116,13 +116,15 @@ function renderProps(): void {
     }
     propsEl.classList.remove('collapsed');
 
-    // 标题栏（bug6.4）：文档第一行，无层级、不属于任何格式
+    // 标题行（恢复原样：属性行之一，非大标题）
     const { frontmatter } = splitFrontmatter(editor.getMarkdown());
     const titleRow = document.createElement('div');
-    titleRow.className = 'doc-title-row';
+    titleRow.className = 'prop-row doc-title-row';
+    const titleKey = document.createElement('span');
+    titleKey.className = 'prop-key';
+    titleKey.textContent = '标题';
     const titleInput = document.createElement('input');
     titleInput.className = 'doc-title-input';
-    titleInput.placeholder = '无标题';
     const titleMatch = frontmatter.match(/^title\s*:\s*(.*)$/m);
     titleInput.value = titleMatch?.[1]?.trim() ?? allFiles.find((f) => f.path === openFile)?.title ?? '';
     titleInput.addEventListener('change', () => {
@@ -132,7 +134,7 @@ function renderProps(): void {
         onEditorChange(ed.getMarkdown());
         void refreshList();
     });
-    titleRow.append(titleInput);
+    titleRow.append(titleKey, titleInput);
     propsEl.append(titleRow);
 
     const row = (key: string, value: Node): void => {
