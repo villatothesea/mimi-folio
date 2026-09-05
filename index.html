@@ -32,6 +32,15 @@
             </span>
           </header>
           <nav id="files" aria-label="文件列表"></nav>
+          <nav id="memo-rail" aria-label="速记筛选">
+            <label class="memo-search">
+              <span class="memo-search-ic"></span>
+              <input id="memo-search" type="search" placeholder="搜索速记…" autocomplete="off" />
+            </label>
+            <div id="memo-cal"></div>
+            <div id="memo-derived"></div>
+            <div id="memo-tags"></div>
+          </nav>
           <footer class="zone-bar" id="bar-left">
             <button id="collapse-left" type="button" class="icon-btn" data-tip="收起侧栏"></button>
             <span id="stat-count" class="zone-text"></span>
@@ -70,6 +79,14 @@
               <button id="replace-all" type="button">全部</button>
               <button id="find-close" type="button" title="关闭（Esc）">×</button>
             </span>
+          </section>
+          <section id="memo-view" aria-label="速记流">
+            <div id="memo-composer-card">
+              <textarea id="memo-composer" placeholder="记下一条…" rows="3"></textarea>
+              <div id="memo-composer-bar"></div>
+            </div>
+            <div id="memo-active"></div>
+            <div id="memo-stream"></div>
           </section>
           <div id="doc-scroll">
             <div id="props-fold-slot" hidden>

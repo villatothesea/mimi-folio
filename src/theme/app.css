@@ -2097,3 +2097,349 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
 .tree-row:not(.folder-row) .row-main {
     padding-left: var(--tree-step);
 }
+
+/* ===== 速记看法（14–20）：只点速记 pill 时占中区；视觉只走 token ===== */
+#memo-rail,
+#memo-view {
+    display: none;
+}
+
+#app.memo-mode #files {
+    display: none;
+}
+
+#app.memo-mode #memo-rail {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--folio-space-2);
+    gap: var(--folio-space-3);
+}
+
+#app.memo-mode #doc-scroll,
+#app.memo-mode #toolbar,
+#app.memo-mode #favorite-toggle,
+#app.memo-mode #toc-host,
+#app.memo-mode #findbar-wrap {
+    display: none;
+}
+
+#app.memo-mode #memo-view {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    width: 100%;
+    max-width: var(--folio-measure);
+    margin: 0 auto;
+    padding: var(--folio-space-3);
+    gap: var(--folio-space-3);
+    box-sizing: border-box;
+}
+
+.memo-search {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-2);
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius-card);
+    padding: 0 var(--folio-space-2);
+    background: var(--folio-bg);
+    color: var(--folio-fg-muted);
+}
+
+.memo-search .folio-icon {
+    flex: none;
+}
+
+.memo-search input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    height: var(--folio-control-h);
+    outline: none;
+}
+
+.memo-cal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--folio-space-2);
+}
+
+.memo-cal-title {
+    font-size: var(--folio-font-size-sm);
+    font-weight: var(--folio-title-weight);
+}
+
+.memo-cal-week,
+.memo-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+}
+
+.memo-cal-week span {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+    padding: var(--folio-space-1) 0;
+}
+
+.memo-cal-day {
+    position: relative;
+    width: var(--folio-cal-cell);
+    height: var(--folio-cal-cell);
+    margin: 0 auto;
+    border: 0;
+    background: transparent;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-xs);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.memo-cal-day:not(.in-month) {
+    color: var(--folio-fg-muted);
+    opacity: 0.45;
+}
+
+.memo-cal-day.is-today:not([aria-pressed='true']) {
+    box-shadow: inset 0 0 0 1px var(--folio-fg);
+    border-radius: 50%;
+}
+
+.memo-cal-day[aria-pressed='true'] {
+    background: var(--folio-fg);
+    color: var(--folio-bg);
+    border-radius: 50%;
+}
+
+.memo-cal-day.has-memos::after {
+    content: '';
+    position: absolute;
+    bottom: 1px;
+    left: 50%;
+    width: var(--folio-cal-dot);
+    height: var(--folio-cal-dot);
+    margin-left: calc(var(--folio-cal-dot) / -2);
+    border-radius: 50%;
+    background: var(--folio-fg-muted);
+}
+
+.memo-cal-day[aria-pressed='true'].has-memos::after {
+    background: var(--folio-bg);
+}
+
+.memo-derived,
+.memo-tag-list,
+#memo-active {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--folio-space-1);
+}
+
+.memo-chip {
+    border: 1px solid var(--folio-border);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-xs);
+    padding: 0 var(--folio-space-2);
+    line-height: 1.7;
+    border-radius: var(--folio-radius-card);
+    cursor: pointer;
+}
+
+.memo-chip[aria-pressed='true'] {
+    background: var(--folio-fg);
+    color: var(--folio-bg);
+    border-color: var(--folio-fg);
+}
+
+#memo-composer-card,
+.memo-flow-card {
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius-card);
+    background: var(--folio-bg);
+    padding: var(--folio-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--folio-space-2);
+    box-shadow: var(--folio-shadow);
+}
+
+#memo-composer {
+    width: 100%;
+    min-height: var(--folio-composer-min-h);
+    border: 0;
+    resize: vertical;
+    background: transparent;
+    color: var(--folio-fg);
+    font: inherit;
+    outline: none;
+}
+
+#memo-composer-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-1);
+}
+
+.memo-composer-hint {
+    margin-left: auto;
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+}
+
+.memo-save {
+    border: 0;
+    background: var(--folio-primary);
+    color: var(--folio-primary-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    height: var(--folio-control-h);
+    padding: 0 var(--folio-space-3);
+    border-radius: var(--folio-radius-card);
+    cursor: pointer;
+}
+
+.memo-flow-head {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-2);
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+}
+
+.memo-flow-time {
+    flex: 1;
+}
+
+.memo-flow-card .memo-body {
+    font-size: var(--folio-font-size-sm);
+    line-height: var(--folio-line-height);
+}
+
+.memo-flow-card .memo-body p {
+    margin: 0 0 var(--folio-space-2);
+}
+
+.memo-flow-card .memo-body p:last-child {
+    margin-bottom: 0;
+}
+
+.memo-flow-card .memo-pre {
+    margin: 0;
+    padding: var(--folio-space-2);
+    background: var(--folio-bg-alt);
+    overflow: auto;
+    font-family: var(--folio-font-mono);
+    font-size: var(--folio-font-size-xs);
+}
+
+.memo-wiki,
+.memo-hash {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--folio-fg);
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.memo-task {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--folio-space-2);
+    font-size: var(--folio-font-size-sm);
+}
+
+.memo-img {
+    max-width: 100%;
+    max-height: var(--folio-memo-img-max);
+    display: block;
+}
+
+.memo-edit {
+    width: 100%;
+    min-height: var(--folio-composer-min-h);
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius-card);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-2);
+    box-sizing: border-box;
+    resize: vertical;
+}
+
+.memo-rel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--folio-space-1);
+    padding-top: var(--folio-space-2);
+    border-top: 1px solid var(--folio-border);
+}
+
+.memo-rel-label {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+}
+
+.memo-mini {
+    display: flex;
+    flex-direction: column;
+    gap: var(--folio-space-1);
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius-card);
+    background: var(--folio-bg-alt);
+    color: var(--folio-fg);
+    font: inherit;
+    padding: var(--folio-space-2);
+    cursor: pointer;
+}
+
+.memo-mini-title {
+    font-size: var(--folio-font-size-sm);
+    font-weight: var(--folio-title-weight);
+}
+
+.memo-mini-snip {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+}
+
+.memo-empty {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-4);
+    text-align: center;
+}
+
+#memo-tags .tag-chip,
+#memo-active .tag-chip {
+    cursor: pointer;
+}
+
+#memo-stream {
+    display: flex;
+    flex-direction: column;
+    gap: var(--folio-space-3);
+}
+

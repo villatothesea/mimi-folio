@@ -50,6 +50,10 @@
     --folio-radius: 0px;
     /* 速记卡片圆角；出厂略圆以区分列表行。改脸只动这个值。 */
     --folio-radius-card: 8px;
+    --folio-cal-cell: 28px;
+    --folio-cal-dot: 4px;
+    --folio-composer-min-h: 5.5rem;
+    --folio-memo-img-max: 240px;
     /* 文档标题栏：与正文字号同级、略加重——不做大号粗体。 */
     --folio-title-size: var(--folio-font-size);
     --folio-title-weight: 600;
