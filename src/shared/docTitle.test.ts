@@ -7,6 +7,7 @@ import {
     fileStem,
     firstHeading,
     newNoteMarkdown,
+    renamedPath,
     setDisplayTitle,
     setFirstHeading,
     yamlTitle,
@@ -15,6 +16,14 @@ import {
 test('fileName 是路径最后一段，含扩展名，不是标题', () => {
     assert.equal(fileName('links/docs/计划.md'), '计划.md');
     assert.equal(fileStem('links/docs/计划.md'), '计划');
+});
+
+test('renamedPath 只改文件名、保留扩展名，再写 .md 不会叠', () => {
+    assert.equal(renamedPath('notes/a.md', '新名'), 'notes/新名.md');
+    assert.equal(renamedPath('notes/a.md', '新名.md'), 'notes/新名.md');
+    assert.equal(renamedPath('notes/a.md', 'a'), null);
+    assert.equal(renamedPath('notes/a.md', '  '), null);
+    assert.equal(renamedPath('links/x.html', '改'), 'links/改.html');
 });
 
 test('yamlTitle 读 frontmatter title，忽略正文 H1', () => {

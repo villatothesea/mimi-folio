@@ -4,11 +4,12 @@ import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
-import { renderMemoTimeline, renderSidebar, setSiblingFoldersCollapsed, siblingFolderFoldState } from './ui/sidebar.ts';
+import { renderSidebar, setSiblingFoldersCollapsed, siblingFolderFoldState } from './ui/sidebar.ts';
+import { focusComposer, isMemoBusy, paintMemoView } from './ui/memoView.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
-import { displayTitle, fileName, newNoteMarkdown, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
+import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
@@ -555,20 +556,59 @@ propsFoldBtn.addEventListener('click', () => {
 let lastListSig = '';
 let lastShown: FolioListItem[] = [];
 
-function listSignature(files: { path: string; title: string; favorite?: boolean }[]): string {
+function listSignature(files: { path: string; title: string; favorite?: boolean; mtimeMs?: number; tags?: string[] }[]): string {
     return `${[...activeFilters].sort().join(',')}|${selectedDir ?? ''}|${openFile ?? ''}|`
-        + files.map((f) => `${f.path}\0${f.title}\0${f.favorite ? 1 : 0}`).join('\n');
+        + files.map((f) => `${f.path}\0${f.title}\0${f.favorite ? 1 : 0}\0${f.mtimeMs ?? 0}\0${(f.tags ?? []).join(',')}`).join('\n');
+}
+
+function isMemoView(): boolean {
+    return activeFilters.size === 1 && activeFilters.has('memos');
+}
+
+async function openMemoInNote(path: string): Promise<void> {
+    activeFilters = new Set();
+    document.querySelector<HTMLElement>('#app')?.classList.remove('memo-mode');
+    await open(path);
+    await refreshList();
+}
+
+async function enterMemos(): Promise<void> {
+    activeFilters = new Set(['memos']);
+    await refreshList();
+    focusComposer();
+}
+
+async function syncMemoMode(): Promise<void> {
+    const root = document.querySelector<HTMLElement>('#app')!;
+    if (isMemoView()) {
+        if (!root.classList.contains('memo-mode')) {
+            if (openFile && currentEditor()) await saveNow(currentEditor()!.getMarkdown());
+            openFile = null;
+            destroyEditor();
+            hideDocHead();
+            setTocOpen(false);
+            root.classList.add('memo-mode');
+            breadcrumbEl.textContent = '速记';
+            lastLinks = { outgoing: [], backlinks: [] };
+            renderCenterBar();
+        }
+        await paintMemoView({
+            host,
+            files: allFiles,
+            say: saySave,
+            confirm: folioConfirm,
+            openInNote: (path) => void openMemoInNote(path),
+            refresh: refreshList,
+        });
+    } else if (root.classList.contains('memo-mode')) {
+        root.classList.remove('memo-mode');
+        if (!openFile) breadcrumbEl.textContent = '未打开';
+    }
 }
 
 function paintNav(files: FolioListItem[] = lastShown): void {
     lastShown = files;
-    if (activeFilters.has('memos') && activeFilters.size === 1) {
-        renderMemoTimeline(nav, files, {
-            activePath: openFile,
-            onOpen: (p) => void open(p),
-        });
-        return;
-    }
+    if (isMemoView()) return;
     renderSidebar(nav, files, {
         activePath: selectedDir ? null : openFile,
         onOpen: (p) => void open(p),
@@ -604,7 +644,7 @@ async function refreshList(): Promise<void> {
         allFiles = files;
         const sig = listSignature(files);
         if (sig === lastListSig) return;
-        if (nav.querySelector('input:focus, textarea:focus') || titleEl.querySelector('input:focus')) return;
+        if (nav.querySelector('input:focus, textarea:focus') || titleEl.querySelector('input:focus') || isMemoBusy()) return;
         lastListSig = sig;
         let shown = files;
         for (const key of activeFilters) {
@@ -616,9 +656,12 @@ async function refreshList(): Promise<void> {
         renderPills();
         renderStatusbar();
         paintNav(shown);
-        renderTitle();
-        renderProps();
-        syncFavoriteBtn();
+        await syncMemoMode();
+        if (!isMemoView()) {
+            renderTitle();
+            renderProps();
+            syncFavoriteBtn();
+        }
     } catch (err) {
         saySave(`列目录失败：${(err as Error).message}`);
     }
@@ -664,16 +707,9 @@ function stamp(): string {
         .replace(/[\s:]/g, '-');
 }
 
-/** 新建速记：memos/<日期时间>.md，frontmatter 留好 tags（单元 8）。 */
+/** 新建速记：进入看法，落盘走 composer（Ctrl+Enter → memos/<时间戳>.md）。 */
 async function newMemo(): Promise<void> {
-    const path = `memos/${stamp()}.md`;
-    try {
-        await host.write(path, '---\ntags: []\n---\n\n');
-        await open(path);
-        void refreshList();
-    } catch (err) {
-        saySave(`新建失败：${(err as Error).message}`);
-    }
+    await enterMemos();
 }
 
 /** 新建动作（验收清单 7/10.4）：统一收进标题栏加号下拉。 */
@@ -696,19 +732,6 @@ async function newFolder(): Promise<void> {
         void refreshList();
     } catch (err) {
         saySave(`建文件夹失败：${(err as Error).message}`);
-    }
-}
-
-/** 今日速记（米米建议 7）：memos/<今日>.md，有则续写，无则建。 */
-async function todayMemo(): Promise<void> {
-    const day = new Date().toLocaleDateString('sv');
-    const path = `memos/${day}.md`;
-    try {
-        if (!allFiles.some((f) => f.path === path)) await host.write(path, `---\ntags: [速记]\n---\n\n# ${day}\n`);
-        await open(path);
-        void refreshList();
-    } catch (err) {
-        saySave(`打开今日速记失败：${(err as Error).message}`);
     }
 }
 
@@ -792,7 +815,6 @@ function openPlusMenu(anchor: HTMLElement): void {
     const items: Array<[string, string, () => void]> = [
         ['file-plus', '新建笔记', () => void newNote()],
         ['bolt', '新建速记', () => void newMemo()],
-        ['calendar', '今日速记', () => void todayMemo()],
         ['folder-plus', '新建文件夹', () => void newFolder()],
         ['external-link', '链入外部 md（路径）', () => void linkOutside()],
         ['file-export', '导入 md（文件窗）', () => void importMdByPicker()],
@@ -960,7 +982,7 @@ nav.addEventListener('contextmenu', (event) => {
     };
 
     showContextMenu(event.clientX, event.clientY, [
-        { ic: 'pencil', label: '改标题', run: () => void renameInline(button, path) },
+        { ic: 'pencil', label: '重命名', run: () => void renameInline(button, path) },
         { ic: 'arrow-move-up', label: '移动到…', run: () => void (async () => {
             const to = await targetOf('移动');
             if (to && host.moveDoc) await withDoc('move', () => host.moveDoc!(path, to), true);
@@ -1094,13 +1116,13 @@ function folderContextMenu(dir: string, x: number, y: number): void {
     ]);
 }
 
-/** 改标题：只写 YAML title:。不改操作系统文件名、不改正文 H1。 */
+/** 重命名：只改操作系统文件名，扩展名原样保留。不写 YAML title:、不改正文 H1。 */
 async function renameInline(button: HTMLButtonElement, path: string): Promise<void> {
     const nameSpan = button.querySelector<HTMLElement>('.file-name');
-    if (!nameSpan || button.querySelector('.rename-input')) return;
+    if (!nameSpan || button.querySelector('.rename-input') || !host.moveDoc) return;
     const input = document.createElement('input');
     input.className = 'rename-input';
-    input.value = nameSpan.textContent ?? '';
+    input.value = fileNameStem(path);
     // 输入框在 <button> 里：必须拦住点击，否则会当成打开文档，焦点被带走。
     const stay = (event: Event) => event.stopPropagation();
     input.addEventListener('mousedown', stay);
@@ -1125,24 +1147,18 @@ async function renameInline(button: HTMLButtonElement, path: string): Promise<vo
         const value = input.value.trim();
         if (input.isConnected) input.replaceWith(nameSpan);
         if (!commit || !value) return;
+        const dest = renamedPath(path, value);
+        if (!dest) return;
         try {
-            const doc = await host.read(path);
-            const next = setDisplayTitle(doc.markdown, value);
-            await host.write(path, next, doc.mtimeMs);
-            const ed = currentEditor();
-            if (openFile === path && ed) {
-                ed.replaceContent(next);
-                lastSaved = next;
-                const fresh = await host.read(path).catch(() => null);
-                docMtime = fresh?.mtimeMs ?? docMtime;
-                renderTitle();
-                renderProps();
-                renderBreadcrumb(next);
+            const to = await host.moveDoc!(path, dest);
+            if (openFile === path) {
+                openFile = to;
+                renderBreadcrumb();
                 paintToc();
             }
             void refreshList();
         } catch (err) {
-            saySave(`改标题失败：${(err as Error).message}`);
+            saySave(`重命名失败：${(err as Error).message}`);
         }
     };
     input.addEventListener('keydown', (e) => {
@@ -1298,7 +1314,7 @@ window.addEventListener('keydown', (event) => {
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
     if (event.code === 'KeyM') {
         event.preventDefault();
-        void todayMemo();
+        void enterMemos();
         return;
     }
     const level = /^Digit([1-6])$/.exec(event.code)?.[1];
