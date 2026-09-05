@@ -500,17 +500,21 @@ async function loadVault(root: string): Promise<VaultCache> {
             if (!isMdFile && !isMdLink) continue;
             const stat = await fs.stat(abs).catch(() => null);
             if (!stat?.isFile()) continue;
-            const markdown = await fs.readFile(abs, 'utf8');
+            const markdown = (await fs.readFile(abs, 'utf8')).replace(/\r\n?/g, '\n');
             contents.set(rel, markdown);
             mtimes.set(rel, stat.mtimeMs);
             const { frontmatter, tags } = splitFrontmatter(markdown);
+            const kind = kindOf(rel);
             list.push({
                 path: rel,
                 title: titleOf(rel, markdown),
                 tags,
-                kind: kindOf(rel),
+                kind,
                 linked: (rel === 'links' || rel.startsWith('links/')) || undefined,
                 favorite: /^favorite\s*:\s*true/im.test(frontmatter) || undefined,
+                mtimeMs: stat.mtimeMs,
+                ctimeMs: stat.birthtimeMs,
+                markdown: kind === 'memo' ? markdown : undefined,
             });
         }
     }

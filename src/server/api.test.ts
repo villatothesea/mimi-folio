@@ -48,13 +48,23 @@ after(() => {
 describe('GET /folio/v1/*', () => {
     it('list 返回全部 md、标题、tags 与 kind', async () => {
         const res = await fetch(`${base}/folio/v1/list`);
-        const files = (await res.json()) as { path: string; title: string; tags: string[]; kind: string }[];
+        const files = (await res.json()) as {
+            path: string;
+            title: string;
+            tags: string[];
+            kind: string;
+            mtimeMs?: number;
+            markdown?: string;
+        }[];
         assert.equal(files.length, 5);
         const tagged = files.find((f) => f.path === 'notes/tagged.md')!;
         assert.deepEqual(tagged.tags, ['项目', '长文']);
         assert.equal(tagged.kind, 'note');
         const memo = files.find((f) => f.path === 'memos/m1.md')!;
         assert.equal(memo.kind, 'memo');
+        assert.equal(typeof memo.mtimeMs, 'number');
+        assert.ok(memo.markdown?.includes('想到 [[tagged]]'));
+        assert.equal(files.find((f) => f.path === 'notes/a.md')!.markdown, undefined);
         assert.equal(files.find((f) => f.path === 'notes/a.md')!.kind, 'note');
     });
 

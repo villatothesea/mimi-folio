@@ -17,7 +17,7 @@ export type FolioDoc = {
 
 export type FolioListItem = {
     path: FolioPath;
-    /** 人看的标题 = 正文首个标题；没有标题才露出操作系统文件名（含 .md）。 */
+    /** YAML `title:`；没有则文件名。搜索/底栏用。左栏清单走 path 文件名（含扩展名）。 */
     title: string;
     /** frontmatter tags:（单元 6），无 frontmatter 时为空 */
     tags?: string[];
@@ -29,6 +29,12 @@ export type FolioListItem = {
     favorite?: boolean;
     /** 搜索命中时的上下文行（单元 13，仅 search 返回） */
     snippet?: string;
+    /** 修改时间（ms）；速记流相对时间用 */
+    mtimeMs?: number;
+    /** 创建时间（birthtime，ms） */
+    ctimeMs?: number;
+    /** 速记看法卡片流用的全文；list 只给 kind=memo 带上，避免把长文塞进清单 */
+    markdown?: string;
 };
 
 /** list 的筛选（单元 6）。合入后 daemon 按同样语义扫资产层。 */
