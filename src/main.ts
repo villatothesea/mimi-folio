@@ -86,6 +86,11 @@ function setTocOpen(open: boolean): void {
     tocFab.setAttribute('aria-expanded', String(open));
 }
 
+function syncTocGutter(): void {
+    const gutter = Math.max(0, docScroll.offsetWidth - docScroll.clientWidth);
+    tocHost.style.setProperty('--folio-toc-scrollbar', `${gutter}px`);
+}
+
 /**
  * 文档头三段式：标题栏（非 md）→ frontmatter 属性 → 正文。
  * 标题栏 = 正文第一个标题；改它只改 H1，不写 title:、不改操作系统里的文件名。
@@ -445,6 +450,7 @@ async function open(path: string): Promise<void> {
         renderStatusbar(doc.markdown);
         renderToc(tocEl, currentEditor());
         restoreScroll(doc.path);
+        requestAnimationFrame(syncTocGutter);
         // bug3：打开即高亮清单当前项（列表渲染早于 openFile 赋值，这里直接补）
         nav.querySelectorAll<HTMLButtonElement>('button[data-path]').forEach((b) => {
             if (b.dataset.path === openFile) b.setAttribute('aria-current', 'true');
@@ -579,8 +585,12 @@ async function refreshList(): Promise<void> {
                 selectedDir,
                 onDirSelect: (dir) => {
                     selectedDir = dir;
+                    nav.querySelectorAll<HTMLElement>('.row-main[data-dir]').forEach((b) => {
+                        if (b.dataset.dir === dir) b.setAttribute('aria-current', 'true');
+                        else b.removeAttribute('aria-current');
+                    });
                     nav.querySelectorAll('.row-main[data-path][aria-current]').forEach((b) => b.removeAttribute('aria-current'));
-                    void refreshList();
+                    lastListSig = listSignature(allFiles);
                 },
                 onFolderContext: (dir, x, y) => folderContextMenu(dir, x, y),
                 onMove: (from, toDir) => void (async () => {
@@ -1228,6 +1238,11 @@ expandLeft.addEventListener('click', () => {
 
 tocFab.innerHTML = icon('menu-deep');
 renderToc(tocEl, currentEditor());
+const tocGutterObs = new ResizeObserver(() => syncTocGutter());
+tocGutterObs.observe(docScroll);
+tocGutterObs.observe(wrap);
+window.addEventListener('resize', syncTocGutter);
+syncTocGutter();
 tocFab.addEventListener('click', (event) => {
     event.stopPropagation();
     const next = tocPanel.hidden === true;

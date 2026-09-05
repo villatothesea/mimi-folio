@@ -25,8 +25,9 @@
     --folio-toc-fab-icon: 12px;
     --folio-toc-fab-radius: 50%;
     --folio-toc-fab-border: 1px solid var(--folio-fg);
-    --folio-toc-pop-w: 200px;
-    --folio-toc-pop-h: 600px;
+    --folio-toc-fab-end: 5px;
+    --folio-toc-pop-w: 220px;
+    --folio-toc-pop-h: 500px;
     /* ==mark== 高亮底色：米米淡米色（bug4 4.4，可在工具栏换色） */
     --folio-highlight: #f2e3c8;
     --folio-primary: #2a2a2a;

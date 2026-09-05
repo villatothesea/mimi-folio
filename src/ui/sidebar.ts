@@ -47,13 +47,40 @@ function buildTree(files: FolioListItem[]): DirNode {
 const collapsedDirs = new Set<string>();
 
 /**
- * 清单 = 文件夹树（bug4 2.1-2.6）：文件夹图标点击折叠/展开、标题点击只选中；
+ * 清单 = 文件夹树（bug4 2.1-2.6）：箭头/文件夹图标折叠，点名称只选中；
  * 子级有 1px 层级引导线；计数右对齐；星标行内显示，不设星标组；无横向滚动。
  */
 export function renderSidebar(nav: HTMLElement, files: FolioListItem[], opts: SidebarOptions): void {
     nav.replaceChildren();
     renderTree(nav, buildTree(files), 0, opts);
     alignGuideLines(nav);
+}
+
+/** 只改这一枝 DOM，不走列目录接口。 */
+function toggleFolder(row: HTMLElement, dir: DirNode, depth: number, opts: SidebarOptions): void {
+    const collapse = !collapsedDirs.has(dir.dir);
+    if (collapse) {
+        collapsedDirs.add(dir.dir);
+        const next = row.nextElementSibling;
+        if (next?.classList.contains('tree-children')) next.remove();
+    } else {
+        collapsedDirs.delete(dir.dir);
+        const children = document.createElement('div');
+        children.className = 'tree-children';
+        renderTree(children, dir, depth + 1, opts);
+        row.after(children);
+    }
+    const collapsed = collapsedDirs.has(dir.dir);
+    const toggle = row.querySelector<HTMLElement>('.folder-toggle');
+    if (toggle) {
+        toggle.innerHTML = icon(collapsed ? 'chevron-right' : 'chevron-down');
+        toggle.title = collapsed ? '展开' : '折叠';
+        toggle.setAttribute('aria-expanded', String(!collapsed));
+    }
+    const folderIcon = row.querySelector<HTMLElement>('.file-icon');
+    if (folderIcon) folderIcon.title = collapsed ? '展开' : '折叠';
+    const nav = row.closest('nav');
+    if (nav instanceof HTMLElement) alignGuideLines(nav);
 }
 
 /** 渲染后对位（清单1 补充 2/3）：竖线钉到折叠三角中心；文件图标对齐同级文件夹图标。 */
@@ -94,23 +121,38 @@ function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTM
     row.className = 'tree-row folder-row';
     indentRow(row, depth);
 
+    const collapsed = collapsedDirs.has(dir.dir);
     const toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.className = 'icon-btn folder-toggle';
-    toggle.innerHTML = icon(collapsedDirs.has(dir.dir) ? 'chevron-right' : 'chevron-down');
-    toggle.title = collapsedDirs.has(dir.dir) ? '展开' : '折叠';
+    toggle.innerHTML = icon(collapsed ? 'chevron-right' : 'chevron-down');
+    toggle.title = collapsed ? '展开' : '折叠';
+    toggle.setAttribute('aria-expanded', String(!collapsed));
     toggle.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (collapsedDirs.has(dir.dir)) collapsedDirs.delete(dir.dir);
-        else collapsedDirs.add(dir.dir);
-        opts.onDirSelect?.(opts.selectedDir ?? null); // 触发重渲染
+        toggleFolder(row, dir, depth, opts);
     });
 
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'row-main';
     const count = dir.files.length + [...dir.children.values()].reduce((sum, ch) => sum + ch.files.length, 0);
-    button.innerHTML = `${icon('folders')}<span class="file-name">${dir.name}</span><span class="folder-count">${count}</span>`;
+    const ic = document.createElement('span');
+    ic.className = 'file-icon';
+    ic.innerHTML = icon('folders');
+    ic.title = collapsed ? '展开' : '折叠';
+    ic.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFolder(row, dir, depth, opts);
+    });
+    const name = document.createElement('span');
+    name.className = 'file-name';
+    name.textContent = dir.name;
+    const tally = document.createElement('span');
+    tally.className = 'folder-count';
+    tally.textContent = String(count);
+    button.append(ic, name, tally);
     button.title = dir.dir;
     button.dataset.dir = dir.dir;
     if (dir.dir === opts.selectedDir) button.setAttribute('aria-current', 'true');
