@@ -3,6 +3,7 @@
  * 不另做分组表、不做文件夹树（docs/计划.md 单元 5 纪律）。
  */
 import type { FolioListItem } from '../host/types.ts';
+import { fileName } from '../shared/docTitle.ts';
 import { icon } from './icons';
 import { applyTagColor } from './tagColors';
 
@@ -232,7 +233,7 @@ function renderGroup(files: FolioListItem[], opts: SidebarOptions, _depth: numbe
         ic.innerHTML = fileIcon(file);
         const name = document.createElement('span');
         name.className = 'file-name';
-        name.textContent = file.title;
+        name.textContent = fileName(file.path);
         button.append(ic, name);
         // bug4 2.6：星标行内靠右，不设星标组
         if (file.favorite) {
@@ -322,7 +323,7 @@ export function renderMemoTimeline(
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'memo-open';
-        button.innerHTML = `<span class="file-icon">${fileIcon(file)}</span><span class="file-name">${file.title}</span>`;
+        button.innerHTML = `<span class="file-icon">${fileIcon(file)}</span><span class="file-name">${fileName(file.path)}</span>`;
         button.title = file.path;
         button.dataset.path = file.path;
         if (file.path === opts.activePath) button.setAttribute('aria-current', 'true');
