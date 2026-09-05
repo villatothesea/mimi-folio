@@ -51,14 +51,48 @@ export function setTags(markdown: string, tags: string[]): string {
     return setScalarEntries(markdown, tags.length ? `tags: [${tags.join(', ')}]` : null, /^tags\s*:/i, /^\s+-\s/);
 }
 
+/** 读一个标量键。没有该键返回 null；值为空字符串也返回 ''。 */
+export function getScalar(markdown: string, key: string): string | null {
+    if (!/^[A-Za-z_][\w-]*$/.test(key)) throw new Error(`键名非法：${key}`);
+    const { frontmatter } = splitFrontmatter(markdown);
+    if (!frontmatter) return null;
+    const m = frontmatter.match(new RegExp(`^${key}\\s*:\\s*(.*)$`, 'im'));
+    if (!m) return null;
+    const raw = m[1].trim();
+    return raw ? unquoteYaml(raw) : '';
+}
+
 /**
- * 写一个标量键（如 favorite: true）。value 为 null 时移除该键；
+ * 写一个标量键（如 favorite: true / title: 名）。value 为 null 时移除该键；
  * 没有键余下且不新增时，frontmatter 整段摘除。
  */
 export function setScalar(markdown: string, key: string, value: string | boolean | null): string {
     if (!/^[A-Za-z_][\w-]*$/.test(key)) throw new Error(`键名非法：${key}`);
-    const line = value === null ? null : `${key}: ${typeof value === 'boolean' ? String(value) : value}`;
+    const line = value === null ? null : `${key}: ${typeof value === 'boolean' ? String(value) : quoteYaml(value)}`;
     return setScalarEntries(markdown, line, new RegExp(`^${key}\\s*:`, 'i'));
+}
+
+function quoteYaml(value: string): string {
+    if (
+        value === ''
+        || /[:#{}[\],&*?|!<>=%@`'"\\\n]|^\s|\s$/.test(value)
+        || /^(true|false|null|yes|no|on|off)$/i.test(value)
+    ) {
+        return JSON.stringify(value);
+    }
+    return value;
+}
+
+function unquoteYaml(raw: string): string {
+    if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
+        try {
+            return JSON.parse(raw) as string;
+        } catch {
+            return raw.slice(1, -1);
+        }
+    }
+    if (raw.length >= 2 && raw.startsWith("'") && raw.endsWith("'")) return raw.slice(1, -1);
+    return raw;
 }
 
 function setScalarEntries(
@@ -81,7 +115,10 @@ function setScalarEntries(
         kept.push(line);
     }
     if (entry) kept.push(entry);
-    // splitFrontmatter 的正则已吞掉闭合 --- 后的一个换行，body 直接续上即可
-    if (kept.length === 0) return entry ? `---\n${entry}\n---\n${body}` : body;
-    return `---\n${kept.join('\n')}\n---\n${body}`;
+    // Muya 的 frontmatter 正则要求闭合 --- 后至少空一行（否则会把 title: + --- 当成 setext 二级标题）
+    if (kept.length === 0) return body;
+    const inner = kept.join('\n');
+    const trimmedBody = body.replace(/^\r?\n+/, '');
+    if (!trimmedBody) return `---\n${inner}\n---\n`;
+    return `---\n${inner}\n---\n\n${trimmedBody}`;
 }

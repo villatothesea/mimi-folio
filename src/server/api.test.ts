@@ -20,7 +20,7 @@ await fs.writeFile(
 );
 await fs.writeFile(
     path.join(vault, 'memos', 'm1.md'),
-    '---\ntags: [速记]\n---\n# 一条速记\n\n想到 [[tagged]]。\n',
+    '---\ntags: [速记]\ntitle: 一条速记\n---\n# 一条速记\n\n想到 [[tagged]]。\n',
     'utf8',
 );
 await fs.writeFile(path.join(vault, 'notes', 'orphan.md'), '链向 [[m1]]\n', 'utf8');
@@ -76,12 +76,13 @@ describe('GET /folio/v1/*', () => {
         assert.deepEqual(files.map((f) => f.path), ['memos/m1.md']);
     });
 
-    it('标题取自正文第一个标题，不用 YAML title、不用文件名', async () => {
+    it('标题取自 YAML title，不用正文 H1；没有 title: 则露出文件名', async () => {
         const res = await fetch(`${base}/folio/v1/list`);
         const files = (await res.json()) as { path: string; title: string }[];
         assert.equal(files.find((f) => f.path === 'memos/m1.md')!.title, '一条速记');
-        assert.equal(files.find((f) => f.path === 'notes/named.md')!.title, '正文H1');
+        assert.equal(files.find((f) => f.path === 'notes/named.md')!.title, 'YAML标题');
         assert.equal(files.find((f) => f.path === 'notes/orphan.md')!.title, 'orphan.md');
+        assert.equal(files.find((f) => f.path === 'notes/tagged.md')!.title, 'tagged.md');
     });
 
     it('read 出来的是 LF（muya 只认 LF）', async () => {

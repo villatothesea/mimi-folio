@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- 样式在 JS 之前进 head：避免等 Muya 包时 img 按 300×150 画出半截 logo -->
+    <style>
+      #app-icon { width: 18px; height: 18px; display: block; flex-shrink: 0; }
+    </style>
+    <link rel="stylesheet" href="/src/theme/tokens.css" />
+    <link rel="stylesheet" href="/src/theme/tokens-dark.css" />
+    <link rel="stylesheet" href="/src/theme/app.css" />
     <title>米素</title>
   </head>
   <body>
@@ -16,7 +23,7 @@
       <div id="main-row">
         <aside id="sidebar">
           <header id="sidebar-head">
-            <img id="app-icon" src="/favicon.svg" alt="米素" />
+            <img id="app-icon" src="/favicon.svg" alt="米素" width="18" height="18" />
             <span class="head-title">米素 Folio</span>
             <span class="head-actions">
               <button id="btn-settings" type="button" class="icon-btn" data-tip="设置"></button>

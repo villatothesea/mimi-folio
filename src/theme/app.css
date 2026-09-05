@@ -2029,7 +2029,13 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
     background: color-mix(in srgb, var(--tag-c) 22%, transparent);
 }
 
-/* TOC 层级字重（bug4 4.6） */
+/* 目录第一行是文档标题，不是 H1 */
+.toc-item.toc-doc-title {
+    font-weight: 600;
+    color: var(--folio-fg);
+}
+
+/* TOC 层级字重（bug4 4.6）：正文 H1 */
 .toc-item[data-lvl='1'] {
     font-weight: 600;
     color: var(--folio-fg);

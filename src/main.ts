@@ -1,6 +1,3 @@
-import './theme/app.css';
-import './theme/tokens.css';
-import './theme/tokens-dark.css';
 import { wordCount } from '@muyajs/core';
 import { applyTextScale, readTextScale } from './shared/textScale.ts';
 import { createHost } from './host/index.ts';
@@ -11,7 +8,7 @@ import { renderMemoTimeline, renderSidebar, setSiblingFoldersCollapsed, siblingF
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
-import { displayTitle, fileName, firstHeading, setFirstHeading } from './shared/docTitle.ts';
+import { displayTitle, fileName, newNoteMarkdown, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
@@ -92,8 +89,8 @@ function syncTocGutter(): void {
 }
 
 /**
- * 文档头三段式：标题栏（非 md）→ frontmatter 属性 → 正文。
- * 标题栏 = 正文第一个标题；改它只改 H1，不写 title:、不改操作系统里的文件名。
+ * 文档头：YAML title:（行业通用的文档标题）+ 属性。
+ * 只经标题栏和左栏右键改；不改正文 H1、不改操作系统文件名。
  */
 function renderTitle(): void {
     const editor = currentEditor();
@@ -109,15 +106,15 @@ function renderTitle(): void {
     titleRow.className = 'doc-title-row';
     const titleInput = document.createElement('input');
     titleInput.className = 'doc-title-input';
-    titleInput.placeholder = '无标题';
+    titleInput.placeholder = fileName(openFile);
     titleInput.setAttribute('aria-label', '文档标题');
-    titleInput.value = firstHeading(editor.getMarkdown()) ?? '';
+    titleInput.value = yamlTitle(editor.getMarkdown()) ?? '';
     titleInput.addEventListener('change', () => {
         const ed = currentEditor();
         if (!ed || !openFile) return;
         const next = titleInput.value.trim();
         if (!next) return;
-        ed.replaceContent(setFirstHeading(ed.getMarkdown(), next));
+        ed.replaceContent(setDisplayTitle(ed.getMarkdown(), next));
         onEditorChange(ed.getMarkdown());
         void refreshList();
     });
@@ -128,7 +125,7 @@ function renderTitle(): void {
 function syncTitleFromBody(markdown: string): void {
     const input = titleEl.querySelector<HTMLInputElement>('.doc-title-input');
     if (!input || document.activeElement === input) return;
-    const next = firstHeading(markdown) ?? '';
+    const next = yamlTitle(markdown) ?? '';
     if (input.value !== next) input.value = next;
 }
 
@@ -137,7 +134,7 @@ function hideDocHead(): void {
     titleEl.hidden = true;
     propsEl.hidden = true;
     propsFoldSlot.hidden = true;
-    setTocOpen(false);
+    paintToc();
 }
 
 /**
@@ -396,7 +393,7 @@ function renderCenterBar(): void {
 /** 点击未命中的 wikilink → 在 notes/ 建页并打开（Foam 规则）。 */
 async function createAndOpen(path: string): Promise<void> {
     const name = path.replace(/^notes\//, '').replace(/\.md$/i, '');
-    await host.write(path, `# ${name}\n`);
+    await host.write(path, newNoteMarkdown(name));
     await open(path);
     void refreshList();
 }
@@ -422,7 +419,13 @@ function renderStatusbar(markdown?: string): void {
         statWords.textContent = `${word} 字`;
     }
     clearTimeout(tocTimer);
-    tocTimer = setTimeout(() => renderToc(tocEl, currentEditor()), 300);
+    tocTimer = setTimeout(() => paintToc(), 300);
+}
+
+function paintToc(): void {
+    const md = currentEditor()?.getMarkdown();
+    const title = openFile && md !== undefined ? displayTitle(openFile, md) : undefined;
+    renderToc(tocEl, currentEditor(), title);
 }
 
 async function open(path: string): Promise<void> {
@@ -448,7 +451,7 @@ async function open(path: string): Promise<void> {
         renderTitle();
         renderProps();
         renderStatusbar(doc.markdown);
-        renderToc(tocEl, currentEditor());
+        paintToc();
         restoreScroll(doc.path);
         requestAnimationFrame(syncTocGutter);
         // bug3：打开即高亮清单当前项（列表渲染早于 openFile 赋值，这里直接补）
@@ -676,7 +679,7 @@ async function newMemo(): Promise<void> {
 /** 新建动作（验收清单 7/10.4）：统一收进标题栏加号下拉。 */
 async function newNote(): Promise<void> {
     const path = `notes/${stamp()}.md`;
-    await host.write(path, '# 未命名笔记\n');
+    await host.write(path, newNoteMarkdown());
     await open(path);
     void refreshList();
 }
@@ -687,7 +690,7 @@ async function newFolder(): Promise<void> {
     const safe = name.trim().replace(/[\\/:*?"<>|]/g, '_');
     const path = `notes/${safe}/未命名笔记.md`;
     try {
-        await host.write(path, '# 未命名笔记\n');
+        await host.write(path, newNoteMarkdown());
         selectedDir = `notes/${safe}`;
         await open(path);
         void refreshList();
@@ -1029,7 +1032,7 @@ function folderContextMenu(dir: string, x: number, y: number): void {
             const safe = name.replace(/[\/:*?"<>|]/g, '_');
             const p = `${dir}/${safe}/未命名笔记.md`;
             try {
-                await host.write(p, '# 未命名笔记\n');
+                await host.write(p, newNoteMarkdown());
                 selectedDir = `${dir}/${safe}`;
                 await open(p);
                 void refreshList();
@@ -1091,23 +1094,40 @@ function folderContextMenu(dir: string, x: number, y: number): void {
     ]);
 }
 
-/** 改显示标题（验收清单 5/14.1）：只改正文第一个标题。不改操作系统文件名。 */
+/** 改标题：只写 YAML title:。不改操作系统文件名、不改正文 H1。 */
 async function renameInline(button: HTMLButtonElement, path: string): Promise<void> {
     const nameSpan = button.querySelector<HTMLElement>('.file-name');
-    if (!nameSpan) return;
+    if (!nameSpan || button.querySelector('.rename-input')) return;
     const input = document.createElement('input');
     input.className = 'rename-input';
     input.value = nameSpan.textContent ?? '';
+    // 输入框在 <button> 里：必须拦住点击，否则会当成打开文档，焦点被带走。
+    const stay = (event: Event) => event.stopPropagation();
+    input.addEventListener('mousedown', stay);
+    input.addEventListener('pointerdown', stay);
+    input.addEventListener('click', stay);
+    const blockOpen = (event: Event) => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    };
+    button.addEventListener('click', blockOpen, true);
+    const wasDrag = button.draggable;
+    button.draggable = false;
     nameSpan.replaceWith(input);
     input.focus();
     input.select();
+    let finished = false;
     const done = async (commit: boolean) => {
+        if (finished) return;
+        finished = true;
+        button.removeEventListener('click', blockOpen, true);
+        button.draggable = wasDrag;
         const value = input.value.trim();
-        input.replaceWith(nameSpan);
+        if (input.isConnected) input.replaceWith(nameSpan);
         if (!commit || !value) return;
         try {
             const doc = await host.read(path);
-            const next = setFirstHeading(doc.markdown, value);
+            const next = setDisplayTitle(doc.markdown, value);
             await host.write(path, next, doc.mtimeMs);
             const ed = currentEditor();
             if (openFile === path && ed) {
@@ -1117,17 +1137,23 @@ async function renameInline(button: HTMLButtonElement, path: string): Promise<vo
                 docMtime = fresh?.mtimeMs ?? docMtime;
                 renderTitle();
                 renderProps();
+                renderBreadcrumb(next);
+                paintToc();
             }
             void refreshList();
         } catch (err) {
-            saySave(`重命名失败：${(err as Error).message}`);
+            saySave(`改标题失败：${(err as Error).message}`);
         }
     };
     input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
         if (e.key === 'Enter') void done(true);
         if (e.key === 'Escape') void done(false);
     });
-    input.addEventListener('blur', () => void done(true));
+    // 右键菜单的那次 click 收尾会落到这一行上，立刻 blur 会把输入框拆掉。
+    window.setTimeout(() => {
+        if (!finished) input.addEventListener('blur', () => void done(true));
+    }, 0);
 }
 
 /** 中区右键（验收清单 14.2）：段落级插入/改型/删除，二级菜单与斜杠同源。 */
@@ -1173,7 +1199,7 @@ setInterval(() => void (async () => {
     docScroll.scrollTop = top;
     renderTitle();
     renderProps();
-    renderToc(tocEl, currentEditor());
+    paintToc();
     saySave('外部已修改，已同步');
 })(), 3000);
 
@@ -1252,7 +1278,7 @@ expandLeft.addEventListener('click', () => {
 });
 
 tocFab.innerHTML = icon('menu-deep');
-renderToc(tocEl, currentEditor());
+paintToc();
 const tocGutterObs = new ResizeObserver(() => syncTocGutter());
 tocGutterObs.observe(docScroll);
 tocGutterObs.observe(wrap);
@@ -1261,18 +1287,8 @@ syncTocGutter();
 tocFab.addEventListener('click', (event) => {
     event.stopPropagation();
     const next = tocPanel.hidden === true;
-    if (next) renderToc(tocEl, currentEditor());
+    if (next) paintToc();
     setTocOpen(next);
-});
-document.addEventListener('click', (event) => {
-    if (!event.isTrusted || tocPanel.hidden) return;
-    if (!tocHost.contains(event.target as Node)) setTocOpen(false);
-});
-window.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape' || tocPanel.hidden) return;
-    event.preventDefault();
-    setTocOpen(false);
-    tocFab.focus();
 });
 
 // Alt+1..6 快速设标题层级（验收清单 13.5）

@@ -69,7 +69,7 @@
 /*
  * 宿主层显示纪律（只在这里动 muya 的呈现，不改其源码）：
  * 1. frontmatter 块整体收起——标签经页头芯片编辑（src/main.ts renderDocTags），
- *    md 里的 frontmatter 原样保留、照常落盘，仅编辑视图不显示。
+ *    md 里的 frontmatter 原样保留、照常落盘，仅编辑视图不显示。文档标题走 YAML title:，不藏 H1。
  * 2. 行内 raw-html（音视频等）的源码标签仅在该段落聚焦（编辑）时出现，
  *    平时只留渲染出的元素本身。
  */

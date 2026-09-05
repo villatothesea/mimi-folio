@@ -1,10 +1,10 @@
 /**
- * 文档目录（单元 12）：中区右上角悬浮窗，H1–H6 缩进树。
- * 数据 muya.getTOC()（顺序 = 文档顺序）；点击滚到对应标题；滚动时高亮所在节。
+ * 文档目录：第一行是文档标题（YAML title / 文件名），其后才是正文 H1–H6。
+ * 标题行滚到页头；标题块数据仍来自 muya.getTOC()。
  */
 import type { Muya } from '@muyajs/core';
 
-export function renderToc(el: HTMLElement, editor: Muya | null): void {
+export function renderToc(el: HTMLElement, editor: Muya | null, docTitle?: string): void {
     // 只清条目，保留宿主层挂在 #toc-list 里的其它节点
     for (const child of [...el.children]) {
         if (child.classList.contains('toc-item') || child.classList.contains('toc-empty')) child.remove();
@@ -16,8 +16,21 @@ export function renderToc(el: HTMLElement, editor: Muya | null): void {
         el.append(empty);
         return;
     }
+    const title = docTitle?.trim() ?? '';
+    if (title) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'toc-item toc-doc-title';
+        button.dataset.kind = 'doc';
+        button.textContent = title;
+        button.title = title;
+        button.addEventListener('click', () => {
+            document.querySelector('#doc-head')?.scrollIntoView({ block: 'start' });
+        });
+        el.append(button);
+    }
     const toc = editor.getTOC();
-    if (toc.length === 0) {
+    if (!title && toc.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'toc-empty';
         empty.textContent = '无标题';
@@ -39,7 +52,7 @@ export function renderToc(el: HTMLElement, editor: Muya | null): void {
     highlightActive(el);
 }
 
-/** TOC 第 i 项 ↔ 文档里第 i 个标题块（两边都按文档顺序）。 */
+/** TOC 第 i 项 ↔ 文档里第 i 个标题块（两边都按文档顺序）。不含目录第一行的文档标题。 */
 function scrollToHeading(index: number): void {
     const headings = document.querySelectorAll<HTMLElement>('#editor-wrap .mu-atx-heading');
     const target = headings[index];
@@ -54,16 +67,22 @@ function scrollToHeading(index: number): void {
     content.dispatchEvent(new MouseEvent('click', opts));
 }
 
-/** 滚动位置高亮当前所在标题（最顶上可见的那个）。 */
+/** 滚动位置高亮当前所在标题（最顶上可见的那个）；在所有 H1 之上则高亮文档标题行。 */
 export function highlightActive(el: HTMLElement): void {
     const headings = [...document.querySelectorAll<HTMLElement>('#editor-wrap .mu-atx-heading')];
-    if (headings.length === 0) return;
-    let active = 0;
-    for (let i = 0; i < headings.length; i++) {
-        if (headings[i].getBoundingClientRect().top <= 120) active = i;
+    const atDocHead = headings.length === 0 || headings[0].getBoundingClientRect().top > 120;
+    let headingIdx: number | null = null;
+    if (!atDocHead) {
+        headingIdx = 0;
+        for (let i = 0; i < headings.length; i++) {
+            if (headings[i].getBoundingClientRect().top <= 120) headingIdx = i;
+        }
     }
     el.querySelectorAll<HTMLButtonElement>('.toc-item').forEach((button) => {
-        if (button.dataset.index === String(active)) button.setAttribute('aria-current', 'true');
+        const on = button.dataset.kind === 'doc'
+            ? atDocHead
+            : headingIdx !== null && button.dataset.index === String(headingIdx);
+        if (on) button.setAttribute('aria-current', 'true');
         else button.removeAttribute('aria-current');
     });
 }
