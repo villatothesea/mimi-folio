@@ -57,6 +57,7 @@ const PATH_SET = {
     'h3': '<path d="M4 6v12"/><path d="M12 6v12"/><path d="M4 12h8"/><path d="M17 13v.01"/><path d="M17 16.5v.01"/><path d="M15.5 14.5a1.5 1.5 0 1 1 3 0c0 1 -3 1.2 -3 3a1.5 1.5 0 0 0 3 0"/>',
     'headphones': '<path d="M4 15a2 2 0 0 1 2 -2h1a2 2 0 0 1 2 2v3a2 2 0 0 1 -2 2h-1a2 2 0 0 1 -2 -2l0 -3"/><path d="M15 15a2 2 0 0 1 2 -2h1a2 2 0 0 1 2 2v3a2 2 0 0 1 -2 2h-1a2 2 0 0 1 -2 -2l0 -3"/><path d="M4 15v-3a8 8 0 0 1 16 0v3"/>',
     'h-4': '<path d="M20 18v-8l-4 6h5"/><path d="M4 6v12"/><path d="M12 6v12"/><path d="M11 18h2"/><path d="M3 18h2"/><path d="M4 12h8"/><path d="M3 6h2"/><path d="M11 6h2"/>',
+    'h-x': '<path d="M17 10l5 8"/><path d="M22 10l-5 8"/><path d="M4 6v12"/><path d="M12 6v12"/><path d="M4 12h8"/><path d="M11 18h2"/><path d="M3 18h2"/><path d="M3 6h2"/><path d="M11 6h2"/>',
     'h-5': '<path d="M17 18h2a2 2 0 1 0 0 -4h-2v-4h4"/><path d="M4 6v12"/><path d="M12 6v12"/><path d="M11 18h2"/><path d="M3 18h2"/><path d="M4 12h8"/><path d="M3 6h2"/><path d="M11 6h2"/>',
     'h-6': '<path d="M19 14a2 2 0 1 0 0 4a2 2 0 0 0 0 -4"/><path d="M21 12a2 2 0 1 0 -4 0v4"/><path d="M4 6v12"/><path d="M12 6v12"/><path d="M11 18h2"/><path d="M3 18h2"/><path d="M4 12h8"/><path d="M3 6h2"/><path d="M11 6h2"/>',
     'arrows-double-sw-ne': '<path d="M14 3l-11 11"/><path d="M3 10v4h4"/><path d="M17 10h4v4"/><path d="M10 21l11 -11"/>',
@@ -70,6 +71,7 @@ const PATH_SET = {
     "file-export": '<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M11.5 21h-4.5a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v5m-5 6h7m-3 -3l3 3l-3 3"/>',
     "robot": '<path d="M6 6a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v4a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2l0 -4"/><path d="M12 2v2"/><path d="M9 12v9"/><path d="M15 12v9"/><path d="M5 16l4 -2"/><path d="M15 14l4 2"/><path d="M9 18h6"/><path d="M10 8v.01"/><path d="M14 8v.01"/>',
     "number-123": '<path d="M3 10l2 -2v8"/><path d="M9 8h3a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-2a1 1 0 0 0 -1 1v2a1 1 0 0 0 1 1h3"/><path d="M17 8h2.5a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1 -1.5 1.5h-1.5h1.5a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1 -1.5 1.5h-2.5"/>',
+    "menu-deep": '<path d="M4 6h16"/><path d="M7 12h13"/><path d="M10 18h10"/>',
 } as const;
 
 /** 兼容旧调用名的别名 */

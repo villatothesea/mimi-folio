@@ -37,13 +37,59 @@ body {
     background: var(--folio-bg);
 }
 
-#toc {
-    width: 200px;
-    flex: none;
+/* 中区右上角：圆形目录按钮，点击向左下展开悬浮窗 */
+#toc-host {
+    position: absolute;
+    top: calc(var(--folio-control-h) + 2 * var(--folio-space-2) + 1px + var(--folio-page-inset));
+    right: var(--folio-page-inset);
+    z-index: 15;
     display: flex;
     flex-direction: column;
-    border-left: 1px solid var(--folio-border);
-    background: var(--folio-panel);
+    align-items: flex-end;
+    pointer-events: none;
+}
+
+#toc-fab,
+#toc {
+    pointer-events: auto;
+}
+
+#toc-fab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--folio-toc-fab-size);
+    height: var(--folio-toc-fab-size);
+    box-sizing: border-box;
+    padding: 0;
+    border: var(--folio-toc-fab-border);
+    border-radius: var(--folio-toc-fab-radius);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    cursor: pointer;
+}
+
+#toc-fab .folio-icon {
+    width: var(--folio-toc-fab-icon);
+    height: var(--folio-toc-fab-icon);
+}
+
+#toc-fab:hover .folio-icon {
+    animation: folio-breathe 1.8s ease-in-out infinite;
+}
+
+#toc {
+    display: flex;
+    flex-direction: column;
+    width: var(--folio-toc-pop-w);
+    height: var(--folio-toc-pop-h);
+    max-height: calc(100dvh - var(--folio-control-h) * 4);
+    margin-top: var(--folio-space-1);
+    box-sizing: border-box;
+    border: 1px solid var(--folio-border);
+    background: var(--folio-bg);
+    box-shadow: var(--folio-shadow);
     min-height: 0;
 }
 
@@ -96,16 +142,6 @@ body {
     margin-left: auto;
 }
 
-#bar-right {
-    justify-content: flex-end;
-}
-
-/* bug2.6：右栏的收起/展开箭头朝右 */
-#collapse-right .folio-icon,
-#expand-right .folio-icon {
-    transform: scaleX(-1);
-}
-
 /* bug2.1：hidden 属性被组件 display 覆盖，全局兜底 */
 [hidden] {
     display: none !important;
@@ -116,11 +152,7 @@ body {
     display: none;
 }
 
-#app.fold-right #toc {
-    display: none;
-}
-
-/* bug1 修复：呼吸箭头锚在整个正文区左下/右下角（贴着中区底栏上方） */
+/* bug1 修复：呼吸箭头锚在整个正文区左下角（贴着中区底栏上方） */
 #page {
     position: relative;
 }
@@ -140,10 +172,6 @@ body {
 
 #expand-left {
     left: var(--folio-space-2);
-}
-
-#expand-right {
-    right: var(--folio-space-2);
 }
 
 @keyframes folio-breathe {
@@ -166,6 +194,9 @@ body {
     border-bottom: 1px solid var(--folio-border);
     font-weight: 600;
     background: var(--folio-panel);
+    z-index: 20;
+    position: relative;
+    overflow: visible;
 }
 
 .head-title {
@@ -202,8 +233,7 @@ body {
     background: color-mix(in srgb, var(--folio-fg-muted) 35%, transparent);
 }
 
-#sidebar,
-#toc {
+#sidebar {
     position: relative;
 }
 
@@ -229,12 +259,10 @@ body {
     color: var(--folio-fg);
 }
 
-[data-tip]:hover::after {
-    content: attr(data-tip);
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
+#folio-tip {
+    position: fixed;
+    z-index: 80;
+    pointer-events: none;
     white-space: nowrap;
     border: 1px solid var(--folio-border);
     border-radius: var(--folio-radius);
@@ -243,30 +271,6 @@ body {
     font-size: var(--folio-font-size-sm);
     padding: var(--folio-space-1) var(--folio-space-2);
     box-shadow: var(--folio-shadow);
-    z-index: 30;
-}
-
-/* bug2：上方的按钮 tooltip 向下弹 */
-#sidebar-head .icon-btn[data-tip]:hover::after,
-#toolbar .icon-btn[data-tip]:hover::after,
-#toolbar .tool-zoom-val[data-tip]:hover::after,
-#filterbar button[data-tip]:hover::after,
-#page-head .icon-btn[data-tip]:hover::after,
-#expand-hints [data-tip]:hover::after {
-    top: calc(100% + 6px);
-    bottom: auto;
-}
-
-/* bug2：贴边按钮的 tooltip 不出界（左贴左、右贴右） */
-#bar-left .icon-btn:first-child[data-tip]:hover::after {
-    left: 0;
-    transform: none;
-}
-
-#bar-right [data-tip]:hover::after {
-    left: auto;
-    right: 0;
-    transform: none;
 }
 
 /* ===== 筛选 pills（bug4 2.4）：底栏靠右、无边框、方形满高高亮、toggle ===== */
@@ -328,12 +332,6 @@ body {
     white-space: nowrap;
 }
 
-.linked-badge {
-    color: var(--folio-fg-muted);
-    font-size: var(--folio-font-size-sm);
-    flex: none;
-}
-
 .side-group {
     color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-sm);
@@ -361,6 +359,8 @@ body {
     padding: 0 var(--folio-space-3);
     border-bottom: 1px solid var(--folio-border);
     background: var(--folio-panel);
+    z-index: 20;
+    overflow: visible;
 }
 
 #page-head > button {
@@ -549,7 +549,10 @@ body {
 }
 
 .crumb-file {
-    font-family: var(--folio-font-mono);
+    color: var(--folio-fg-muted);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 #favorite-toggle[aria-pressed='true'] {
@@ -563,6 +566,22 @@ body {
     overflow-y: auto;
     background: var(--folio-bg);
     zoom: var(--folio-text-scale);
+    position: relative;
+    z-index: 0;
+}
+
+#props-fold-slot {
+    position: sticky;
+    top: var(--folio-page-inset);
+    z-index: 6;
+    height: 0;
+    margin: 0;
+    pointer-events: none;
+}
+
+#props-fold {
+    pointer-events: auto;
+    margin-left: var(--folio-page-inset);
 }
 
 #doc-head {
@@ -583,8 +602,8 @@ body {
 
 html[data-width='wide'] #doc-head {
     max-width: calc(100% - 20px);
-    padding-left: 10px;
-    padding-right: 10px;
+    padding-left: calc(var(--folio-page-inset) + var(--folio-control-h) + var(--folio-space-2));
+    padding-right: var(--folio-page-inset);
 }
 
 .prop-row {
@@ -970,8 +989,9 @@ span.mu-inline-image.folio-img-fixed {
     padding: var(--folio-space-3) var(--folio-space-4);
 }
 
-/* ===== 加号下拉 ===== */
-#plus-menu {
+/* ===== 加号 / Hx 下拉 ===== */
+#plus-menu,
+#hx-menu {
     position: fixed;
     z-index: 50;
     display: flex;
@@ -984,7 +1004,8 @@ span.mu-inline-image.folio-img-fixed {
     padding: var(--folio-space-1);
 }
 
-#plus-menu button {
+#plus-menu button,
+#hx-menu button {
     display: flex;
     align-items: center;
     gap: var(--folio-space-2);
@@ -999,7 +1020,8 @@ span.mu-inline-image.folio-img-fixed {
     text-align: left;
 }
 
-#plus-menu button:hover {
+#plus-menu button:hover,
+#hx-menu button:hover {
     background: var(--folio-hover);
 }
 
@@ -1349,17 +1371,44 @@ html[data-width='wide'] .mu-editor {
 }
 
 html[data-width='wide'] .mu-editor .mu-container {
-    padding: 0 10px;
+    padding-left: calc(var(--folio-page-inset) + var(--folio-control-h) + var(--folio-space-2));
+    padding-right: var(--folio-page-inset);
 }
 
-/* 表格不溢出：块内横向滚动 */
-.mu-editor figure[class*='table'] {
+/* 表格：等宽铺满正文列；格子太挤或拆不开时才横向滚动 */
+.mu-editor figure.mu-table {
+    width: 100%;
     max-width: 100%;
     overflow-x: auto;
 }
 
-.mu-editor table {
+.mu-editor table.mu-table-inner {
+    width: 100%;
     max-width: 100%;
+    table-layout: fixed;
+    word-break: break-word;
+}
+
+.mu-editor table.mu-table-inner td {
+    min-width: var(--folio-table-cell-min);
+    overflow-wrap: anywhere;
+    font-weight: inherit;
+}
+
+/* Muya 用 td::before 宽高 +1px 叠边；末列那 1px 会逼出假横条 */
+.mu-editor table.mu-table-inner tr td:last-child::before,
+.mu-editor table.mu-table-inner tr th:last-child::before {
+    width: 100%;
+}
+
+.mu-editor .mu-table:not(.mu-table-header-row) table.mu-table-inner tr:first-child td {
+    font-weight: inherit;
+}
+
+.mu-editor .mu-table.mu-table-header-row table.mu-table-inner tr:first-child td,
+.mu-editor .mu-table.mu-table-header-col table.mu-table-inner tr td:first-child {
+    background: var(--folio-table-header-bg);
+    font-weight: var(--folio-title-weight);
 }
 
 /* ===== 右键菜单（验收清单 14） ===== */

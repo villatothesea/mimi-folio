@@ -1,15 +1,21 @@
 /**
- * 文档目录（单元 12，Tolaria 交互）：右侧竖条，H1–H6 缩进树。
+ * 文档目录（单元 12）：中区右上角悬浮窗，H1–H6 缩进树。
  * 数据 muya.getTOC()（顺序 = 文档顺序）；点击滚到对应标题；滚动时高亮所在节。
  */
 import type { Muya } from '@muyajs/core';
 
 export function renderToc(el: HTMLElement, editor: Muya | null): void {
-    // 只清条目，保留宿主层挂在 #toc 里的其它元素（如拖宽窄把手）
+    // 只清条目，保留宿主层挂在 #toc-list 里的其它节点
     for (const child of [...el.children]) {
         if (child.classList.contains('toc-item') || child.classList.contains('toc-empty')) child.remove();
     }
-    if (!editor) return;
+    if (!editor) {
+        const empty = document.createElement('div');
+        empty.className = 'toc-empty';
+        empty.textContent = '未打开';
+        el.append(empty);
+        return;
+    }
     const toc = editor.getTOC();
     if (toc.length === 0) {
         const empty = document.createElement('div');
@@ -23,6 +29,7 @@ export function renderToc(el: HTMLElement, editor: Muya | null): void {
         button.type = 'button';
         button.className = 'toc-item';
         button.dataset.index = String(i);
+        button.dataset.lvl = String(item.lvl);
         button.style.paddingLeft = `calc(var(--folio-space-2) + ${(item.lvl - 1) * 0.8}em)`;
         button.textContent = item.content || '(空标题)';
         button.title = item.content;

@@ -43,9 +43,14 @@
             <button id="favorite-toggle" type="button" title="收藏（frontmatter favorite）">☆</button>
             <span id="save-state" role="status"></span>
           </header>
+          <div id="toc-host">
+            <button id="toc-fab" type="button" data-tip="目录" aria-label="目录" aria-expanded="false" aria-controls="toc"></button>
+            <aside id="toc" hidden aria-label="文档目录">
+              <nav id="toc-list"></nav>
+            </aside>
+          </div>
           <div id="expand-hints">
             <button id="expand-left" type="button" class="icon-btn breathe" data-tip="展开侧栏" hidden></button>
-            <button id="expand-right" type="button" class="icon-btn breathe" data-tip="展开目录" hidden></button>
           </div>
           <section id="findbar-wrap">
             <span id="findbar" hidden>
@@ -60,6 +65,9 @@
             </span>
           </section>
           <div id="doc-scroll">
+            <div id="props-fold-slot" hidden>
+              <button id="props-fold" type="button" class="icon-btn" aria-label="文档属性"></button>
+            </div>
             <header id="doc-head" hidden>
               <section id="doc-title" aria-label="文档标题"></section>
               <section id="props" aria-label="文档属性"></section>
@@ -72,12 +80,6 @@
             <span id="stat-words" class="zone-text"></span>
           </footer>
         </main>
-        <aside id="toc" aria-label="文档目录">
-          <nav id="toc-list"></nav>
-          <footer class="zone-bar" id="bar-right">
-            <button id="collapse-right" type="button" class="icon-btn" data-tip="收起目录"></button>
-          </footer>
-        </aside>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

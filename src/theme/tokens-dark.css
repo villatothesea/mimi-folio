@@ -16,6 +16,7 @@
     --folio-hover-active: #353535;
     --folio-selection: #484848;
     --folio-table-sel: rgb(255 255 255 / 8%);
+    --folio-table-header-bg: var(--folio-bg-alt);
     --folio-highlight: #5a4a2e;
     --folio-primary: #d8d8d8;
     --folio-primary-fg: #161616;

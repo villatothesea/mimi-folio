@@ -11,13 +11,14 @@ import { renderMemoTimeline, renderSidebar } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
-import { firstHeading, setFirstHeading } from './shared/docTitle.ts';
+import { displayTitle, fileName, firstHeading, setFirstHeading } from './shared/docTitle.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
 import { attachWikiAutocomplete, attachWikilinkDecor } from './ui/wikilinkDecor.ts';
 import { blockNativeContextMenu, showContextMenu } from './ui/contextMenu.ts';
 import { folioConfirm, folioPick, folioPrompt } from './ui/dialogs.ts';
+import { attachTips } from './ui/tips.ts';
 import { buildToolbar } from './ui/toolbar.ts';
 import { initSettings, openSettings } from './ui/settings.ts';
 import { icon } from './ui/icons.ts';
@@ -34,6 +35,9 @@ const breadcrumbEl = document.querySelector<HTMLElement>('#breadcrumb')!;
 const favoriteBtn = document.querySelector<HTMLButtonElement>('#favorite-toggle')!;
 const filterbar = document.querySelector<HTMLElement>('#filterbar')!;
 const sidebarEl = document.querySelector<HTMLElement>('#sidebar')!;
+const tocHost = document.querySelector<HTMLElement>('#toc-host')!;
+const tocFab = document.querySelector<HTMLButtonElement>('#toc-fab')!;
+const tocPanel = document.querySelector<HTMLElement>('#toc')!;
 const tocEl = document.querySelector<HTMLElement>('#toc-list')!;
 const wrap = document.querySelector<HTMLElement>('#editor-wrap')!;
 const docScroll = document.querySelector<HTMLElement>('#doc-scroll')!;
@@ -75,6 +79,11 @@ async function saveNow(markdown: string): Promise<void> {
             saySave(`存失败：${(err as Error).message}`);
         }
     }
+}
+
+function setTocOpen(open: boolean): void {
+    tocPanel.hidden = !open;
+    tocFab.setAttribute('aria-expanded', String(open));
 }
 
 /**
@@ -122,6 +131,8 @@ function hideDocHead(): void {
     docHead.hidden = true;
     titleEl.hidden = true;
     propsEl.hidden = true;
+    propsFoldSlot.hidden = true;
+    setTocOpen(false);
 }
 
 /**
@@ -135,9 +146,11 @@ function renderProps(): void {
         hideDocHead();
         return;
     }
-    propsEl.hidden = false;
+    propsEl.hidden = propsCollapsed;
     docHead.hidden = false;
     propsEl.classList.toggle('collapsed', propsCollapsed);
+    paintPropsFold();
+    if (propsCollapsed) return;
 
     const commit = (next: string[]) => {
         const ed = currentEditor();
@@ -147,24 +160,6 @@ function renderProps(): void {
     };
 
     const { frontmatter } = splitFrontmatter(editor.getMarkdown());
-
-    const head = document.createElement('div');
-    head.className = 'props-head';
-    const chevron = document.createElement('button');
-    chevron.type = 'button';
-    chevron.className = 'icon-btn props-chevron';
-    if (propsCollapsed) chevron.classList.add('breathe');
-    chevron.innerHTML = icon(propsCollapsed ? 'chevron-down' : 'chevron-up');
-    chevron.title = propsCollapsed ? '展开文档属性' : '收起文档属性';
-    chevron.addEventListener('click', () => {
-        propsCollapsed = !propsCollapsed;
-        localStorage.setItem('folio-props-fold', String(propsCollapsed));
-        renderTitle();
-        renderProps();
-    });
-    head.append(chevron);
-    propsEl.append(head);
-    if (propsCollapsed) return;
 
     const row = (key: string, value: Node): void => {
         const line = document.createElement('div');
@@ -403,6 +398,7 @@ async function createAndOpen(path: string): Promise<void> {
 
 function onEditorChange(markdown: string): void {
     syncTitleFromBody(markdown);
+    renderBreadcrumb(markdown);
     renderStatusbar(markdown);
     if (markdown === lastSaved) return;
     saySave('改动中…');
@@ -440,7 +436,7 @@ async function open(path: string): Promise<void> {
         docMtime = doc.mtimeMs;
         docCtime = doc.ctimeMs;
         renderCenterBar();
-        renderBreadcrumb();
+        renderBreadcrumb(doc.markdown);
         syncFavoriteBtn();
         saySave('');
         mountEditor(wrap, doc.markdown, host, onEditorChange);
@@ -461,13 +457,15 @@ async function open(path: string): Promise<void> {
 }
 
 /** 面包屑（单元 13）：路径逐级可点，点哪层就把清单筛到哪层。 */
-function renderBreadcrumb(): void {
+function renderBreadcrumb(markdown?: string): void {
     breadcrumbEl.replaceChildren();
     if (!openFile) {
         breadcrumbEl.textContent = '未打开';
         return;
     }
-    const segments = openFile.split('/');
+    const path = openFile;
+    const md = markdown ?? currentEditor()?.getMarkdown() ?? lastSaved;
+    const segments = path.split('/');
     segments.forEach((seg, i) => {
         const isLast = i === segments.length - 1;
         if (!isLast) {
@@ -487,8 +485,8 @@ function renderBreadcrumb(): void {
         } else {
             const crumb = document.createElement('span');
             crumb.className = 'crumb-file';
-            crumb.textContent = seg;
-            crumb.title = '文件名';
+            crumb.textContent = displayTitle(path, md);
+            crumb.title = fileName(path);
             breadcrumbEl.append(crumb);
         }
     });
@@ -513,6 +511,8 @@ favoriteBtn.addEventListener('click', () => {
 });
 
 const propsEl = document.querySelector<HTMLElement>('#props')!;
+const propsFoldSlot = document.querySelector<HTMLElement>('#props-fold-slot')!;
+const propsFoldBtn = document.querySelector<HTMLButtonElement>('#props-fold')!;
 const titleEl = document.querySelector<HTMLElement>('#doc-title')!;
 const docHead = document.querySelector<HTMLElement>('#doc-head')!;
 const statCount = document.querySelector<HTMLElement>('#stat-count')!;
@@ -521,6 +521,27 @@ const findbarEl = document.querySelector<HTMLElement>('#findbar')!;
 const findInput = document.querySelector<HTMLInputElement>('#find-input')!;
 const findCount = document.querySelector<HTMLElement>('#find-count')!;
 const replaceInput = document.querySelector<HTMLInputElement>('#replace-input')!;
+
+function paintPropsFold(): void {
+    if (!openFile) {
+        propsFoldSlot.hidden = true;
+        return;
+    }
+    propsFoldSlot.hidden = false;
+    propsFoldBtn.innerHTML = icon(propsCollapsed ? 'chevron-down' : 'chevron-up');
+    const tip = propsCollapsed ? '展开文档属性' : '收起文档属性';
+    propsFoldBtn.title = tip;
+    propsFoldBtn.dataset.tip = tip;
+    propsFoldBtn.setAttribute('aria-label', tip);
+    propsFoldBtn.classList.toggle('breathe', propsCollapsed);
+}
+
+propsFoldBtn.addEventListener('click', () => {
+    propsCollapsed = !propsCollapsed;
+    localStorage.setItem('folio-props-fold', String(propsCollapsed));
+    renderTitle();
+    renderProps();
+});
 
 let lastListSig = '';
 
@@ -1161,7 +1182,7 @@ attachWikiAutocomplete(wrap, { getFiles: () => allFiles, getEditor: currentEdito
 let scrollTimer: ReturnType<typeof setTimeout> | undefined;
 docScroll.addEventListener('scroll', () => {
     clearTimeout(scrollTimer);
-    scrollTimer = setTimeout(() => highlightActive(document.querySelector<HTMLElement>('#toc-list')!), 150);
+    scrollTimer = setTimeout(() => highlightActive(tocEl), 150);
 });
 
 // 设置与主题（验收清单 7）：data-theme 只切 token 集，页面色卡/文字主题见 settings.ts
@@ -1181,6 +1202,8 @@ btnTheme.addEventListener('click', () => {
     applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 });
 
+attachTips();
+
 // 顶栏工具栏（验收清单 11）
 buildToolbar(
     document.querySelector<HTMLElement>('#toolbar')!,
@@ -1189,29 +1212,37 @@ buildToolbar(
     host,
 );
 
-// 三区折叠（验收清单 10.2）
+// 三区折叠（验收清单 10.2）：只剩左栏；目录改悬浮窗
 const app = document.querySelector<HTMLElement>('#app')!;
 const expandLeft = document.querySelector<HTMLButtonElement>('#expand-left')!;
-const expandRight = document.querySelector<HTMLButtonElement>('#expand-right')!;
 document.querySelector<HTMLButtonElement>('#collapse-left')!.innerHTML = icon('layout-sidebar-left-collapse');
-document.querySelector<HTMLButtonElement>('#collapse-right')!.innerHTML = icon('layout-sidebar-left-collapse');
 expandLeft.innerHTML = icon('layout-sidebar-left-expand');
-expandRight.innerHTML = icon('layout-sidebar-left-expand');
 document.querySelector<HTMLButtonElement>('#collapse-left')!.addEventListener('click', () => {
     app.classList.add('fold-left');
     expandLeft.hidden = false;
-});
-document.querySelector<HTMLButtonElement>('#collapse-right')!.addEventListener('click', () => {
-    app.classList.add('fold-right');
-    expandRight.hidden = false;
 });
 expandLeft.addEventListener('click', () => {
     app.classList.remove('fold-left');
     expandLeft.hidden = true;
 });
-expandRight.addEventListener('click', () => {
-    app.classList.remove('fold-right');
-    expandRight.hidden = true;
+
+tocFab.innerHTML = icon('menu-deep');
+renderToc(tocEl, currentEditor());
+tocFab.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const next = tocPanel.hidden === true;
+    if (next) renderToc(tocEl, currentEditor());
+    setTocOpen(next);
+});
+document.addEventListener('click', (event) => {
+    if (!event.isTrusted || tocPanel.hidden) return;
+    if (!tocHost.contains(event.target as Node)) setTocOpen(false);
+});
+window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || tocPanel.hidden) return;
+    event.preventDefault();
+    setTocOpen(false);
+    tocFab.focus();
 });
 
 // Alt+1..6 快速设标题层级（验收清单 13.5）
@@ -1261,6 +1292,5 @@ function attachResizer(panel: HTMLElement, edge: 'left' | 'right', key: string, 
     panel.append(handle);
 }
 attachResizer(sidebarEl, 'right', 'folio-w-sidebar', 180, 440);
-attachResizer(document.querySelector<HTMLElement>('#toc')!, 'left', 'folio-w-toc', 140, 380);
 
 void refreshList();

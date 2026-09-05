@@ -11,6 +11,7 @@ type Tool =
     | { kind: 'format'; ic: string; tip: string; type: string }
     | { kind: 'para'; ic: string; tip: string; label: string }
     | { kind: 'table'; ic: string; tip: string }
+    | { kind: 'hx'; ic: string; tip: string }
     | { kind: 'custom'; ic: string; tip: string; run: () => void }
     | { kind: 'sep' };
 
@@ -82,6 +83,45 @@ function showHighlightMenu(): void {
     });
 }
 
+function showHxMenu(anchor: HTMLElement, getEditor: () => Muya | null): void {
+    const existing = document.querySelector('#hx-menu');
+    if (existing) {
+        existing.remove();
+        return;
+    }
+    const menu = document.createElement('div');
+    menu.id = 'hx-menu';
+    const levels: Array<[string, string, string]> = [
+        ['h-4', '四级标题（Alt+4）', 'heading 4'],
+        ['h-5', '五级标题（Alt+5）', 'heading 5'],
+        ['h-6', '六级标题（Alt+6）', 'heading 6'],
+    ];
+    for (const [ic, label, para] of levels) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.innerHTML = `${icon(ic)}<span>${label}</span>`;
+        item.addEventListener('mousedown', (event) => event.preventDefault());
+        item.addEventListener('click', () => {
+            menu.remove();
+            getEditor()?.updateParagraph(para);
+        });
+        menu.append(item);
+    }
+    document.body.append(menu);
+    const rect = anchor.getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 6}px`;
+    menu.style.left = `${rect.left}px`;
+    setTimeout(() => {
+        const close = (event: MouseEvent) => {
+            if (!menu.contains(event.target as Node)) {
+                menu.remove();
+                document.removeEventListener('mousedown', close);
+            }
+        };
+        document.addEventListener('mousedown', close);
+    });
+}
+
 export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, extras: Array<{ ic: string; tip: string; run: () => void }>, host?: FolioHost): void {
     const tools: Tool[] = [
         { kind: 'format', ic: 'bold', tip: '加粗', type: 'strong' },
@@ -94,9 +134,7 @@ export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, ext
         { kind: 'para', ic: 'h-1', tip: '一级标题（Alt+1）', label: 'heading 1' },
         { kind: 'para', ic: 'h-2', tip: '二级标题（Alt+2）', label: 'heading 2' },
         { kind: 'para', ic: 'h-3', tip: '三级标题（Alt+3）', label: 'heading 3' },
-        { kind: 'para', ic: 'h-4', tip: '四级标题（Alt+4）', label: 'heading 4' },
-        { kind: 'para', ic: 'h-5', tip: '五级标题（Alt+5）', label: 'heading 5' },
-        { kind: 'para', ic: 'h-6', tip: '六级标题（Alt+6）', label: 'heading 6' },
+        { kind: 'hx', ic: 'h-x', tip: '四级–六级标题' },
         { kind: 'sep' },
         { kind: 'para', ic: 'list', tip: '无序列表', label: 'ul-bullet' },
         { kind: 'para', ic: 'list-numbers', tip: '有序列表', label: 'ol-order' },
@@ -127,8 +165,17 @@ export function buildToolbar(bar: HTMLElement, getEditor: () => Muya | null, ext
         button.dataset.tip = tool.tip;
         button.innerHTML = icon(tool.ic);
         // 防止点击夺走编辑器焦点/选区
-        button.addEventListener('mousedown', (e) => e.preventDefault());
-        button.addEventListener('click', () => {
+        button.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            if (tool.kind === 'hx') e.stopPropagation();
+        });
+        if (tool.kind === 'hx') button.setAttribute('aria-haspopup', 'menu');
+        button.addEventListener('click', (event) => {
+            if (tool.kind === 'hx') {
+                event.stopPropagation();
+                showHxMenu(button, getEditor);
+                return;
+            }
             const editor = getEditor();
             if (!editor) return;
             if (tool.kind === 'format') editor.format(tool.type);

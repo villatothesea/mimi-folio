@@ -17,6 +17,16 @@
     --folio-selection: #d8d8d8;
     /* 表格框选：透明浅灰，不盖网格、不改字色 */
     --folio-table-sel: rgb(0 0 0 / 6%);
+    --folio-table-header-bg: var(--folio-bg-alt);
+    --folio-table-cell-min: 4.5em;
+    --folio-page-inset: 10px;
+    /* 中区目录悬浮：圆形按钮 + 向左下展开的窗 */
+    --folio-toc-fab-size: 20px;
+    --folio-toc-fab-icon: 12px;
+    --folio-toc-fab-radius: 50%;
+    --folio-toc-fab-border: 1px solid var(--folio-fg);
+    --folio-toc-pop-w: 200px;
+    --folio-toc-pop-h: 600px;
     /* ==mark== 高亮底色：米米淡米色（bug4 4.4，可在工具栏换色） */
     --folio-highlight: #f2e3c8;
     --folio-primary: #2a2a2a;

@@ -162,13 +162,6 @@ function renderGroup(files: FolioListItem[], opts: SidebarOptions, _depth: numbe
             star.title = '已收藏';
             button.append(star);
         }
-        if (file.linked) {
-            const badge = document.createElement('span');
-            badge.className = 'linked-badge';
-            badge.textContent = '⌗';
-            badge.title = '库外链入文档，读写回原文件';
-            button.append(badge);
-        }
         button.title = file.path;
         button.dataset.path = file.path;
         if (!opts.selectedDir && file.path === opts.activePath) button.setAttribute('aria-current', 'true');
