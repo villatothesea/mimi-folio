@@ -10,6 +10,7 @@ import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
 import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
+import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewSrc } from './shared/htmlPreview.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
@@ -39,6 +40,7 @@ const tocPanel = document.querySelector<HTMLElement>('#toc')!;
 const tocEl = document.querySelector<HTMLElement>('#toc-list')!;
 const wrap = document.querySelector<HTMLElement>('#editor-wrap')!;
 const docScroll = document.querySelector<HTMLElement>('#doc-scroll')!;
+const htmlFrame = document.querySelector<HTMLIFrameElement>('#html-frame')!;
 const saveStateEl = document.querySelector<HTMLElement>('#save-state')!;
 
 let openFile: string | null = null;
@@ -58,7 +60,7 @@ function saySave(message: string): void {
 }
 
 async function saveNow(markdown: string): Promise<void> {
-    if (!openFile) return;
+    if (!openFile || isHtmlPath(openFile)) return;
     if (markdown === lastSaved) return;
     try {
         await host.write(openFile, markdown, docMtime);
@@ -373,7 +375,9 @@ function renderCenterBar(): void {
         el.textContent = s;
         return el;
     };
-    meta.append(text(`创建 ${fmt(docCtime)} · 修改 ${fmt(docMtime)} · `));
+    meta.append(text(`创建 ${fmt(docCtime)} · 修改 ${fmt(docMtime)}`));
+    if (isHtmlPath(openFile)) return;
+    meta.append(text(' · '));
     const seg = (label: string, kind: 'outgoing' | 'backlinks'): void => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -414,6 +418,10 @@ let tocTimer: ReturnType<typeof setTimeout> | undefined;
 
 function renderStatusbar(markdown?: string): void {
     statCount.textContent = allFiles.length ? `${allFiles.length} 篇` : '';
+    if (openFile && isHtmlPath(openFile)) {
+        statWords.textContent = '网页预览';
+        return;
+    }
     const md = markdown ?? currentEditor()?.getMarkdown();
     if (md !== undefined) {
         const { word } = wordCount(md);
@@ -429,14 +437,51 @@ function paintToc(): void {
     renderToc(tocEl, currentEditor(), title);
 }
 
+function mountHtmlPreview(path: string): void {
+    htmlFrame.setAttribute('sandbox', htmlPreviewSandbox(htmlPreviewScriptsEnabled()));
+    const src = host.previewUrl?.(path) ?? previewSrc(path);
+    htmlFrame.removeAttribute('src');
+    htmlFrame.src = src;
+}
+
 async function open(path: string): Promise<void> {
     try {
-        // 切文件前把上一篇落盘
         if (openFile && currentEditor()) await saveNow(currentEditor()!.getMarkdown());
         clearTimeout(saveTimer);
+        const root = document.querySelector<HTMLElement>('#app')!;
+        root.classList.remove('memo-mode');
+
+        if (isHtmlPath(path)) {
+            destroyEditor();
+            hideDocHead();
+            setTocOpen(false);
+            root.classList.add('html-mode');
+            const doc = await host.read(path);
+            openFile = doc.path;
+            lastSaved = '';
+            docMtime = doc.mtimeMs;
+            docCtime = doc.ctimeMs;
+            lastLinks = { outgoing: [], backlinks: [] };
+            if (selectedDir !== null) {
+                selectedDir = null;
+                nav.querySelectorAll('.row-main[aria-current][data-dir]').forEach((b) => b.removeAttribute('aria-current'));
+            }
+            mountHtmlPreview(doc.path);
+            renderCenterBar();
+            renderBreadcrumb('');
+            renderStatusbar();
+            saySave('预览');
+            nav.querySelectorAll<HTMLButtonElement>('button[data-path]').forEach((b) => {
+                if (b.dataset.path === openFile) b.setAttribute('aria-current', 'true');
+                else b.removeAttribute('aria-current');
+            });
+            return;
+        }
+
+        root.classList.remove('html-mode');
+        htmlFrame.removeAttribute('src');
         const doc = await host.read(path);
         openFile = doc.path;
-        // 清单第 1 条：打开文档即取消文件夹选中——高亮只在文件夹被选中时出现
         if (selectedDir !== null) {
             selectedDir = null;
             nav.querySelectorAll('.row-main[aria-current][data-dir]').forEach((b) => b.removeAttribute('aria-current'));
@@ -455,7 +500,6 @@ async function open(path: string): Promise<void> {
         paintToc();
         restoreScroll(doc.path);
         requestAnimationFrame(syncTocGutter);
-        // bug3：打开即高亮清单当前项（列表渲染早于 openFile 赋值，这里直接补）
         nav.querySelectorAll<HTMLButtonElement>('button[data-path]').forEach((b) => {
             if (b.dataset.path === openFile) b.setAttribute('aria-current', 'true');
             else b.removeAttribute('aria-current');
@@ -495,7 +539,7 @@ function renderBreadcrumb(markdown?: string): void {
         } else {
             const crumb = document.createElement('span');
             crumb.className = 'crumb-file';
-            crumb.textContent = displayTitle(path, md);
+            crumb.textContent = isHtmlPath(path) ? fileName(path) : displayTitle(path, md);
             crumb.title = fileName(path);
             breadcrumbEl.append(crumb);
         }
@@ -587,6 +631,8 @@ async function syncMemoMode(): Promise<void> {
             destroyEditor();
             hideDocHead();
             setTocOpen(false);
+            root.classList.remove('html-mode');
+            htmlFrame.removeAttribute('src');
             root.classList.add('memo-mode');
             breadcrumbEl.textContent = '速记';
             lastLinks = { outgoing: [], backlinks: [] };
@@ -993,9 +1039,10 @@ nav.addEventListener('contextmenu', (event) => {
         })() },
         { ic: 'copy-plus', label: '添加副本', run: () => void (async () => {
             const dir = path.split('/').slice(0, -1).join('/');
-            const name = path.split('/').pop()!.replace(/\.md$/i, '');
+            const stem = fileNameStem(path);
+            const ext = /\.[^.]+$/.exec(fileName(path))?.[0] ?? '';
             for (let i = 1; i < 99; i++) {
-                const to = `${dir ? `${dir}/` : ''}${name}-${i}.md`;
+                const to = `${dir ? `${dir}/` : ''}${stem}-${i}${ext}`;
                 if (!allFiles.some((f) => f.path === to)) {
                     if (host.copyDoc) await withDoc('copy', () => host.copyDoc!(path, to), false);
                     return;
@@ -1021,6 +1068,8 @@ nav.addEventListener('contextmenu', (event) => {
             if (openFile === path) {
                 openFile = null;
                 destroyEditor();
+                document.querySelector<HTMLElement>('#app')?.classList.remove('html-mode');
+                htmlFrame.removeAttribute('src');
                 breadcrumbEl.textContent = '未打开';
                 hideDocHead();
                 renderCenterBar();
@@ -1204,8 +1253,18 @@ wrap.addEventListener('contextmenu', (event) => {
 // 外链文件夹里新文件、以及打开篇被外部改过：3s 轮询。清单未变则 refreshList 自己跳过重绘。
 setInterval(() => void (async () => {
     void refreshList();
-    if (!openFile || !currentEditor()) return;
-    if (currentEditor()!.getMarkdown() !== lastSaved) return; // 有未存改动不覆盖
+    if (!openFile) return;
+    if (isHtmlPath(openFile)) {
+        const doc = await host.read(openFile).catch(() => null);
+        if (!doc || doc.mtimeMs === docMtime) return;
+        docMtime = doc.mtimeMs;
+        docCtime = doc.ctimeMs;
+        mountHtmlPreview(openFile);
+        saySave('外部已修改，已同步');
+        return;
+    }
+    if (!currentEditor()) return;
+    if (currentEditor()!.getMarkdown() !== lastSaved) return;
     const doc = await host.read(openFile).catch(() => null);
     if (!doc || doc.mtimeMs === docMtime) return;
     const top = docScroll.scrollTop;
@@ -1254,6 +1313,9 @@ docScroll.addEventListener('scroll', () => {
 
 // 设置与主题（验收清单 7）：data-theme 只切 token 集，页面色卡/文字主题见 settings.ts
 initSettings();
+window.addEventListener('folio-html-scripts', () => {
+    if (openFile && isHtmlPath(openFile)) mountHtmlPreview(openFile);
+});
 const btnTheme = document.querySelector<HTMLButtonElement>('#btn-theme')!;
 btnTheme.innerHTML = icon('moon');
 function applyTheme(mode: 'light' | 'dark'): void {

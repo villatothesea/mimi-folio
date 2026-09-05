@@ -3,6 +3,7 @@
  * 默认格式 = 编号系统开关（CSS counters，见 app.css）；主题 = 页面色卡 + 文字主题 JSON。
  * 所有选择存 localStorage，应用层只挂 html data-* / 覆写 --folio-*（token 纪律）。
  */
+import { htmlPreviewScriptsEnabled, setHtmlPreviewScriptsEnabled } from '../shared/htmlPreview.ts';
 import { icon } from './icons';
 
 export type FmtSettings = {
@@ -237,6 +238,27 @@ export function openSettings(): void {
         keys.className = 'set-note';
         keys.textContent = '可用键：em strong del marker h1 h2 h3 codeBg inlineCodeBg（值为 #RRGGBB）';
         box.append(keys);
+        content.replaceChildren(box);
+    });
+
+    addSection('网页预览', () => {
+        const box = document.createElement('div');
+        const row = document.createElement('label');
+        row.className = 'set-row';
+        const span = document.createElement('span');
+        span.textContent = '允许预览页运行脚本';
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.checked = htmlPreviewScriptsEnabled();
+        check.addEventListener('change', () => {
+            setHtmlPreviewScriptsEnabled(check.checked);
+            window.dispatchEvent(new Event('folio-html-scripts'));
+        });
+        row.append(span, check);
+        const note = document.createElement('p');
+        note.className = 'set-note';
+        note.textContent = '默认开启，接近用浏览器打开这份 html。脚本跑在沙箱里，摸不到米素界面和笔记库；仍可能访问外网、弹窗、占资源。不信任的页面请关掉。';
+        box.append(row, note);
         content.replaceChildren(box);
     });
 

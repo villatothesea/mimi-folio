@@ -86,6 +86,8 @@ export interface FolioHost {
     /** 全文搜索（单元 13）：标题或正文命中，回清单项 + 上下文行 */
     search?(query: string): Promise<FolioSearchItem[]>;
     index?(path: FolioPath): Promise<FolioIndex>;
+    /** 网页预览看法的 iframe src（单元：html 不当 md 打开）。合入后 daemon 同路径端文件。 */
+    previewUrl?(path: FolioPath): string;
 }
 
 export function detectHostKind(): 'mimi' | 'standalone' {

@@ -569,6 +569,33 @@ const ATTACH_MIME: Record<string, string> = {
     '.pdf': 'application/pdf',
 };
 
+const PREVIEW_MIME: Record<string, string> = {
+    ...ATTACH_MIME,
+    '.html': 'text/html; charset=utf-8',
+    '.htm': 'text/html; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.mjs': 'text/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.txt': 'text/plain; charset=utf-8',
+    '.ico': 'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+};
+
+function previewRel(pathname: string): string | null {
+    if (!pathname.startsWith('preview/')) return null;
+    const rest = pathname.slice('preview/'.length);
+    if (!rest) return null;
+    try {
+        const segs = rest.split('/').map((s) => decodeURIComponent(s));
+        return safeRel(segs.join('/'));
+    } catch {
+        return null;
+    }
+}
+
 /**
  * GET /attachments/<name>：把 vault 附件端给 <img>/<video>/<audio>。
  * md 里存的是相对路径，页面根就是 vault 根；合入后 daemon 按同样规则端。
@@ -605,6 +632,24 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
     try {
         if (req.method === 'GET' && pathname === 'root') {
             send(res, 200, { root });
+            return true;
+        }
+
+        if (req.method === 'GET' && pathname.startsWith('preview/')) {
+            const rel = previewRel(pathname);
+            if (!rel) return fail(res, 400, 'path 非法');
+            const abs = path.join(root, rel);
+            const st = await fs.stat(abs).catch(() => null);
+            if (!st?.isFile()) return fail(res, 404, '不存在');
+            const ext = path.extname(abs).toLowerCase();
+            res.statusCode = 200;
+            res.setHeader('content-type', PREVIEW_MIME[ext] ?? 'application/octet-stream');
+            res.setHeader('x-content-type-options', 'nosniff');
+            if (ext === '.html' || ext === '.htm') {
+                // 不禁脚本：开关在 iframe sandbox。script-src none 会盖掉「默认允许脚本」。
+                res.setHeader('content-security-policy', "object-src 'none'");
+            }
+            res.end(await fs.readFile(abs));
             return true;
         }
 

@@ -139,4 +139,9 @@ export class StandaloneHost implements FolioHost {
         const resp = await fetch(this.url(`/folio/v1/search?q=${encodeURIComponent(query)}`));
         return this.json<FolioSearchItem[]>(resp);
     }
+
+    previewUrl(path: FolioPath): string {
+        const segs = path.split('/').filter(Boolean).map(encodeURIComponent);
+        return this.url(`/folio/v1/preview/${segs.join('/')}`);
+    }
 }

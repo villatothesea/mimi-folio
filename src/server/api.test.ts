@@ -456,3 +456,29 @@ describe('附件（saveImage/saveFile）', () => {
         assert.equal(res.status, 400);
     });
 });
+
+describe('GET /folio/v1/preview/*', () => {
+    it('端 html 为网页，相对 css 跟目录走；CSP 不禁脚本（开关在 iframe sandbox）', async () => {
+        const dir = path.join(vault, 'notes', 'site');
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, 'index.html'), '<h1>预览</h1><link rel="stylesheet" href="a.css">', 'utf8');
+        await fs.writeFile(path.join(dir, 'a.css'), 'h1{color:black}', 'utf8');
+        const page = await fetch(`${base}/folio/v1/preview/notes/site/index.html`);
+        assert.equal(page.status, 200);
+        assert.match(page.headers.get('content-type') ?? '', /text\/html/);
+        assert.equal(page.headers.get('x-content-type-options'), 'nosniff');
+        const csp = page.headers.get('content-security-policy') ?? '';
+        assert.match(csp, /object-src 'none'/);
+        assert.doesNotMatch(csp, /script-src 'none'/);
+        assert.match(await page.text(), /<h1>预览<\/h1>/);
+        const css = await fetch(`${base}/folio/v1/preview/notes/site/a.css`);
+        assert.equal(css.status, 200);
+        assert.match(css.headers.get('content-type') ?? '', /text\/css/);
+        assert.equal(await css.text(), 'h1{color:black}');
+    });
+
+    it('预览越界 400', async () => {
+        const res = await fetch(`${base}/folio/v1/preview/..%2F..%2Fpackage.json`);
+        assert.equal(res.status, 400);
+    });
+});

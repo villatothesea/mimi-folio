@@ -1121,6 +1121,12 @@ span.mu-inline-image.folio-img-fixed {
     padding: var(--folio-space-1) var(--folio-space-2);
 }
 
+.set-row input[type='checkbox'] {
+    width: var(--folio-icon-size);
+    height: var(--folio-icon-size);
+    accent-color: var(--folio-fg);
+}
+
 .set-note {
     color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-sm);
@@ -2139,6 +2145,36 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
     padding: var(--folio-space-3);
     gap: var(--folio-space-3);
     box-sizing: border-box;
+}
+
+/* 网页预览看法：.html 不当 markdown 进 Muya */
+#html-preview {
+    display: none;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+}
+
+#app.html-mode #html-preview {
+    display: flex;
+}
+
+#app.html-mode #doc-scroll,
+#app.html-mode #toolbar,
+#app.html-mode #favorite-toggle,
+#app.html-mode #toc-host,
+#app.html-mode #findbar-wrap,
+#app.html-mode #memo-view {
+    display: none;
+}
+
+#html-frame {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    background: var(--folio-bg);
 }
 
 .memo-search {
