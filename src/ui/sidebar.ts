@@ -46,6 +46,44 @@ function buildTree(files: FolioListItem[]): DirNode {
 /** 折叠状态（模块级，会话内保持） */
 const collapsedDirs = new Set<string>();
 
+function parentDir(dir: string): string {
+    const i = dir.lastIndexOf('/');
+    return i < 0 ? '' : dir.slice(0, i);
+}
+
+function siblingDirs(files: FolioListItem[], dir: string): string[] {
+    const parent = parentDir(dir);
+    const node = (() => {
+        let cur = buildTree(files);
+        if (!parent) return cur;
+        for (const seg of parent.split('/')) {
+            const next = cur.children.get(seg);
+            if (!next) return null;
+            cur = next;
+        }
+        return cur;
+    })();
+    if (!node) return [dir];
+    return [...node.children.values()].map((ch) => ch.dir);
+}
+
+/** 展开/折叠与 `dir` 同级的全部文件夹（不含孙级）。 */
+export function setSiblingFoldersCollapsed(files: FolioListItem[], dir: string, collapse: boolean): void {
+    for (const sib of siblingDirs(files, dir)) {
+        if (collapse) collapsedDirs.add(sib);
+        else collapsedDirs.delete(sib);
+    }
+}
+
+/** 同级是否已经全开/全折，用来灰掉菜单项。 */
+export function siblingFolderFoldState(files: FolioListItem[], dir: string): { allExpanded: boolean; allCollapsed: boolean } {
+    const sibs = siblingDirs(files, dir);
+    if (sibs.length === 0) return { allExpanded: true, allCollapsed: true };
+    let collapsed = 0;
+    for (const sib of sibs) if (collapsedDirs.has(sib)) collapsed += 1;
+    return { allExpanded: collapsed === 0, allCollapsed: collapsed === sibs.length };
+}
+
 /**
  * 清单 = 文件夹树（bug4 2.1-2.6）：箭头/文件夹图标折叠，点名称只选中；
  * 子级有 1px 层级引导线；计数右对齐；星标行内显示，不设星标组；无横向滚动。

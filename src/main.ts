@@ -7,7 +7,7 @@ import { createHost } from './host/index.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
-import { renderMemoTimeline, renderSidebar } from './ui/sidebar.ts';
+import { renderMemoTimeline, renderSidebar, setSiblingFoldersCollapsed, siblingFolderFoldState } from './ui/sidebar.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
@@ -550,10 +550,49 @@ propsFoldBtn.addEventListener('click', () => {
 });
 
 let lastListSig = '';
+let lastShown: FolioListItem[] = [];
 
 function listSignature(files: { path: string; title: string; favorite?: boolean }[]): string {
     return `${[...activeFilters].sort().join(',')}|${selectedDir ?? ''}|${openFile ?? ''}|`
         + files.map((f) => `${f.path}\0${f.title}\0${f.favorite ? 1 : 0}`).join('\n');
+}
+
+function paintNav(files: FolioListItem[] = lastShown): void {
+    lastShown = files;
+    if (activeFilters.has('memos') && activeFilters.size === 1) {
+        renderMemoTimeline(nav, files, {
+            activePath: openFile,
+            onOpen: (p) => void open(p),
+        });
+        return;
+    }
+    renderSidebar(nav, files, {
+        activePath: selectedDir ? null : openFile,
+        onOpen: (p) => void open(p),
+        selectedDir,
+        onDirSelect: (dir) => {
+            selectedDir = dir;
+            nav.querySelectorAll<HTMLElement>('.row-main[data-dir]').forEach((b) => {
+                if (b.dataset.dir === dir) b.setAttribute('aria-current', 'true');
+                else b.removeAttribute('aria-current');
+            });
+            nav.querySelectorAll('.row-main[data-path][aria-current]').forEach((b) => b.removeAttribute('aria-current'));
+            lastListSig = listSignature(allFiles);
+        },
+        onFolderContext: (dir, x, y) => folderContextMenu(dir, x, y),
+        onMove: (from, toDir) => void (async () => {
+            if (!host.moveDoc) return;
+            const name = from.split('/').pop()!;
+            const to = `${toDir}/${name}`;
+            if (to === from) return;
+            try {
+                await host.moveDoc(from, to);
+                void refreshList();
+            } catch (err) {
+                saySave(`移动失败：${(err as Error).message}`);
+            }
+        })(),
+    });
 }
 
 async function refreshList(): Promise<void> {
@@ -573,40 +612,7 @@ async function refreshList(): Promise<void> {
         }
         renderPills();
         renderStatusbar();
-        if (activeFilters.has('memos') && activeFilters.size === 1) {
-            renderMemoTimeline(nav, shown, {
-                activePath: openFile,
-                onOpen: (p) => void open(p),
-            });
-        } else {
-            renderSidebar(nav, shown, {
-                activePath: selectedDir ? null : openFile,
-                onOpen: (p) => void open(p),
-                selectedDir,
-                onDirSelect: (dir) => {
-                    selectedDir = dir;
-                    nav.querySelectorAll<HTMLElement>('.row-main[data-dir]').forEach((b) => {
-                        if (b.dataset.dir === dir) b.setAttribute('aria-current', 'true');
-                        else b.removeAttribute('aria-current');
-                    });
-                    nav.querySelectorAll('.row-main[data-path][aria-current]').forEach((b) => b.removeAttribute('aria-current'));
-                    lastListSig = listSignature(allFiles);
-                },
-                onFolderContext: (dir, x, y) => folderContextMenu(dir, x, y),
-                onMove: (from, toDir) => void (async () => {
-                    if (!host.moveDoc) return;
-                    const name = from.split('/').pop()!;
-                    const to = `${toDir}/${name}`;
-                    if (to === from) return;
-                    try {
-                        await host.moveDoc(from, to);
-                        void refreshList();
-                    } catch (err) {
-                        saySave(`移动失败：${(err as Error).message}`);
-                    }
-                })(),
-            });
-        }
+        paintNav(shown);
         renderTitle();
         renderProps();
         syncFavoriteBtn();
@@ -1010,6 +1016,7 @@ function folderContextMenu(dir: string, x: number, y: number): void {
         }
         return [...dirs].sort((a, b) => a.localeCompare(b, 'zh'));
     };
+    const fold = siblingFolderFoldState(lastShown, dir);
     showContextMenu(x, y, [
         ...(dir.split('/').length === 2 && dir.startsWith('links/') ? [{
             ic: 'external-link',
@@ -1057,6 +1064,14 @@ function folderContextMenu(dir: string, x: number, y: number): void {
         { ic: 'clipboard-text', label: '复制文件夹路径', run: () => {
             void navigator.clipboard.writeText(dir);
             saySave('已复制文件夹路径');
+        } },
+        { ic: 'chevrons-down', label: '展开全部同级文件夹', disabled: fold.allExpanded, run: () => {
+            setSiblingFoldersCollapsed(lastShown, dir, false);
+            paintNav();
+        } },
+        { ic: 'chevrons-up', label: '折叠全部同级文件夹', disabled: fold.allCollapsed, run: () => {
+            setSiblingFoldersCollapsed(lastShown, dir, true);
+            paintNav();
         } },
         { ic: 'robot', label: '添加到米米（合入后可用）', disabled: true },
         { sep: true },

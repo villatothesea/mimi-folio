@@ -23,6 +23,8 @@ const PATH_SET = {
     "chevron-down": '<path d="M6 9l6 6l6 -6"/>',
     "chevron-right": '<path d="M9 6l6 6l-6 6"/>',
     "chevron-up": '<path d="M6 15l6 -6l6 6"/>',
+    "chevrons-down": '<path d="M7 7l5 5l5 -5"/><path d="M7 13l5 5l5 -5"/>',
+    "chevrons-up": '<path d="M7 11l5 -5l5 5"/><path d="M7 17l5 -5l5 5"/>',
     "clock": '<path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 7v5l3 3"/>',
     "bold": '<path d="M7 5h6a3.5 3.5 0 0 1 0 7h-6l0 -7"/><path d="M13 12h1a3.5 3.5 0 0 1 0 7h-7v-7"/>',
     "italic": '<path d="M11 5l6 0"/><path d="M7 19l6 0"/><path d="M14 5l-4 14"/>',
