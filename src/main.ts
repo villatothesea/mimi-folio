@@ -11,6 +11,7 @@ import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
 import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
 import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewFrameHref, previewSrc } from './shared/htmlPreview.ts';
+import { readLastView, writeLastView } from './shared/lastView.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
@@ -477,6 +478,7 @@ async function open(path: string): Promise<void> {
                 selectedDir = null;
                 nav.querySelectorAll('.row-main[aria-current][data-dir]').forEach((b) => b.removeAttribute('aria-current'));
             }
+            writeLastView({ v: 'file', path: doc.path });
             mountHtmlPreview(doc.path);
             renderCenterBar();
             renderBreadcrumb('');
@@ -504,6 +506,7 @@ async function open(path: string): Promise<void> {
         renderBreadcrumb(doc.markdown);
         syncFavoriteBtn();
         saySave('');
+        writeLastView({ v: 'file', path: doc.path });
         mountEditor(wrap, doc.markdown, host, onEditorChange);
         renderTitle();
         renderProps();
@@ -645,6 +648,7 @@ async function syncMemoMode(): Promise<void> {
             root.classList.remove('html-mode');
             clearHtmlPreview();
             root.classList.add('memo-mode');
+            writeLastView({ v: 'memos' });
             breadcrumbEl.textContent = '速记';
             lastLinks = { outgoing: [], backlinks: [] };
             renderCenterBar();
@@ -659,7 +663,10 @@ async function syncMemoMode(): Promise<void> {
         });
     } else if (root.classList.contains('memo-mode')) {
         root.classList.remove('memo-mode');
-        if (!openFile) breadcrumbEl.textContent = '未打开';
+        if (!openFile) {
+            breadcrumbEl.textContent = '未打开';
+            writeLastView(null);
+        }
     }
 }
 
@@ -858,6 +865,7 @@ async function relinkFolder(dir: string): Promise<void> {
             breadcrumbEl.textContent = '未打开';
             hideDocHead();
             renderCenterBar();
+            writeLastView(null);
         }
     } catch (err) {
         saySave(`更换路径失败：${(err as Error).message}`);
@@ -1089,6 +1097,7 @@ nav.addEventListener('contextmenu', (event) => {
                 breadcrumbEl.textContent = '未打开';
                 hideDocHead();
                 renderCenterBar();
+                writeLastView(null);
             }
             if (host.deleteDoc) await host.deleteDoc(path).catch((err: Error) => saySave(`删除失败：${err.message}`));
             await refreshList();
@@ -1173,6 +1182,7 @@ function folderContextMenu(dir: string, x: number, y: number): void {
                 breadcrumbEl.textContent = '未打开';
                 hideDocHead();
                 renderCenterBar();
+                writeLastView(null);
             }
             if (host.deleteDoc) await host.deleteDoc(dir).catch(() => undefined);
             if (selectedDir === dir) selectedDir = null;
@@ -1218,6 +1228,7 @@ async function renameInline(button: HTMLButtonElement, path: string): Promise<vo
             const to = await host.moveDoc!(path, dest);
             if (openFile === path) {
                 openFile = to;
+                writeLastView({ v: 'file', path: to });
                 renderBreadcrumb();
                 paintToc();
             }
@@ -1458,4 +1469,16 @@ function attachResizer(panel: HTMLElement, edge: 'left' | 'right', key: string, 
 }
 attachResizer(sidebarEl, 'right', 'folio-w-sidebar', 180, 440);
 
-void refreshList();
+async function restoreLastView(): Promise<void> {
+    const last = readLastView();
+    if (!last) return;
+    if (last.v === 'memos') {
+        await enterMemos();
+        return;
+    }
+    if (!allFiles.some((f) => f.path === last.path)) return;
+    await open(last.path);
+    await refreshList();
+}
+
+void refreshList().then(() => restoreLastView());
