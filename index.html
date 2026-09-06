@@ -44,12 +44,16 @@
           <footer class="zone-bar" id="bar-left">
             <button id="collapse-left" type="button" class="icon-btn" data-tip="收起侧栏"></button>
             <span id="stat-count" class="zone-text"></span>
-            <div id="filterbar" aria-label="筛选">
+            <div id="filterbar" hidden aria-label="筛选">
               <button id="pill-all" type="button" data-view="all" data-tip="全部"></button>
               <button id="pill-notes" type="button" data-view="notes" data-tip="笔记"></button>
               <button id="pill-memos" type="button" data-view="memos" data-tip="速记"></button>
               <button id="pill-links" type="button" data-view="links" data-tip="外链"></button>
               <button id="pill-fav" type="button" data-view="fav" data-tip="星标"></button>
+            </div>
+            <div id="bar-left-actions">
+              <button id="btn-filter-menu" type="button" class="icon-btn" data-tip="筛选" aria-haspopup="menu" aria-expanded="false"></button>
+              <button id="btn-workspace" type="button" class="icon-btn" data-tip="工作区" aria-haspopup="dialog" aria-expanded="false"></button>
             </div>
           </footer>
         </aside>

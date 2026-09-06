@@ -5,6 +5,7 @@
  */
 import { htmlPreviewScriptsEnabled, setHtmlPreviewScriptsEnabled } from '../shared/htmlPreview.ts';
 import { icon } from './icons';
+import { lockAppOverlay } from './overlayLock.ts';
 
 export type FmtSettings = {
     numHead: 'none' | 'dot' | 'cjk' | 'paren';
@@ -128,7 +129,11 @@ export function openSettings(): void {
 
     const sections: Array<[string, () => void]> = [];
     const addSection = (name: string, build: () => void) => sections.push([name, build]);
-    const close = () => overlay.remove();
+    const unlockApp = lockAppOverlay();
+    const close = () => {
+        overlay.remove();
+        unlockApp();
+    };
 
     addSection('默认格式', () => {
         const fmt = readJSON(FMT_KEY, DEFAULT_FMT);

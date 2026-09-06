@@ -16,13 +16,87 @@ import { displayTitle } from '../shared/docTitle.ts';
 import { splitFrontmatter } from '../shared/frontmatter.ts';
 import { withPreviewNav } from '../shared/htmlPreview.ts';
 import { buildIndex, linksFor, type WikilinkIndex } from '../shared/wikilink.ts';
+import {
+    activateWorkspace,
+    activeWorkspace,
+    addWorkspace,
+    parseWorkspaces,
+    removeWorkspace,
+    renameWorkspace,
+    seedWorkspaces,
+    type FolioWorkspaceState,
+} from '../shared/workspaces.ts';
 
 const PREFIX = '/folio/v1/';
 const DOC_RE = /\.(md|html)$/i; // 外链含 html（待评估 9.3）
 const MAX_BODY = 10 * 1024 * 1024;
 
+let currentRoot = '';
+let wsState: FolioWorkspaceState | null = null;
+
+function defaultRoot(): string {
+    return path.resolve(process.env.FOLIO_VAULT ?? path.join(process.cwd(), 'vault'));
+}
+
 export function vaultRoot(): string {
-    return process.env.FOLIO_VAULT ?? path.join(process.cwd(), 'vault');
+    return currentRoot || defaultRoot();
+}
+
+function workspacesFile(): string | null {
+    if (process.env.FOLIO_WORKSPACES) return process.env.FOLIO_WORKSPACES;
+    if (process.env.FOLIO_VAULT) return null;
+    return path.join(os.homedir(), '.mimi-folio', 'workspaces.json');
+}
+
+async function ensureVaultDirs(dir: string): Promise<void> {
+    await fs.mkdir(path.join(dir, 'notes'), { recursive: true });
+    await fs.mkdir(path.join(dir, 'memos'), { recursive: true });
+    await fs.mkdir(path.join(dir, 'attachments'), { recursive: true });
+}
+
+async function persistWorkspaces(): Promise<void> {
+    if (!wsState) return;
+    const file = workspacesFile();
+    if (!file) return;
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, JSON.stringify(wsState, null, 2), 'utf8');
+}
+
+async function loadWorkspaces(): Promise<FolioWorkspaceState> {
+    if (wsState) return wsState;
+    if (!currentRoot) currentRoot = defaultRoot();
+    const file = workspacesFile();
+    if (file) {
+        const raw = await fs.readFile(file, 'utf8').catch(() => '');
+        const parsed = raw ? parseWorkspaces(raw) : null;
+        if (parsed) {
+            wsState = parsed;
+            currentRoot = activeWorkspace(parsed).dir;
+            return parsed;
+        }
+    }
+    wsState = seedWorkspaces(currentRoot);
+    await persistWorkspaces();
+    return wsState;
+}
+
+async function applyWorkspace(next: FolioWorkspaceState): Promise<void> {
+    wsState = next;
+    const dir = activeWorkspace(next).dir;
+    await ensureVaultDirs(dir);
+    if (dir !== currentRoot) {
+        closeVaultWatcher();
+        currentRoot = dir;
+    }
+    await persistWorkspaces();
+}
+
+async function resolveWorkspaceDir(raw: string): Promise<string> {
+    if (!path.isAbsolute(raw)) throw new Error('目录必须是绝对路径');
+    const resolved = path.resolve(raw);
+    const st = await fs.stat(resolved).catch(() => null);
+    if (!st?.isDirectory()) throw new Error('目录不存在');
+    return resolved;
 }
 
 /** vault 内的 posix 相对路径；带 .. 、绝对路径、反斜杠、空段一律拒收。 */
@@ -273,24 +347,32 @@ async function pickFolderNative(): Promise<string | null> {
     if (process.platform === 'win32') {
         const scriptPath = path.join(os.tmpdir(), `folio-pick-${process.pid}-${Date.now()}.ps1`);
         const script = [
-            'Add-Type -AssemblyName System.Windows.Forms',
-            '$hostForm = New-Object System.Windows.Forms.Form',
-            '$hostForm.TopMost = $true',
-            '$hostForm.ShowInTaskbar = $false',
-            '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
-            "$dialog.Description = '选择文件夹'",
-            '$dialog.ShowNewFolderButton = $false',
-            '$result = $dialog.ShowDialog($hostForm)',
-            '$path = if ($result -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.SelectedPath } else { \'\' }',
-            '$hostForm.Dispose()',
             '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-            'Write-Output $path',
+            'function Get-FolioFolder {',
+            '  try {',
+            '    $shell = New-Object -ComObject Shell.Application',
+            '    $folder = $shell.BrowseForFolder(0, "选择工作区目录", 0x0041, 0)',
+            '    if ($null -ne $folder) { return [string]$folder.Self.Path }',
+            '  } catch { }',
+            '  Add-Type -AssemblyName System.Windows.Forms',
+            '  [System.Windows.Forms.Application]::EnableVisualStyles()',
+            '  $hostForm = New-Object System.Windows.Forms.Form',
+            '  $hostForm.TopMost = $true',
+            '  $hostForm.ShowInTaskbar = $false',
+            '  $dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
+            '  $dialog.Description = "选择工作区目录"',
+            '  $dialog.ShowNewFolderButton = $true',
+            '  if ($dialog.ShowDialog($hostForm) -eq [System.Windows.Forms.DialogResult]::OK) { return $dialog.SelectedPath }',
+            '  return ""',
+            '}',
+            '$path = Get-FolioFolder',
+            'if ($path) { Write-Output $path }',
         ].join('\n');
         await fs.writeFile(scriptPath, `\uFEFF${script}`, 'utf8');
         try {
             const { stdout } = await execFileP(
                 'powershell.exe',
-                ['-STA', '-NoProfile', '-NonInteractive', '-File', scriptPath],
+                ['-STA', '-NoProfile', '-File', scriptPath],
                 { timeout: 10 * 60 * 1000, windowsHide: false },
             );
             const line = String(stdout).split(/\r?\n/).map((s) => s.trim()).filter(Boolean).pop() ?? '';
@@ -628,11 +710,59 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
     if (!raw.startsWith(PREFIX)) return false;
     const [pathname, search = ''] = raw.slice(PREFIX.length).split('?');
     const query = new URLSearchParams(search);
+    await loadWorkspaces();
     const root = vaultRoot();
 
     try {
         if (req.method === 'GET' && pathname === 'root') {
             send(res, 200, { root });
+            return true;
+        }
+
+        if (req.method === 'GET' && pathname === 'workspaces') {
+            send(res, 200, await loadWorkspaces());
+            return true;
+        }
+
+        if (req.method === 'POST' && pathname === 'workspace') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { id?: string };
+            if (typeof body.id !== 'string') return fail(res, 400, '需要 {id}');
+            const next = activateWorkspace(await loadWorkspaces(), body.id);
+            await applyWorkspace(next);
+            send(res, 204);
+            return true;
+        }
+
+        if (req.method === 'POST' && pathname === 'workspaces') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { name?: string; dir?: string };
+            if (typeof body.name !== 'string' || typeof body.dir !== 'string') {
+                return fail(res, 400, '需要 {name, dir}');
+            }
+            const dir = await resolveWorkspaceDir(body.dir);
+            const name = body.name.trim() || path.basename(dir);
+            const next = addWorkspace(await loadWorkspaces(), name, dir, crypto.randomUUID());
+            await applyWorkspace(next);
+            send(res, 200, activeWorkspace(next));
+            return true;
+        }
+
+        if (req.method === 'PATCH' && pathname === 'workspaces') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { id?: string; name?: string };
+            if (typeof body.id !== 'string' || typeof body.name !== 'string') {
+                return fail(res, 400, '需要 {id, name}');
+            }
+            const next = renameWorkspace(await loadWorkspaces(), body.id, body.name);
+            await applyWorkspace(next);
+            send(res, 204);
+            return true;
+        }
+
+        if (req.method === 'DELETE' && pathname === 'workspaces') {
+            const id = query.get('id') ?? '';
+            if (!id) return fail(res, 400, '需要 id');
+            const next = removeWorkspace(await loadWorkspaces(), id);
+            await applyWorkspace(next);
+            send(res, 204);
             return true;
         }
 

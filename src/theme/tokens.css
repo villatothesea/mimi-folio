@@ -77,6 +77,9 @@
     --folio-doc-pad: 50px;
     --folio-font-size-code: var(--folio-fs-code);
     --folio-shadow: rgb(0 0 0 / 5%) 0 0 0 1px, rgb(0 0 0 / 6%) 0 3px 6px;
+    /* 须高于 Muya 段落钮/浮动层（~10000），否则弹窗会被穿透 */
+    --folio-overlay-z: 10001;
+    --folio-modal-z: 10002;
     --folio-control-h: 28px;
     /* 正文比例：放大用 zoom；缩小只缩字号，栏宽不动 */
     --folio-text-zoom: 1;

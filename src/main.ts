@@ -11,7 +11,7 @@ import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
 import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
 import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewFrameHref, previewSrc } from './shared/htmlPreview.ts';
-import { readLastView, writeLastView } from './shared/lastView.ts';
+import { readLastView, readLastViewFor, writeLastView as persistView, writeLastViewFor } from './shared/lastView.ts';
 import { applyViewFilters, nextViewFilters } from './shared/viewFilters.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
@@ -20,6 +20,7 @@ import { attachWikiAutocomplete, attachWikilinkDecor } from './ui/wikilinkDecor.
 import { blockNativeContextMenu, showContextMenu } from './ui/contextMenu.ts';
 import { folioConfirm, folioPick, folioPrompt } from './ui/dialogs.ts';
 import { attachTips } from './ui/tips.ts';
+import { attachWorkspaceMenu } from './ui/workspaces.ts';
 import { attachScrollFade } from './ui/scrollFade.ts';
 import { buildToolbar } from './ui/toolbar.ts';
 import { initSettings, openSettings } from './ui/settings.ts';
@@ -32,10 +33,18 @@ import type { FolioListItem } from './host/types.ts';
  */
 const host = createHost();
 
+let activeWorkspaceId = '';
+
+function writeLastView(view: Parameters<typeof persistView>[0]): void {
+    if (activeWorkspaceId) writeLastViewFor(activeWorkspaceId, view);
+    else persistView(view);
+}
+
 const nav = document.querySelector<HTMLElement>('#files')!;
 const breadcrumbEl = document.querySelector<HTMLElement>('#breadcrumb')!;
 const favoriteBtn = document.querySelector<HTMLButtonElement>('#favorite-toggle')!;
 const filterbar = document.querySelector<HTMLElement>('#filterbar')!;
+const btnFilterMenu = document.querySelector<HTMLButtonElement>('#btn-filter-menu')!;
 const sidebarEl = document.querySelector<HTMLElement>('#sidebar')!;
 const tocHost = document.querySelector<HTMLElement>('#toc-host')!;
 const tocFab = document.querySelector<HTMLButtonElement>('#toc-fab')!;
@@ -743,30 +752,103 @@ async function refreshList(): Promise<void> {
 /** 筛选 pills（验收批）：全部/笔记/速记/外链，图标在文字左，带计数。 */
 const PILL_ICONS: Record<string, string> = { all: 'all', notes: 'note', memos: 'memo', links: 'link', fav: 'star' };
 const PILL_LABELS: Record<string, string> = { all: '全部', notes: '笔记', memos: '速记', links: '外链', fav: '星标' };
+const PILL_KEYS = ['all', 'notes', 'memos', 'links', 'fav'] as const;
 
-function renderPills(): void {
-    const counts: Record<string, number> = {
+function pillCounts(): Record<string, number> {
+    return {
         all: allFiles.length,
         notes: allFiles.filter((f) => f.kind === 'note').length,
         memos: allFiles.filter((f) => f.kind === 'memo').length,
         links: allFiles.filter((f) => f.linked).length,
         fav: allFiles.filter((f) => f.favorite).length,
     };
+}
+
+function pillPressed(key: string): boolean {
+    return key === 'all' ? activeFilters.size === 0 : activeFilters.has(key);
+}
+
+function applyFilter(key: string, multi: boolean): void {
+    activeFilters = nextViewFilters(activeFilters, key, multi);
+    void refreshList();
+}
+
+function renderPills(): void {
+    const counts = pillCounts();
+    const activeLabel = activeFilters.size === 0
+        ? '全部'
+        : [...activeFilters].map((key) => PILL_LABELS[key] ?? key).join('·');
+    btnFilterMenu.dataset.tip = `筛选 · ${activeLabel}`;
+    btnFilterMenu.setAttribute('aria-pressed', String(activeFilters.size > 0));
     filterbar.querySelectorAll<HTMLButtonElement>('button[data-view]').forEach((button) => {
         const key = button.dataset.view ?? 'all';
         button.innerHTML = icon(PILL_ICONS[key] ?? 'all');
         button.dataset.tip = `${PILL_LABELS[key] ?? ''} ${counts[key] ?? 0}`;
-        button.setAttribute('aria-pressed', String(key === 'all' ? activeFilters.size === 0 : activeFilters.has(key)));
+        button.setAttribute('aria-pressed', String(pillPressed(key)));
+    });
+    document.querySelectorAll<HTMLButtonElement>('#filter-menu button[data-view]').forEach((button) => {
+        const key = button.dataset.view ?? 'all';
+        button.setAttribute('aria-pressed', String(pillPressed(key)));
+        button.querySelector('.filter-menu-count')!.textContent = String(counts[key] ?? 0);
     });
 }
+
+function openFilterMenu(anchor: HTMLButtonElement): void {
+    document.querySelector('#filter-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.id = 'filter-menu';
+    menu.setAttribute('role', 'menu');
+    const counts = pillCounts();
+    for (const key of PILL_KEYS) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.dataset.view = key;
+        item.setAttribute('role', 'menuitemcheckbox');
+        item.innerHTML = `${icon(PILL_ICONS[key])}<span>${PILL_LABELS[key]}</span><span class="filter-menu-count">${counts[key] ?? 0}</span>`;
+        item.setAttribute('aria-pressed', String(pillPressed(key)));
+        item.addEventListener('click', (event) => {
+            applyFilter(key, event.ctrlKey || event.metaKey);
+            renderPills();
+            if (!(event.ctrlKey || event.metaKey)) {
+                menu.remove();
+                anchor.setAttribute('aria-expanded', 'false');
+            }
+        });
+        menu.append(item);
+    }
+    const rect = anchor.getBoundingClientRect();
+    menu.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+    menu.style.left = `${rect.left}px`;
+    document.body.append(menu);
+    anchor.setAttribute('aria-expanded', 'true');
+    setTimeout(() => {
+        const close = (event: MouseEvent) => {
+            if (menu.contains(event.target as Node)) return;
+            menu.remove();
+            anchor.setAttribute('aria-expanded', 'false');
+            document.removeEventListener('mousedown', close);
+        };
+        document.addEventListener('mousedown', close);
+    });
+}
+
+btnFilterMenu.innerHTML = icon('menu');
+btnFilterMenu.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (document.querySelector('#filter-menu')) {
+        document.querySelector('#filter-menu')?.remove();
+        btnFilterMenu.setAttribute('aria-expanded', 'false');
+        return;
+    }
+    openFilterMenu(event.currentTarget as HTMLButtonElement);
+});
 
 filterbar.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-view]');
     if (!button) return;
     const key = button.dataset.view ?? 'all';
     if (event.ctrlKey || event.metaKey) event.preventDefault();
-    activeFilters = nextViewFilters(activeFilters, key, event.ctrlKey || event.metaKey);
-    void refreshList();
+    applyFilter(key, event.ctrlKey || event.metaKey);
 });
 
 function stamp(): string {
@@ -1567,6 +1649,47 @@ applySavedTocSize();
 attachTocResizer();
 attachScrollFade();
 
+async function leaveOpenDoc(): Promise<void> {
+    if (openFile && currentEditor()) await saveNow(currentEditor()!.getMarkdown());
+    openFile = null;
+    destroyEditor();
+    hideDocHead();
+    setTocOpen(false);
+    clearHtmlPreview();
+    document.querySelector<HTMLElement>('#app')?.classList.remove('memo-mode', 'html-mode');
+    selectedDir = null;
+    lastListSig = '';
+    lastShown = [];
+    lastLinks = { outgoing: [], backlinks: [] };
+    breadcrumbEl.textContent = '未打开';
+    renderCenterBar();
+}
+
+async function switchToWorkspace(id: string): Promise<void> {
+    if (!host.setWorkspace) return;
+    if (activeWorkspaceId && id !== activeWorkspaceId) {
+        writeLastViewFor(activeWorkspaceId, readLastView());
+    }
+    await leaveOpenDoc();
+    if (id !== activeWorkspaceId) await host.setWorkspace(id);
+    activeWorkspaceId = id;
+    await refreshList();
+    const last = readLastViewFor(id);
+    if (!last) return;
+    persistView(last);
+    await restoreLastView();
+}
+
+const btnWorkspace = document.querySelector<HTMLButtonElement>('#btn-workspace');
+if (btnWorkspace) {
+    attachWorkspaceMenu(btnWorkspace, {
+        host,
+        onSwitch: (id) => switchToWorkspace(id),
+        onCreated: (id) => switchToWorkspace(id),
+        say: saySave,
+    });
+}
+
 async function restoreLastView(): Promise<void> {
     const last = readLastView();
     if (!last) return;
@@ -1579,4 +1702,17 @@ async function restoreLastView(): Promise<void> {
     await refreshList();
 }
 
-void refreshList().then(() => restoreLastView());
+void (async () => {
+    if (host.listWorkspaces) {
+        try {
+            const ws = await host.listWorkspaces();
+            activeWorkspaceId = ws.activeId;
+        } catch {
+            /* 服务还没起来时先按默认 vault */
+        }
+    }
+    await refreshList();
+    const last = (activeWorkspaceId ? readLastViewFor(activeWorkspaceId) : null) ?? readLastView();
+    if (last) persistView(last);
+    await restoreLastView();
+})();

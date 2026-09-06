@@ -1,4 +1,4 @@
-import type { FolioAttachment, FolioDoc, FolioHost, FolioImage, FolioIndex, FolioListItem, FolioListOpts, FolioPath, FolioSearchItem } from './types.ts';
+import type { FolioAttachment, FolioDoc, FolioHost, FolioImage, FolioIndex, FolioListItem, FolioListOpts, FolioPath, FolioSearchItem, FolioWorkspace } from './types.ts';
 
 /**
  * 独立模式的浏览器侧实现：fetch 本仓小服务（src/server/）的 /folio/v1/*。
@@ -143,5 +143,51 @@ export class StandaloneHost implements FolioHost {
     previewUrl(path: FolioPath): string {
         const segs = path.split('/').filter(Boolean).map(encodeURIComponent);
         return this.url(`/folio/v1/preview/${segs.join('/')}`);
+    }
+
+    async listWorkspaces(): Promise<{ items: FolioWorkspace[]; activeId: string }> {
+        const resp = await fetch(this.url('/folio/v1/workspaces'));
+        return this.json<{ items: FolioWorkspace[]; activeId: string }>(resp);
+    }
+
+    async setWorkspace(id: string): Promise<void> {
+        const resp = await fetch(this.url('/folio/v1/workspace'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id }),
+        });
+        if (!resp.ok) {
+            const err = (await resp.json().catch(() => ({}))) as { error?: string };
+            throw new Error(err.error ?? `HTTP ${resp.status}`);
+        }
+    }
+
+    async addWorkspace(name: string, dir: string): Promise<FolioWorkspace> {
+        const resp = await fetch(this.url('/folio/v1/workspaces'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ name, dir }),
+        });
+        return this.json<FolioWorkspace>(resp);
+    }
+
+    async renameWorkspace(id: string, name: string): Promise<void> {
+        const resp = await fetch(this.url('/folio/v1/workspaces'), {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id, name }),
+        });
+        if (!resp.ok) {
+            const err = (await resp.json().catch(() => ({}))) as { error?: string };
+            throw new Error(err.error ?? `HTTP ${resp.status}`);
+        }
+    }
+
+    async deleteWorkspace(id: string): Promise<void> {
+        const resp = await fetch(this.url(`/folio/v1/workspaces?id=${encodeURIComponent(id)}`), { method: 'DELETE' });
+        if (!resp.ok) {
+            const err = (await resp.json().catch(() => ({}))) as { error?: string };
+            throw new Error(err.error ?? `HTTP ${resp.status}`);
+        }
     }
 }

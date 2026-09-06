@@ -484,3 +484,41 @@ describe('GET /folio/v1/preview/*', () => {
         assert.equal(res.status, 400);
     });
 });
+
+describe('工作区（切换 vault 根，不写进 md）', () => {
+    it('默认至少有当前 vault；新建后 list 换成新区，切回原区', async () => {
+        const listed = await fetch(`${base}/folio/v1/workspaces`);
+        const before = (await listed.json()) as { items: { id: string; dir: string }[]; activeId: string };
+        assert.ok(before.items.length >= 1);
+        const origin = before.activeId;
+
+        const other = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-ws-'));
+        await fs.mkdir(path.join(other, 'notes'), { recursive: true });
+        await fs.writeFile(path.join(other, 'notes', 'only-here.md'), '# 只在新区\n', 'utf8');
+
+        const created = await fetch(`${base}/folio/v1/workspaces`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ name: '编程', dir: other }),
+        });
+        assert.equal(created.status, 200);
+        const item = (await created.json()) as { id: string; name: string };
+        assert.equal(item.name, '编程');
+
+        const files = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string }[];
+        assert.ok(files.some((f) => f.path === 'notes/only-here.md'));
+        assert.ok(!files.some((f) => f.path === 'notes/a.md'));
+
+        const back = await fetch(`${base}/folio/v1/workspace`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: origin }),
+        });
+        assert.equal(back.status, 204);
+        const restored = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string }[];
+        assert.ok(restored.some((f) => f.path === 'notes/a.md'));
+
+        const del = await fetch(`${base}/folio/v1/workspaces?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+        assert.equal(del.status, 204);
+    });
+});

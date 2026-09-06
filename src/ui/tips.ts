@@ -23,7 +23,7 @@ function hideTip(): void {
 }
 
 function preferBelow(el: HTMLElement): boolean {
-    return Boolean(el.closest('#toolbar, #page-head, #sidebar-head, #filterbar, #toc-host, #expand-hints'));
+    return Boolean(el.closest('#toolbar, #page-head, #sidebar-head, #bar-left-actions, #toc-host, #expand-hints'));
 }
 
 function place(el: HTMLElement): void {

@@ -225,6 +225,203 @@ body.is-toc-resizing iframe {
     text-overflow: ellipsis;
 }
 
+#bar-left {
+    padding: 0;
+    gap: 0;
+}
+
+#bar-left #stat-count {
+    padding: 0 var(--folio-space-2);
+}
+
+#bar-left #filterbar {
+    display: none;
+}
+
+#bar-left-actions {
+    display: flex;
+    align-items: stretch;
+    align-self: stretch;
+    margin-left: auto;
+}
+
+#btn-filter-menu,
+#btn-workspace {
+    align-self: stretch;
+    height: auto;
+    border-radius: 0;
+}
+
+#btn-filter-menu[aria-pressed='true'] {
+    background: var(--folio-fg);
+    color: var(--folio-bg);
+}
+
+.ws-dialog-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+#ws-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--folio-space-1);
+    padding: var(--folio-space-2);
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.ws-card {
+    display: flex;
+    align-items: stretch;
+    gap: var(--folio-space-1);
+    border: 1px solid var(--folio-border);
+    background: var(--folio-bg);
+    padding: var(--folio-space-1);
+    cursor: pointer;
+    text-align: left;
+}
+
+.ws-card[aria-current='true'] {
+    border-color: var(--folio-fg);
+}
+
+.ws-card-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex: none;
+}
+
+.ws-card-actions .icon-btn {
+    width: var(--folio-control-h);
+    height: var(--folio-control-h);
+}
+
+.ws-card-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    padding: var(--folio-space-1);
+}
+
+.ws-card-name {
+    color: var(--folio-fg);
+    font-size: var(--folio-font-size-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ws-card-dir {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ws-card-name-input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 0;
+    border-bottom: 1px solid var(--folio-border);
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0;
+}
+
+#ws-add {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--folio-border);
+}
+
+#ws-add-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-2);
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-2);
+    cursor: pointer;
+    text-align: left;
+}
+
+#ws-add-toggle:hover {
+    background: var(--folio-hover);
+}
+
+#ws-add-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--folio-space-1);
+    padding: 0 var(--folio-space-2) var(--folio-space-2);
+}
+
+#ws-add-form input,
+#ws-add-form button.ws-pick,
+#ws-add-form button.ws-create {
+    box-sizing: border-box;
+    width: 100%;
+    height: var(--folio-control-h);
+    border: 1px solid var(--folio-border);
+    border-radius: 0;
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    padding: 0 var(--folio-space-2);
+    text-align: left;
+}
+
+.ws-add-actions {
+    display: flex;
+    gap: var(--folio-space-1);
+}
+
+.ws-add-actions .ws-pick,
+.ws-add-actions .ws-create {
+    flex: 1;
+    width: auto;
+}
+
+#ws-add-form button.ws-create {
+    cursor: pointer;
+    text-align: center;
+}
+
+#ws-add-form button.ws-create:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#ws-add-form button.ws-pick {
+    color: var(--folio-fg-muted);
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .link-like {
     border: 0;
     background: none;
@@ -235,6 +432,19 @@ body.is-toc-resizing iframe {
 
 .link-like:hover {
     color: var(--folio-fg);
+}
+
+body.folio-overlay-open #app {
+    pointer-events: none;
+    user-select: none;
+}
+
+body.folio-overlay-open #ws-overlay,
+body.folio-overlay-open #settings-overlay,
+body.folio-overlay-open #search-overlay,
+body.folio-overlay-open .folio-modal {
+    pointer-events: auto;
+    user-select: auto;
 }
 
 #stat-words {
@@ -984,6 +1194,7 @@ span.mu-inline-image.folio-img-fixed {
 
 #search-overlay,
 #settings-overlay,
+#ws-overlay,
 .folio-modal {
     animation: folio-fade-in 0.15s ease-out;
 }
@@ -1002,7 +1213,7 @@ span.mu-inline-image.folio-img-fixed {
 #search-overlay {
     position: fixed;
     inset: 0;
-    z-index: 60;
+    z-index: var(--folio-overlay-z);
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -1104,9 +1315,10 @@ span.mu-inline-image.folio-img-fixed {
     padding: var(--folio-space-3) var(--folio-space-4);
 }
 
-/* ===== 加号 / Hx 下拉 ===== */
+/* ===== 加号 / Hx / 筛选 下拉 ===== */
 #plus-menu,
-#hx-menu {
+#hx-menu,
+#filter-menu {
     position: fixed;
     z-index: 50;
     display: flex;
@@ -1120,7 +1332,8 @@ span.mu-inline-image.folio-img-fixed {
 }
 
 #plus-menu button,
-#hx-menu button {
+#hx-menu button,
+#filter-menu button {
     display: flex;
     align-items: center;
     gap: var(--folio-space-2);
@@ -1136,15 +1349,27 @@ span.mu-inline-image.folio-img-fixed {
 }
 
 #plus-menu button:hover,
-#hx-menu button:hover {
+#hx-menu button:hover,
+#filter-menu button:hover {
     background: var(--folio-hover);
 }
 
+#filter-menu button[aria-pressed='true'] {
+    background: var(--folio-hover-active);
+}
+
+.filter-menu-count {
+    margin-left: auto;
+    color: var(--folio-fg-muted);
+    font-variant-numeric: tabular-nums;
+}
+
 /* ===== 设置弹窗（验收清单 7） ===== */
-#settings-overlay {
+#settings-overlay,
+#ws-overlay {
     position: fixed;
     inset: 0;
-    z-index: 70;
+    z-index: var(--folio-overlay-z);
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -1609,7 +1834,7 @@ html[data-width='wide'] .mu-editor .mu-container {
 .folio-modal {
     position: fixed;
     inset: 0;
-    z-index: 90;
+    z-index: var(--folio-modal-z);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2183,6 +2408,8 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
 /* 底栏按钮高亮上下贴边，不与横线留缝 */
 .zone-bar .icon-btn,
 .zone-bar #filterbar button,
+.zone-bar #btn-filter-menu,
+.zone-bar #btn-workspace,
 .zone-bar .link-seg {
     height: auto;
     align-self: stretch;

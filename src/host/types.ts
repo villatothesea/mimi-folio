@@ -60,6 +60,12 @@ export type FolioIndex = {
     backlinks: FolioPath[];
 };
 
+export type FolioWorkspace = {
+    id: string;
+    name: string;
+    dir: string;
+};
+
 export interface FolioHost {
     read(path: FolioPath): Promise<FolioDoc>;
     /** ifMatch 传读时的 mtimeMs：文件已变则 409，不静默覆盖 */
@@ -88,6 +94,12 @@ export interface FolioHost {
     index?(path: FolioPath): Promise<FolioIndex>;
     /** 网页预览看法的 iframe src（单元：html 不当 md 打开）。合入后 daemon 同路径端文件。 */
     previewUrl?(path: FolioPath): string;
+    /** 工作区清单（人翻不同目录；不写进 md）。合入后 daemon 同名。 */
+    listWorkspaces?(): Promise<{ items: FolioWorkspace[]; activeId: string }>;
+    setWorkspace?(id: string): Promise<void>;
+    addWorkspace?(name: string, dir: string): Promise<FolioWorkspace>;
+    renameWorkspace?(id: string, name: string): Promise<void>;
+    deleteWorkspace?(id: string): Promise<void>;
 }
 
 export function detectHostKind(): 'mimi' | 'standalone' {
