@@ -28,6 +28,13 @@
     --folio-toc-fab-end: 5px;
     --folio-toc-pop-w: 220px;
     --folio-toc-pop-h: 500px;
+    --folio-toc-pop-min-w: 140px;
+    --folio-toc-pop-max-w: 480px;
+    --folio-toc-pop-min-h: 120px;
+    --folio-toc-pop-max-h: 800px;
+    --folio-toc-pop-border: 1px solid var(--folio-border);
+    --folio-toc-scrollbar-size: 1px;
+    --folio-toc-scrollbar-end: 2px;
     /* ==mark== 高亮底色：米米淡米色（bug4 4.4，可在工具栏换色） */
     --folio-highlight: #f2e3c8;
     --folio-primary: #2a2a2a;
@@ -77,6 +84,15 @@
     --folio-sel-gap: 3px;
     /* 侧栏拖宽窄的可点宽度（比线宽，好抓住） */
     --folio-resize-hit: 12px;
+    /* 滚动条：平时隐藏；滚动淡入，停后按 --folio-scrollbar-hide 淡出 */
+    --folio-scrollbar-size: 8px;
+    --folio-scrollbar-thumb: var(--folio-border-strong);
+    --folio-scrollbar-thumb-hover: var(--folio-fg-muted);
+    --folio-scrollbar-track: transparent;
+    --folio-scrollbar-end: 2px;
+    --folio-scrollbar-fade: 0.2s;
+    --folio-scrollbar-hide: 1s;
+    --folio-scrollbar-thumb-min: 12px;
 
     /* 色块贴文字：四边内边距；链接字号比正文小一号 */
     --folio-chip-pad: 2px;

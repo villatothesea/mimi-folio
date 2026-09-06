@@ -6,6 +6,48 @@ body {
     height: 100%;
 }
 
+/* 原生滚动条藏掉（占位会挤布局）；可见条是 .folio-sb 叠层。 */
+* {
+    scrollbar-width: none;
+}
+
+::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+.folio-scroll {
+    position: relative;
+}
+
+.folio-sb {
+    position: absolute;
+    top: 0;
+    right: var(--folio-scrollbar-end);
+    width: var(--folio-scrollbar-size);
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity var(--folio-scrollbar-fade);
+}
+
+.folio-sb.is-on {
+    opacity: 1;
+}
+
+.folio-sb-thumb {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    background: var(--folio-scrollbar-thumb);
+    border-radius: 0;
+}
+
+#toc-list > .folio-sb {
+    width: var(--folio-toc-scrollbar-size);
+    right: var(--folio-toc-scrollbar-end);
+}
+
 #app {
     display: flex;
     height: 100%;
@@ -46,6 +88,9 @@ body {
     top: calc(var(--folio-control-h) + 2 * var(--folio-space-2) + 1px + var(--folio-page-inset));
     right: calc(var(--folio-toc-fab-end) + var(--folio-toc-scrollbar, 0px));
     z-index: 15;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
     width: var(--folio-toc-fab-size);
     height: var(--folio-toc-fab-size);
     overflow: visible;
@@ -84,7 +129,7 @@ body {
 
 #toc {
     position: absolute;
-    top: calc(100% + var(--folio-space-1));
+    top: calc(var(--folio-toc-fab-size) + var(--folio-space-1));
     right: 0;
     display: flex;
     flex-direction: column;
@@ -92,11 +137,51 @@ body {
     height: var(--folio-toc-pop-h);
     max-height: calc(100dvh - var(--folio-control-h) * 4);
     box-sizing: border-box;
-    border: 1px solid var(--folio-border);
+    border: var(--folio-toc-pop-border);
     background: var(--folio-bg);
-    box-shadow: var(--folio-shadow);
+    box-shadow: none;
     min-height: 0;
     overflow: hidden;
+}
+
+.toc-resize {
+    position: absolute;
+    z-index: 8;
+    touch-action: none;
+    pointer-events: auto;
+}
+
+.toc-resize-w {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--folio-resize-hit);
+    cursor: ew-resize;
+}
+
+.toc-resize-h {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--folio-resize-hit);
+    cursor: ns-resize;
+}
+
+.toc-resize-wh {
+    left: 0;
+    bottom: 0;
+    width: var(--folio-resize-hit);
+    height: var(--folio-resize-hit);
+    cursor: nesw-resize;
+    z-index: 3;
+}
+
+body.is-toc-resizing {
+    user-select: none;
+}
+
+body.is-toc-resizing iframe {
+    pointer-events: none;
 }
 
 #toc-list {
@@ -108,6 +193,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: var(--folio-space-1);
+    z-index: 0;
 }
 
 /* 三区底栏（zone bar）：同高细条，贴到窗口底 */
@@ -238,11 +324,6 @@ body {
     touch-action: none;
 }
 
-.col-resize:hover,
-body.is-col-resizing .col-resize {
-    background: color-mix(in srgb, var(--folio-fg-muted) 35%, transparent);
-}
-
 body.is-col-resizing {
     cursor: col-resize;
     user-select: none;
@@ -288,7 +369,7 @@ body.is-col-resizing iframe {
     box-shadow: var(--folio-shadow);
 }
 
-/* ===== 筛选 pills（bug4 2.4）：底栏靠右、无边框、方形满高高亮、toggle ===== */
+/* ===== 筛选 pills：底栏靠右、无边框、方形满高高亮；默认单选，Ctrl 多选 ===== */
 #filterbar {
     display: flex;
     align-items: stretch;

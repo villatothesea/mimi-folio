@@ -12,6 +12,7 @@ import { attachWikilinkHandlers } from './ui/wikilink.ts';
 import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
 import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewFrameHref, previewSrc } from './shared/htmlPreview.ts';
 import { readLastView, writeLastView } from './shared/lastView.ts';
+import { applyViewFilters, nextViewFilters } from './shared/viewFilters.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
@@ -19,6 +20,7 @@ import { attachWikiAutocomplete, attachWikilinkDecor } from './ui/wikilinkDecor.
 import { blockNativeContextMenu, showContextMenu } from './ui/contextMenu.ts';
 import { folioConfirm, folioPick, folioPrompt } from './ui/dialogs.ts';
 import { attachTips } from './ui/tips.ts';
+import { attachScrollFade } from './ui/scrollFade.ts';
 import { buildToolbar } from './ui/toolbar.ts';
 import { initSettings, openSettings } from './ui/settings.ts';
 import { icon } from './ui/icons.ts';
@@ -52,7 +54,7 @@ let docCtime: number | undefined;
 let lastLinks: { outgoing: string[]; backlinks: string[] } = { outgoing: [], backlinks: [] };
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let allFiles: FolioListItem[] = [];
-/** 底栏五枚筛选按钮 = toggle 集合（bug4 2.4）：点开加滤、重点取消；全部=清空 */
+/** 底栏五枚筛选：默认单选；Ctrl/Cmd 点选为并集。空集合 = 全部。 */
 let activeFilters = new Set<string>();
 let selectedDir: string | null = null;
 
@@ -85,6 +87,19 @@ async function saveNow(markdown: string): Promise<void> {
 function setTocOpen(open: boolean): void {
     tocPanel.hidden = !open;
     tocFab.setAttribute('aria-expanded', String(open));
+    syncTocHostBox();
+}
+
+function syncTocHostBox(): void {
+    if (tocPanel.hidden) {
+        tocHost.style.removeProperty('width');
+        tocHost.style.removeProperty('height');
+        return;
+    }
+    const fab = tokenPx('--folio-toc-fab-size', 20);
+    const gap = tokenPx('--folio-space-1', 4);
+    tocHost.style.width = `${Math.round(tocPanel.offsetWidth)}px`;
+    tocHost.style.height = `${Math.round(fab + gap + tocPanel.offsetHeight)}px`;
 }
 
 function syncTocGutter(): void {
@@ -710,13 +725,7 @@ async function refreshList(): Promise<void> {
         if (sig === lastListSig) return;
         if (nav.querySelector('input:focus, textarea:focus') || titleEl.querySelector('input:focus') || isMemoBusy()) return;
         lastListSig = sig;
-        let shown = files;
-        for (const key of activeFilters) {
-            if (key === 'notes') shown = shown.filter((f) => f.kind === 'note');
-            if (key === 'memos') shown = shown.filter((f) => f.kind === 'memo');
-            if (key === 'links') shown = shown.filter((f) => f.linked);
-            if (key === 'fav') shown = shown.filter((f) => f.favorite);
-        }
+        const shown = applyViewFilters(files, activeFilters);
         renderPills();
         renderStatusbar();
         paintNav(shown);
@@ -755,13 +764,8 @@ filterbar.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-view]');
     if (!button) return;
     const key = button.dataset.view ?? 'all';
-    if (key === 'all') {
-        activeFilters = new Set();
-    } else if (activeFilters.has(key)) {
-        activeFilters.delete(key);
-    } else {
-        activeFilters.add(key);
-    }
+    if (event.ctrlKey || event.metaKey) event.preventDefault();
+    activeFilters = nextViewFilters(activeFilters, key, event.ctrlKey || event.metaKey);
     void refreshList();
 });
 
@@ -1468,6 +1472,100 @@ function attachResizer(panel: HTMLElement, edge: 'left' | 'right', key: string, 
     panel.append(handle);
 }
 attachResizer(sidebarEl, 'right', 'folio-w-sidebar', 180, 440);
+
+function tokenPx(name: string, fallback: number): number {
+    const n = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name));
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function tocSizeBounds(): { minW: number; maxW: number; minH: number; maxH: number } {
+    return {
+        minW: tokenPx('--folio-toc-pop-min-w', 140),
+        maxW: tokenPx('--folio-toc-pop-max-w', 480),
+        minH: tokenPx('--folio-toc-pop-min-h', 120),
+        maxH: Math.min(tokenPx('--folio-toc-pop-max-h', 800), Math.round(window.innerHeight * 0.8)),
+    };
+}
+
+function applySavedTocSize(): void {
+    const { minW, maxW, minH, maxH } = tocSizeBounds();
+    const w = Number(localStorage.getItem('folio-toc-w'));
+    const h = Number(localStorage.getItem('folio-toc-h'));
+    if (Number.isFinite(w) && w >= minW && w <= maxW) tocPanel.style.width = `${Math.round(w)}px`;
+    if (Number.isFinite(h) && h >= minH && h <= maxH) tocPanel.style.height = `${Math.round(h)}px`;
+}
+
+function attachTocResizer(): void {
+    const addHandle = (cls: string, axes: { w?: boolean; h?: boolean }): void => {
+        const handle = document.createElement('div');
+        handle.className = `toc-resize ${cls}`;
+        let dragging = false;
+        let pointerId = 0;
+        let startX = 0;
+        let startY = 0;
+        let startW = 0;
+        let startH = 0;
+        const stop = (): void => {
+            if (!dragging) return;
+            dragging = false;
+            document.body.classList.remove('is-toc-resizing');
+            document.body.style.removeProperty('cursor');
+            const box = tocPanel.getBoundingClientRect();
+            localStorage.setItem('folio-toc-w', String(Math.round(box.width)));
+            localStorage.setItem('folio-toc-h', String(Math.round(box.height)));
+            syncTocHostBox();
+            try {
+                handle.releasePointerCapture(pointerId);
+            } catch {
+                /* 已经丢了 capture */
+            }
+        };
+        handle.addEventListener('pointerdown', (down) => {
+            if (down.button !== 0) return;
+            down.preventDefault();
+            down.stopPropagation();
+            dragging = true;
+            pointerId = down.pointerId;
+            startX = down.clientX;
+            startY = down.clientY;
+            const box = tocPanel.getBoundingClientRect();
+            startW = box.width;
+            startH = box.height;
+            document.body.classList.add('is-toc-resizing');
+            document.body.style.cursor = getComputedStyle(handle).cursor;
+            try {
+                handle.setPointerCapture(down.pointerId);
+            } catch {
+                /* 无真实指针时 capture 会抛 */
+            }
+        });
+        handle.addEventListener('pointermove', (moveEvent) => {
+            if (!dragging || moveEvent.pointerId !== pointerId) return;
+            const { minW, maxW, minH, maxH } = tocSizeBounds();
+            if (axes.w) {
+                const width = Math.min(maxW, Math.max(minW, Math.round(startW + (startX - moveEvent.clientX))));
+                tocPanel.style.width = `${width}px`;
+            }
+            if (axes.h) {
+                const height = Math.min(maxH, Math.max(minH, Math.round(startH + (moveEvent.clientY - startY))));
+                tocPanel.style.height = `${height}px`;
+            }
+            syncTocHostBox();
+        });
+        handle.addEventListener('pointerup', stop);
+        handle.addEventListener('pointercancel', stop);
+        handle.addEventListener('lostpointercapture', stop);
+        handle.addEventListener('dragstart', (event) => event.preventDefault());
+        tocPanel.append(handle);
+    };
+    addHandle('toc-resize-w', { w: true });
+    addHandle('toc-resize-h', { h: true });
+    addHandle('toc-resize-wh', { w: true, h: true });
+}
+
+applySavedTocSize();
+attachTocResizer();
+attachScrollFade();
 
 async function restoreLastView(): Promise<void> {
     const last = readLastView();
