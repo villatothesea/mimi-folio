@@ -21,14 +21,13 @@ body {
 }
 
 .folio-sb {
-    position: absolute;
-    top: 0;
-    right: var(--folio-scrollbar-end);
+    position: fixed;
     width: var(--folio-scrollbar-size);
     pointer-events: none;
     z-index: 5;
     opacity: 0;
     transition: opacity var(--folio-scrollbar-fade);
+    box-sizing: border-box;
 }
 
 .folio-sb.is-on {
@@ -37,20 +36,12 @@ body {
 
 .folio-sb-thumb {
     position: absolute;
+    top: 0;
     left: 0;
     width: 100%;
     background: var(--folio-scrollbar-thumb);
     border-radius: 0;
-}
-
-#toc-list > .folio-sb {
-    width: var(--folio-toc-scrollbar-size);
-    right: var(--folio-toc-scrollbar-end);
-}
-
-#files > .folio-sb {
-    width: var(--folio-files-scrollbar-size);
-    right: var(--folio-files-scrollbar-end);
+    will-change: transform;
 }
 
 #app {
