@@ -35,6 +35,8 @@
     --folio-toc-pop-border: 1px solid var(--folio-border);
     --folio-toc-scrollbar-size: 1px;
     --folio-toc-scrollbar-end: 2px;
+    --folio-files-scrollbar-size: var(--folio-toc-scrollbar-size);
+    --folio-files-scrollbar-end: 3px;
     /* ==mark== 高亮底色：米米淡米色（bug4 4.4，可在工具栏换色） */
     --folio-highlight: #f2e3c8;
     --folio-primary: #2a2a2a;

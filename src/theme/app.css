@@ -48,6 +48,11 @@ body {
     right: var(--folio-toc-scrollbar-end);
 }
 
+#files > .folio-sb {
+    width: var(--folio-files-scrollbar-size);
+    right: var(--folio-files-scrollbar-end);
+}
+
 #app {
     display: flex;
     height: 100%;
@@ -2188,7 +2193,7 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
 }
 
 
-/* 高亮挂整行；色块条只在右侧，左边不设竖条 */
+/* 高亮挂整行；选中竖条在左侧 */
 .tree-row:hover {
     background: color-mix(in srgb, var(--folio-fg) 5%, transparent);
 }
@@ -2202,8 +2207,8 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
     position: absolute;
     top: 0;
     bottom: 0;
-    left: auto;
-    right: 0;
+    left: 0;
+    right: auto;
     width: var(--folio-sel-bar);
     background: var(--folio-fg);
     pointer-events: none;
