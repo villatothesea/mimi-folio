@@ -574,15 +574,29 @@ body.is-col-resizing iframe {
     color: var(--folio-fg);
 }
 
-/* ===== 文档列：标题 + 属性 + 正文同一滚动、同一列宽（Ob 式文件头） ===== */
+/* ===== 文档列：标题 + 属性 + 正文同一滚动、同一列宽（Ob 式文件头）
+   放大：zoom 整栏变宽。缩小：只缩字号，栏宽与位置不动。 */
 #doc-scroll {
     flex: 1;
+    min-width: 0;
     min-height: 0;
     overflow-y: auto;
     background: var(--folio-bg);
-    zoom: var(--folio-text-scale);
+    zoom: var(--folio-text-zoom);
+    --folio-font-size: calc(var(--folio-fs) * var(--folio-text-font));
+    --folio-font-size-sm: calc(var(--folio-fs-sm) * var(--folio-text-font));
+    --folio-font-size-xs: calc(var(--folio-fs-xs) * var(--folio-text-font));
+    --folio-font-size-code: calc(var(--folio-fs-code) * var(--folio-text-font));
+    --folio-title-size: var(--folio-font-size);
+    --folio-link-size: var(--folio-font-size-sm);
+    --mu-font-size: var(--folio-font-size);
+    --mu-code-font-size: var(--folio-font-size-code);
     position: relative;
     z-index: 0;
+}
+
+#doc-scroll .mu-editor {
+    font-size: var(--folio-font-size);
 }
 
 #props-fold-slot {

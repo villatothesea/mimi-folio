@@ -64,6 +64,7 @@
     --mu-font-family: var(--folio-font);
     --mu-code-font-size: var(--folio-font-size-code);
     --mu-code-font-family: var(--folio-font-mono);
+    font-size: var(--folio-font-size);
 }
 
 /*

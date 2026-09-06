@@ -39,9 +39,13 @@
 
     --folio-font: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
     --folio-font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
-    --folio-font-size: 16px;
-    --folio-font-size-sm: 13px;
-    --folio-font-size-xs: 12px;
+    --folio-fs: 16px;
+    --folio-fs-sm: 13px;
+    --folio-fs-xs: 12px;
+    --folio-fs-code: 14px;
+    --folio-font-size: var(--folio-fs);
+    --folio-font-size-sm: var(--folio-fs-sm);
+    --folio-font-size-xs: var(--folio-fs-xs);
     --folio-line-height: 1.6;
     --folio-space-1: 4px;
     --folio-space-2: 8px;
@@ -62,11 +66,12 @@
     --folio-measure: 800px;
     /* 与 muya .mu-container 左右内边距对齐，文档头才能跟正文一列 */
     --folio-doc-pad: 50px;
-    --folio-font-size-code: 14px;
+    --folio-font-size-code: var(--folio-fs-code);
     --folio-shadow: rgb(0 0 0 / 5%) 0 0 0 1px, rgb(0 0 0 / 6%) 0 3px 6px;
     --folio-control-h: 28px;
-    /* 正文显示比例，工具栏 100%；只作用在 #doc-scroll */
-    --folio-text-scale: 1;
+    /* 正文比例：放大用 zoom；缩小只缩字号，栏宽不动 */
+    --folio-text-zoom: 1;
+    --folio-text-font: 1;
     /* 清单选中右侧竖条，及数字/星星与竖条的间距 */
     --folio-sel-bar: 5px;
     --folio-sel-gap: 3px;
