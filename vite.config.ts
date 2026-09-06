@@ -22,6 +22,8 @@ function folioApi(): Plugin {
 export default defineConfig({
     plugins: [folioApi()],
     server: {
+        // 127.0.0.1 与 localhost 都通：预览 iframe 用另一个源，#锚点才能跳且摸不到米素
+        host: true,
         fs: {
             // @muyajs/core 以 link: 接本地检出，其字体/图标等资源在仓外，需放行
             allow: [searchForWorkspaceRoot(process.cwd()), fileURLToPath(new URL('../Assets/marktext-develop', import.meta.url))],

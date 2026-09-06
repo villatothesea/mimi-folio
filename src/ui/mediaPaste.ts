@@ -8,6 +8,8 @@
 import type { Muya } from '@muyajs/core';
 
 import type { FolioHost } from '../host/types.ts';
+import { isMarkdownFile, looksLikeMarkdownSource } from '../shared/markdownPaste.ts';
+import { insertMarkdown } from './editorHost.ts';
 
 const AV_RE = /\.(mp4|webm|mp3|wav|ogg|m4a|flac)$/i;
 const IMG_RE = /\.(png|jpe?g|gif|webp|svg)$/i;
@@ -39,6 +41,10 @@ export function attachMediaHandlers(container: HTMLElement, host: FolioHost, get
         if (!editor) return;
         for (const file of files) {
             const name = file.name || '粘贴.png';
+            if (isMarkdownFile(file)) {
+                insertMarkdown(editor, await file.text());
+                continue;
+            }
             if (isPaste && file.type.startsWith('image/')) continue; // 位图粘贴归 muya imageAction
             if (AV_RE.test(name)) {
                 const { src } = await putFile(await bytesOf(file), stampHint(name, file.type.startsWith('video/') ? '.mp4' : '.mp3'));
@@ -56,9 +62,26 @@ export function attachMediaHandlers(container: HTMLElement, host: FolioHost, get
     container.addEventListener(
         'paste',
         (event) => {
-            const files = event.clipboardData?.files;
-            if (!files || files.length === 0) return;
-            const av = [...files].some((f) => AV_RE.test(f.name) || (!f.type.startsWith('image/') && f.type !== ''));
+            const dt = event.clipboardData;
+            if (!dt) return;
+            const editor = getEditor();
+            const files = [...dt.files];
+            const mdFiles = files.filter(isMarkdownFile);
+            const text = dt.getData('text/plain');
+            if (editor && mdFiles.length > 0) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                void Promise.all(mdFiles.map((f) => f.text())).then((parts) => insertMarkdown(editor, parts.join('\n\n')));
+                return;
+            }
+            if (editor && looksLikeMarkdownSource(text)) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                insertMarkdown(editor, text, event);
+                return;
+            }
+            if (files.length === 0) return;
+            const av = files.some((f) => AV_RE.test(f.name) || (!f.type.startsWith('image/') && f.type !== '' && !isMarkdownFile(f)));
             // 只拦 muya 不会处理的（音视频/其它文件）；位图继续走 muya
             if (!av) return;
             event.preventDefault();

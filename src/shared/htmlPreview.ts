@@ -34,9 +34,72 @@ export function setHtmlPreviewScriptsEnabled(on: boolean, store?: Store | null):
 }
 
 /**
- * 始终带 sandbox（空值仍隔离：无脚本、无同源、无表单）。
- * 开脚本也不给 allow-same-origin，页面摸不到米素 DOM / 接口。
+ * 页内 #锚点在 Chromium 沙箱里必须 allow-same-origin 才会跳。
+ * 预览 iframe 走另一主机名（见 previewFrameHref），同源不等于米素这一页。
  */
 export function htmlPreviewSandbox(allowScripts: boolean): string {
-    return allowScripts ? 'allow-scripts' : '';
+    return allowScripts ? 'allow-scripts allow-same-origin' : 'allow-same-origin';
+}
+
+/**
+ * 把预览 URL 赶到与父页不同的 loopback 主机上。
+ * allow-same-origin 只让页自己跳 #锚点，摸不到 parent / 米素 fetch。
+ */
+export function previewFrameHref(previewUrl: string, parentOrigin: string): string {
+    const abs = new URL(previewUrl, parentOrigin);
+    const parent = new URL(parentOrigin);
+    if (abs.origin !== parent.origin) return abs.href;
+    const host = parent.hostname;
+    if (host === '127.0.0.1') abs.hostname = 'localhost';
+    else if (host === 'localhost') abs.hostname = '127.0.0.1';
+    else if (host === '::1' || host === '[::1]') abs.hostname = '127.0.0.1';
+    return abs.href;
+}
+
+/** 预览响应里插的点击/hash 跳转。只改送给 iframe 的字节，不写回文件。 */
+const PREVIEW_NAV_SCRIPT = `<script data-folio-preview-nav>
+(function(){
+  function jump(id){
+    if(!id)return;
+    try{id=decodeURIComponent(id)}catch(e){}
+    var el=document.getElementById(id)||document.getElementsByName(id)[0];
+    if(!el)return;
+    var y=el.getBoundingClientRect().top+window.pageYOffset;
+    var root=document.documentElement;
+    var prev=root.style.scrollBehavior;
+    root.style.scrollBehavior='auto';
+    window.scrollTo(0,y);
+    root.style.scrollBehavior=prev;
+  }
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    if(t&&t.nodeType!==1)t=t.parentElement;
+    if(!t||!t.closest)return;
+    var a=t.closest('a[href]');
+    if(!a)return;
+    var raw=a.getAttribute('href');
+    if(!raw)return;
+    var id='';
+    if(raw.charAt(0)==='#')id=raw.slice(1);
+    else{
+      try{
+        var u=new URL(a.href);
+        if(u.hash&&u.pathname===location.pathname)id=u.hash.slice(1);
+      }catch(err){return;}
+    }
+    if(!id)return;
+    var el=document.getElementById(decodeURIComponent(id))||document.getElementsByName(decodeURIComponent(id))[0];
+    if(!el)return;
+    e.preventDefault();
+    setTimeout(function(){jump(id);},0);
+  },true);
+  if(location.hash)setTimeout(function(){jump(location.hash.slice(1));},0);
+})();
+</script>`;
+
+/** 预览用副本：页内 #锚点改成立即 scrollTo。不写回文件。 */
+export function withPreviewNav(html: string): string {
+    if (html.includes('data-folio-preview-nav')) return html;
+    if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${PREVIEW_NAV_SCRIPT}</body>`);
+    return `${html}${PREVIEW_NAV_SCRIPT}`;
 }

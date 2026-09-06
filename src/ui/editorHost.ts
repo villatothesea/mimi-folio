@@ -22,6 +22,7 @@ import type { Muya as TMuya } from '@muyajs/core';
 import { MENU_CONFIG } from '@muyajs/core/ui/paragraphQuickInsertMenu/config.ts';
 
 import type { FolioHost } from '../host/types.ts';
+import { splitFrontmatter } from '../shared/frontmatter.ts';
 import '../theme/muya.css';
 
 /**
@@ -126,6 +127,7 @@ export function mountEditor(wrap: HTMLElement, markdown: string, host: FolioHost
     });
     editor.locale(zhCN);
     editor.init();
+    focusEditorBody(editor);
     editor.on('json-change', () => {
         if (muya === editor) onChange(editor.getMarkdown());
     });
@@ -137,4 +139,55 @@ export function mountEditor(wrap: HTMLElement, markdown: string, host: FolioHost
 export function destroyEditor(): void {
     muya?.destroy();
     muya = null;
+}
+
+type ContentLeaf = {
+    blockName?: string;
+    parent?: ContentLeaf | null;
+    setCursor: (start: number, end: number, keep: boolean) => void;
+    nextContentInContext?: () => ContentLeaf | null;
+};
+
+function isInsideFrontmatter(leaf: ContentLeaf): boolean {
+    for (let node: ContentLeaf | null | undefined = leaf; node; node = node.parent) {
+        if (node.blockName === 'frontmatter') return true;
+    }
+    return false;
+}
+
+function firstBodyLeaf(editor: TMuya): ContentLeaf | null {
+    const page = (editor as unknown as { editor?: { scrollPage?: { firstContentInDescendant?: () => ContentLeaf | null } } }).editor?.scrollPage;
+    let leaf = page?.firstContentInDescendant?.() ?? null;
+    while (leaf && isInsideFrontmatter(leaf)) leaf = leaf.nextContentInContext?.() ?? null;
+    return leaf;
+}
+
+/** YAML 在视图里 display:none，光标不能停在里面，否则粘贴进隐藏块、正文看起来没进去。 */
+export function focusEditorBody(editor: TMuya): void {
+    firstBodyLeaf(editor)?.setCursor(0, 0, true);
+}
+
+export function selectionInFrontmatter(editor: TMuya): boolean {
+    const sel = (editor as unknown as { editor?: { selection?: { getSelection?: () => { anchor?: { block?: ContentLeaf } } | null } } }).editor?.selection?.getSelection?.();
+    const block = sel?.anchor?.block;
+    return block ? isInsideFrontmatter(block) : false;
+}
+
+type MuyaClip = { pasteHandler: (event: ClipboardEvent, text?: string, html?: string) => Promise<void> };
+
+/** 把 markdown 源插进正文。有粘贴事件就走 Muya 管道（空 html，避免 GitHub 的残缺 HTML）；否则拼进当前篇。 */
+export function insertMarkdown(editor: TMuya, text: string, event?: ClipboardEvent): void {
+    if (selectionInFrontmatter(editor)) focusEditorBody(editor);
+    const clip = (editor as unknown as { editor?: { clipboard?: MuyaClip } }).editor?.clipboard;
+    if (clip && event?.clipboardData && !selectionInFrontmatter(editor)) {
+        void clip.pasteHandler(event, text, '');
+        return;
+    }
+    const cur = splitFrontmatter(editor.getMarkdown());
+    const incoming = splitFrontmatter(text);
+    const article = (incoming.body.trim() ? incoming.body : text).replace(/^\n+/, '');
+    const yaml = cur.frontmatter ? `---\n${cur.frontmatter}\n---\n\n` : '';
+    const existing = cur.body.replace(/^\n+/, '').replace(/\n+$/, '');
+    const mid = existing ? `${existing}\n\n` : '';
+    editor.replaceContent(yaml + mid + article);
 }

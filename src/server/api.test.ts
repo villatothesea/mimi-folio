@@ -470,7 +470,9 @@ describe('GET /folio/v1/preview/*', () => {
         const csp = page.headers.get('content-security-policy') ?? '';
         assert.match(csp, /object-src 'none'/);
         assert.doesNotMatch(csp, /script-src 'none'/);
-        assert.match(await page.text(), /<h1>预览<\/h1>/);
+        const html = await page.text();
+        assert.match(html, /<h1>预览<\/h1>/);
+        assert.match(html, /data-folio-preview-nav/);
         const css = await fetch(`${base}/folio/v1/preview/notes/site/a.css`);
         assert.equal(css.status, 200);
         assert.match(css.headers.get('content-type') ?? '', /text\/css/);

@@ -70,6 +70,8 @@
     /* 清单选中右侧竖条，及数字/星星与竖条的间距 */
     --folio-sel-bar: 5px;
     --folio-sel-gap: 3px;
+    /* 侧栏拖宽窄的可点宽度（比线宽，好抓住） */
+    --folio-resize-hit: 12px;
 
     /* 色块贴文字：四边内边距；链接字号比正文小一号 */
     --folio-chip-pad: 2px;

@@ -26,6 +26,9 @@ body {
     border-right: 1px solid var(--folio-border);
     background: var(--folio-panel);
     min-height: 0;
+    position: relative;
+    /* 拖宽把手压过预览 iframe，否则开 html 时点边线点不到、松开粘鼠标 */
+    z-index: 2;
 }
 
 #page {
@@ -37,15 +40,15 @@ body {
     background: var(--folio-bg);
 }
 
-/* 中区右上角：圆形目录按钮，点击向左下展开悬浮窗 */
+/* 中区右上角：圆形按钮；目录窗绝对定位向左下弹出，不进 flex，避免被 20px 钮挤成竖条。 */
 #toc-host {
     position: absolute;
     top: calc(var(--folio-control-h) + 2 * var(--folio-space-2) + 1px + var(--folio-page-inset));
     right: calc(var(--folio-toc-fab-end) + var(--folio-toc-scrollbar, 0px));
     z-index: 15;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    width: var(--folio-toc-fab-size);
+    height: var(--folio-toc-fab-size);
+    overflow: visible;
     pointer-events: none;
 }
 
@@ -80,21 +83,26 @@ body {
 }
 
 #toc {
+    position: absolute;
+    top: calc(100% + var(--folio-space-1));
+    right: 0;
     display: flex;
     flex-direction: column;
     width: var(--folio-toc-pop-w);
     height: var(--folio-toc-pop-h);
     max-height: calc(100dvh - var(--folio-control-h) * 4);
-    margin-top: var(--folio-space-1);
     box-sizing: border-box;
     border: 1px solid var(--folio-border);
     background: var(--folio-bg);
     box-shadow: var(--folio-shadow);
     min-height: 0;
+    overflow: hidden;
 }
 
 #toc-list {
     flex: 1;
+    min-width: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     padding: var(--folio-space-3) var(--folio-space-2);
     display: flex;
@@ -219,22 +227,29 @@ body {
     flex: none;
 }
 
-/* 左右栏拖宽窄的把手 */
+/* 左右栏拖宽窄的把手：略探出边线，好抓住；z 压过预览 iframe */
 .col-resize {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 5px;
+    width: var(--folio-resize-hit);
     cursor: col-resize;
-    z-index: 6;
+    z-index: 8;
+    touch-action: none;
 }
 
-.col-resize:hover {
+.col-resize:hover,
+body.is-col-resizing .col-resize {
     background: color-mix(in srgb, var(--folio-fg-muted) 35%, transparent);
 }
 
-#sidebar {
-    position: relative;
+body.is-col-resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+body.is-col-resizing iframe {
+    pointer-events: none;
 }
 
 /* ===== 图标按钮 + 上弹 tooltip ===== */
@@ -1654,6 +1669,12 @@ html[data-width='wide'] .mu-editor .mu-container {
 
 /* 目录条目（bug4：纯文字树，无按钮样式，缩进即层级） */
 .toc-item {
+    display: block;
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     border: 0;
     background: none;
     color: var(--folio-fg-muted);
@@ -2158,6 +2179,19 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
 
 #app.html-mode #html-preview {
     display: flex;
+    position: relative;
+    z-index: 6;
+}
+
+/* 展开钮别铺满中区：pointer-events:none 的层盖在 iframe 上，Chromium 会把点击吃掉 */
+#app.html-mode #expand-hints {
+    inset: auto;
+    left: 0;
+    bottom: 0;
+    width: 0;
+    height: 0;
+    overflow: visible;
+    z-index: 7;
 }
 
 #app.html-mode #doc-scroll,

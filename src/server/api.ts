@@ -14,6 +14,7 @@ import { promisify } from 'node:util';
 import type { FolioListItem, FolioListOpts } from '../host/types.ts';
 import { displayTitle } from '../shared/docTitle.ts';
 import { splitFrontmatter } from '../shared/frontmatter.ts';
+import { withPreviewNav } from '../shared/htmlPreview.ts';
 import { buildIndex, linksFor, type WikilinkIndex } from '../shared/wikilink.ts';
 
 const PREFIX = '/folio/v1/';
@@ -648,6 +649,9 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             if (ext === '.html' || ext === '.htm') {
                 // 不禁脚本：开关在 iframe sandbox。script-src none 会盖掉「默认允许脚本」。
                 res.setHeader('content-security-policy', "object-src 'none'");
+                const html = await fs.readFile(abs, 'utf8');
+                res.end(withPreviewNav(html));
+                return true;
             }
             res.end(await fs.readFile(abs));
             return true;

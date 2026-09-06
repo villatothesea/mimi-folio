@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewSrc, setHtmlPreviewScriptsEnabled } from './htmlPreview.ts';
+import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewFrameHref, previewSrc, setHtmlPreviewScriptsEnabled, withPreviewNav } from './htmlPreview.ts';
 
 test('认 .html / .htm，不认 md', () => {
     assert.equal(isHtmlPath('links/页.html'), true);
@@ -26,7 +26,31 @@ test('脚本开关未存过则默认开，只有 0 关掉', () => {
     assert.equal(htmlPreviewScriptsEnabled(store), true);
 });
 
-test('sandbox 开脚本是 allow-scripts，关掉仍保留空 sandbox', () => {
-    assert.equal(htmlPreviewSandbox(true), 'allow-scripts');
-    assert.equal(htmlPreviewSandbox(false), '');
+test('sandbox 始终给同源好跳锚点；开脚本再加 allow-scripts', () => {
+    assert.equal(htmlPreviewSandbox(true), 'allow-scripts allow-same-origin');
+    assert.equal(htmlPreviewSandbox(false), 'allow-same-origin');
+});
+
+test('预览 iframe 与父页拆开 loopback 主机', () => {
+    assert.equal(
+        previewFrameHref('/folio/v1/preview/links/a.html', 'http://127.0.0.1:5173'),
+        'http://localhost:5173/folio/v1/preview/links/a.html',
+    );
+    assert.equal(
+        previewFrameHref('/folio/v1/preview/links/a.html', 'http://localhost:5173'),
+        'http://127.0.0.1:5173/folio/v1/preview/links/a.html',
+    );
+    assert.equal(
+        previewFrameHref('http://localhost:5173/folio/v1/preview/a.html', 'http://127.0.0.1:5173'),
+        'http://localhost:5173/folio/v1/preview/a.html',
+    );
+});
+
+test('预览副本插入锚点滚动脚本，不改传入串的原文件语义', () => {
+    const src = '<body><a href="#s2">二</a></body>';
+    const out = withPreviewNav(src);
+    assert.match(out, /data-folio-preview-nav/);
+    assert.match(out, /scrollBehavior/);
+    assert.equal(withPreviewNav(out), out);
+    assert.match(out, /<a href="#s2">二<\/a>/);
 });

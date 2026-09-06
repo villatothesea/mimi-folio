@@ -10,7 +10,7 @@ import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc } from './ui/toc.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
 import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
-import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewSrc } from './shared/htmlPreview.ts';
+import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewFrameHref, previewSrc } from './shared/htmlPreview.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
@@ -437,11 +437,22 @@ function paintToc(): void {
     renderToc(tocEl, currentEditor(), title);
 }
 
-function mountHtmlPreview(path: string): void {
-    htmlFrame.setAttribute('sandbox', htmlPreviewSandbox(htmlPreviewScriptsEnabled()));
-    const src = host.previewUrl?.(path) ?? previewSrc(path);
+function clearHtmlPreview(): void {
     htmlFrame.removeAttribute('src');
-    htmlFrame.src = src;
+    htmlFrame.removeAttribute('srcdoc');
+}
+
+function mountHtmlPreview(path: string): void {
+    const rel = host.previewUrl?.(path) ?? previewSrc(path);
+    htmlFrame.removeAttribute('src');
+    htmlFrame.removeAttribute('srcdoc');
+    htmlFrame.setAttribute('sandbox', htmlPreviewSandbox(htmlPreviewScriptsEnabled()));
+    htmlFrame.src = previewFrameHref(rel, location.origin);
+}
+
+function openHtmlInBrowserTab(path: string): void {
+    const rel = host.previewUrl?.(path) ?? previewSrc(path);
+    window.open(rel, '_blank', 'noopener,noreferrer');
 }
 
 async function open(path: string): Promise<void> {
@@ -479,7 +490,7 @@ async function open(path: string): Promise<void> {
         }
 
         root.classList.remove('html-mode');
-        htmlFrame.removeAttribute('src');
+        clearHtmlPreview();
         const doc = await host.read(path);
         openFile = doc.path;
         if (selectedDir !== null) {
@@ -632,7 +643,7 @@ async function syncMemoMode(): Promise<void> {
             hideDocHead();
             setTocOpen(false);
             root.classList.remove('html-mode');
-            htmlFrame.removeAttribute('src');
+            clearHtmlPreview();
             root.classList.add('memo-mode');
             breadcrumbEl.textContent = '速记';
             lastLinks = { outgoing: [], backlinks: [] };
@@ -1028,6 +1039,11 @@ nav.addEventListener('contextmenu', (event) => {
     };
 
     showContextMenu(event.clientX, event.clientY, [
+        ...(isHtmlPath(path) ? [{
+            ic: 'external-link',
+            label: '在浏览器新页签中打开',
+            run: () => openHtmlInBrowserTab(path),
+        }] : []),
         { ic: 'pencil', label: '重命名', run: () => void renameInline(button, path) },
         { ic: 'arrow-move-up', label: '移动到…', run: () => void (async () => {
             const to = await targetOf('移动');
@@ -1069,7 +1085,7 @@ nav.addEventListener('contextmenu', (event) => {
                 openFile = null;
                 destroyEditor();
                 document.querySelector<HTMLElement>('#app')?.classList.remove('html-mode');
-                htmlFrame.removeAttribute('src');
+                clearHtmlPreview();
                 breadcrumbEl.textContent = '未打开';
                 hideDocHead();
                 renderCenterBar();
@@ -1314,7 +1330,8 @@ docScroll.addEventListener('scroll', () => {
 // 设置与主题（验收清单 7）：data-theme 只切 token 集，页面色卡/文字主题见 settings.ts
 initSettings();
 window.addEventListener('folio-html-scripts', () => {
-    if (openFile && isHtmlPath(openFile)) mountHtmlPreview(openFile);
+    if (!openFile || !isHtmlPath(openFile)) return;
+    mountHtmlPreview(openFile);
 });
 const btnTheme = document.querySelector<HTMLButtonElement>('#btn-theme')!;
 btnTheme.innerHTML = icon('moon');
@@ -1389,30 +1406,54 @@ window.addEventListener('keydown', (event) => {
     }
 });
 
-// 左右栏拖宽窄（验收批）：边线拖拽，宽度持久化
+// 左右栏拖宽窄（验收批）：边线拖拽，宽度持久化。
+// 预览 iframe 会吞掉 document 的 mouseup，必须 pointer capture，否则粘鼠标。
 function attachResizer(panel: HTMLElement, edge: 'left' | 'right', key: string, min: number, max: number): void {
     const saved = Number(localStorage.getItem(key));
     if (Number.isFinite(saved) && saved >= min && saved <= max) panel.style.width = `${saved}px`;
     const handle = document.createElement('div');
     handle.className = 'col-resize';
     handle.style[edge] = '0';
-    handle.addEventListener('mousedown', (down) => {
+    let dragging = false;
+    let pointerId = 0;
+    let startX = 0;
+    let startW = 0;
+    const stop = (): void => {
+        if (!dragging) return;
+        dragging = false;
+        document.body.classList.remove('is-col-resizing');
+        localStorage.setItem(key, String(Math.round(panel.getBoundingClientRect().width)));
+        try {
+            handle.releasePointerCapture(pointerId);
+        } catch {
+            /* 已经丢了 capture */
+        }
+    };
+    handle.addEventListener('pointerdown', (down) => {
+        if (down.button !== 0) return;
         down.preventDefault();
-        const startX = down.clientX;
-        const startW = panel.getBoundingClientRect().width;
-        const move = (moveEvent: MouseEvent) => {
-            const delta = edge === 'right' ? moveEvent.clientX - startX : startX - moveEvent.clientX;
-            const width = Math.min(max, Math.max(min, Math.round(startW + delta)));
-            panel.style.width = `${width}px`;
-            localStorage.setItem(key, String(width));
-        };
-        const up = () => {
-            document.removeEventListener('mousemove', move);
-            document.removeEventListener('mouseup', up);
-        };
-        document.addEventListener('mousemove', move);
-        document.addEventListener('mouseup', up);
+        down.stopPropagation();
+        dragging = true;
+        pointerId = down.pointerId;
+        startX = down.clientX;
+        startW = panel.getBoundingClientRect().width;
+        document.body.classList.add('is-col-resizing');
+        try {
+            handle.setPointerCapture(down.pointerId);
+        } catch {
+            /* 无真实指针时 capture 会抛，mousemove 仍走 handle */
+        }
     });
+    handle.addEventListener('pointermove', (moveEvent) => {
+        if (!dragging || moveEvent.pointerId !== pointerId) return;
+        const delta = edge === 'right' ? moveEvent.clientX - startX : startX - moveEvent.clientX;
+        const width = Math.min(max, Math.max(min, Math.round(startW + delta)));
+        panel.style.width = `${width}px`;
+    });
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
+    handle.addEventListener('lostpointercapture', stop);
+    handle.addEventListener('dragstart', (event) => event.preventDefault());
     panel.append(handle);
 }
 attachResizer(sidebarEl, 'right', 'folio-w-sidebar', 180, 440);
