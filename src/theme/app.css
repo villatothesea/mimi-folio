@@ -626,6 +626,12 @@ body.is-col-resizing iframe {
     flex: none;
 }
 
+#files .file-icon .folio-icon,
+#files .folder-toggle .folio-icon {
+    width: var(--folio-tree-icon-size);
+    height: var(--folio-tree-icon-size);
+}
+
 .file-name {
     flex: 1;
     min-width: 0;
@@ -2189,8 +2195,9 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
     color: var(--folio-fg);
     font: inherit;
     font-size: var(--folio-font-size-sm);
+    line-height: var(--folio-tree-row-lh);
     text-align: left;
-    padding: var(--folio-space-2) calc(var(--folio-sel-bar) + var(--folio-sel-gap)) var(--folio-space-2) 0;
+    padding: var(--folio-tree-row-py) calc(var(--folio-sel-bar) + var(--folio-sel-gap)) var(--folio-tree-row-py) 0;
     cursor: pointer;
 }
 

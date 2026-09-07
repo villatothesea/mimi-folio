@@ -60,6 +60,11 @@
     --folio-space-2: 8px;
     --folio-space-3: 12px;
     --folio-space-4: 16px;
+    /* 侧栏文件/文件夹行：上下内边距与行高（高亮区高度由此决定） */
+    --folio-tree-row-py: calc(var(--folio-space-2) * 2 / 3);
+    /* 行高不能再跟 line-height 同比缩，否则 g/y 等下伸会被 overflow:hidden 裁掉 */
+    --folio-tree-row-lh: 1.25;
+    --folio-tree-icon-size: calc(var(--folio-icon-size) * 2 / 3);
     --folio-radius: 0px;
     /* 速记卡片圆角；出厂略圆以区分列表行。改脸只动这个值。 */
     --folio-radius-card: 8px;
