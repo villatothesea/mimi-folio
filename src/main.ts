@@ -1,6 +1,7 @@
 import { wordCount } from '@muyajs/core';
 import { applyTextScale, readTextScale } from './shared/textScale.ts';
 import { createHost } from './host/index.ts';
+import { startMimiPresence } from './host/presence.ts';
 import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
@@ -32,6 +33,8 @@ import type { FolioListItem } from './host/types.ts';
  * 真源是盘上的 md；编辑器只是视图（AGENTS.md 硬规则 3）。
  */
 const host = createHost();
+
+startMimiPresence(); // mimi 模式下报存活：米米顶栏按钮高亮跟着它翻
 
 let activeWorkspaceId = '';
 

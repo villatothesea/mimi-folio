@@ -45,6 +45,16 @@ after(() => {
     void server.close();
 });
 
+describe('POST /folio/v1/presence|bye', () => {
+    it('存活心跳与关页 beacon 都是 204 空体', async () => {
+        for (const p of ['presence', 'bye']) {
+            const res = await fetch(`${base}/folio/v1/${p}`, { method: 'POST' });
+            assert.equal(res.status, 204);
+            assert.equal(await res.text(), '');
+        }
+    });
+});
+
 describe('GET /folio/v1/*', () => {
     it('list 返回全部 md、标题、tags 与 kind', async () => {
         const res = await fetch(`${base}/folio/v1/list`);

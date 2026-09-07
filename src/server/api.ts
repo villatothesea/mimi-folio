@@ -904,6 +904,13 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             return true;
         }
 
+        // 米素页存活心跳：daemon 由此点亮/熄灭米米顶栏按钮；独立模式没有
+        // 按钮，收下回 204 即可（与 daemon 端 folio.rs 同形）。
+        if (req.method === 'POST' && (pathname === 'presence' || pathname === 'bye')) {
+            send(res, 204);
+            return true;
+        }
+
         // 系统选文件夹窗（独立模式；合入后由宿主原生对话框提供）
         if (req.method === 'POST' && pathname === 'pick-folder') {
             try {
