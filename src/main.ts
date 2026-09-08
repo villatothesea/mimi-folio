@@ -6,9 +6,11 @@ import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
 import { renderSidebar, setSiblingFoldersCollapsed, siblingFolderFoldState } from './ui/sidebar.ts';
-import { focusComposer, isMemoBusy, paintMemoView } from './ui/memoView.ts';
+import { focusComposer, isMemoBusy, paintMemoView, stageMemoDay } from './ui/memoView.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
-import { highlightActive, renderToc } from './ui/toc.ts';
+import { highlightActive, renderToc, scrollToHeading } from './ui/toc.ts';
+import { memoDayFromPath } from './shared/memoMd.ts';
+import { matchDocPath, matchHeadingIndex, parseDeepLink } from './shared/deepLink.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
 import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
 import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewFrameHref, previewSrc } from './shared/htmlPreview.ts';
@@ -470,12 +472,14 @@ function clearHtmlPreview(): void {
     htmlFrame.removeAttribute('srcdoc');
 }
 
-function mountHtmlPreview(path: string): void {
+/** anchor 是深链的标题文本：编成 #fragment 塞给 iframe，预览页自己的 nav 脚本按 id/name 跳。 */
+function mountHtmlPreview(path: string, anchor?: string): void {
     const rel = host.previewUrl?.(path) ?? previewSrc(path);
+    const frag = anchor ? `#${encodeURIComponent(anchor)}` : '';
     htmlFrame.removeAttribute('src');
     htmlFrame.removeAttribute('srcdoc');
     htmlFrame.setAttribute('sandbox', htmlPreviewSandbox(htmlPreviewScriptsEnabled()));
-    htmlFrame.src = previewFrameHref(rel, location.origin);
+    htmlFrame.src = previewFrameHref(rel + frag, location.origin);
 }
 
 function openHtmlInBrowserTab(path: string): void {
@@ -483,7 +487,7 @@ function openHtmlInBrowserTab(path: string): void {
     window.open(rel, '_blank', 'noopener,noreferrer');
 }
 
-async function open(path: string): Promise<void> {
+async function open(path: string, anchor?: string): Promise<void> {
     try {
         if (openFile && currentEditor()) await saveNow(currentEditor()!.getMarkdown());
         clearTimeout(saveTimer);
@@ -506,7 +510,7 @@ async function open(path: string): Promise<void> {
                 nav.querySelectorAll('.row-main[aria-current][data-dir]').forEach((b) => b.removeAttribute('aria-current'));
             }
             writeLastView({ v: 'file', path: doc.path });
-            mountHtmlPreview(doc.path);
+            mountHtmlPreview(doc.path, anchor);
             renderCenterBar();
             renderBreadcrumb('');
             renderStatusbar();
@@ -1705,6 +1709,29 @@ async function restoreLastView(): Promise<void> {
     await refreshList();
 }
 
+/**
+ * 米米深链落位（docs/单篇路由-米米联动-实施计划.md）：doc 已在清单里匹配上才走到这。
+ * 速记 → 进速记看法并把月历翻到该日；html → iframe 带 #fragment；md → 等两帧布局稳了滚到标题。
+ */
+async function revealDeepTarget(path: string, anchor: string | null): Promise<void> {
+    if (allFiles.find((f) => f.path === path)?.kind === 'memo') {
+        const day = memoDayFromPath(path);
+        if (day) stageMemoDay(day);
+        await enterMemos();
+        return;
+    }
+    await open(path, isHtmlPath(path) && anchor ? anchor : undefined);
+    await refreshList();
+    if (!anchor || isHtmlPath(path)) return;
+    const editor = currentEditor();
+    if (!editor) return;
+    // Muya 在 mountEditor 里同步出 DOM（restoreScroll 同款时序），不用等帧——
+    // rAF 在无头/后台页不执行，会把落位整个吞掉
+    const index = matchHeadingIndex(editor.getTOC().map((t) => t.content), anchor);
+    if (index >= 0) scrollToHeading(index);
+    else document.querySelector('#doc-head')?.scrollIntoView({ block: 'start' });
+}
+
 void (async () => {
     if (host.listWorkspaces) {
         try {
@@ -1715,6 +1742,13 @@ void (async () => {
         }
     }
     await refreshList();
+    // 深链（?doc=&anchor=）优先于上次视图；匹配不上静默落默认流程，参数留在 URL 里刷新仍落原位
+    const deep = parseDeepLink(location.search);
+    const deepPath = deep.doc ? matchDocPath(allFiles, deep.doc) : null;
+    if (deepPath) {
+        await revealDeepTarget(deepPath, deep.anchor);
+        return;
+    }
     const last = (activeWorkspaceId ? readLastViewFor(activeWorkspaceId) : null) ?? readLastView();
     if (last) persistView(last);
     await restoreLastView();

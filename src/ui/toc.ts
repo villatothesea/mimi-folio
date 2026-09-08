@@ -71,7 +71,8 @@ function headingEls(): HTMLElement[] {
     return [...document.querySelectorAll<HTMLElement>('#editor-wrap .mu-atx-heading, #editor-wrap .mu-setext-heading')];
 }
 
-function scrollToHeading(index: number): void {
+/** 米米深链（docs/单篇路由）复用：滚到第 index 个标题并落光标，与目录点击同一行为。 */
+export function scrollToHeading(index: number): void {
     const target = headingEls()[index];
     if (!target) return;
     target.scrollIntoView({ block: 'start' });

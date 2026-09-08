@@ -60,6 +60,18 @@ export function focusComposer(): void {
     document.querySelector<HTMLTextAreaElement>('#memo-composer')?.focus();
 }
 
+/**
+ * 米米深链（docs/单篇路由）：进速记看法前把月历翻到该日并选中，
+ * 随后的 paint 全吃这份状态；不在这里自己画（视图可能还没进）。
+ */
+export function stageMemoDay(day: string): void {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+    if (!m) return;
+    state.year = Number(m[1]);
+    state.month0 = Number(m[2]) - 1;
+    state.selectedDay = day;
+}
+
 export async function paintMemoView(next: MemoDeps): Promise<void> {
     deps = next;
     bindOnce();
