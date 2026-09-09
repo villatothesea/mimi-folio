@@ -13,7 +13,7 @@ import { memoDayFromPath } from './shared/memoMd.ts';
 import { matchDocPath, matchHeadingIndex, parseDeepLink } from './shared/deepLink.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
 import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
-import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewFrameHref, previewSrc } from './shared/htmlPreview.ts';
+import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, folioEntryToken, isHtmlPath, previewFrameHref, previewSrc } from './shared/htmlPreview.ts';
 import { readLastView, readLastViewFor, writeLastView as persistView, writeLastViewFor } from './shared/lastView.ts';
 import { applyViewFilters, nextViewFilters } from './shared/viewFilters.ts';
 import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
@@ -479,12 +479,12 @@ function mountHtmlPreview(path: string, anchor?: string): void {
     htmlFrame.removeAttribute('src');
     htmlFrame.removeAttribute('srcdoc');
     htmlFrame.setAttribute('sandbox', htmlPreviewSandbox(htmlPreviewScriptsEnabled()));
-    htmlFrame.src = previewFrameHref(rel + frag, location.origin);
+    htmlFrame.src = previewFrameHref(rel + frag, location.origin, { token: folioEntryToken() });
 }
 
 function openHtmlInBrowserTab(path: string): void {
     const rel = host.previewUrl?.(path) ?? previewSrc(path);
-    window.open(rel, '_blank', 'noopener,noreferrer');
+    window.open(previewFrameHref(rel, location.origin, { token: folioEntryToken() }), '_blank', 'noopener,noreferrer');
 }
 
 async function open(path: string, anchor?: string): Promise<void> {

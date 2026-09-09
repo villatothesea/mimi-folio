@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewFrameHref, previewSrc, setHtmlPreviewScriptsEnabled, withPreviewNav } from './htmlPreview.ts';
+import { folioEntryToken, htmlPreviewSandbox, htmlPreviewScriptsEnabled, isHtmlPath, previewFrameHref, previewSrc, setHtmlPreviewScriptsEnabled, withPreviewNav } from './htmlPreview.ts';
 
 test('认 .html / .htm，不认 md', () => {
     assert.equal(isHtmlPath('links/页.html'), true);
@@ -44,6 +44,18 @@ test('预览 iframe 与父页拆开 loopback 主机', () => {
         previewFrameHref('http://localhost:5173/folio/v1/preview/a.html', 'http://127.0.0.1:5173'),
         'http://localhost:5173/folio/v1/preview/a.html',
     );
+});
+
+test('合入米米时 loopback 换位须带入口 token', () => {
+    assert.equal(
+        previewFrameHref('/folio/v1/preview/a.html', 'http://127.0.0.1:64203', { token: 'abc' }),
+        'http://localhost:64203/folio/v1/preview/a.html?token=abc',
+    );
+    assert.equal(
+        previewFrameHref('/folio/v1/preview/a.html#s2', 'http://127.0.0.1:64203', { token: 'abc' }),
+        'http://localhost:64203/folio/v1/preview/a.html?token=abc#s2',
+    );
+    assert.equal(folioEntryToken('?token=t1&host=mimi'), 't1');
 });
 
 test('预览副本插入锚点滚动脚本，不改传入串的原文件语义', () => {

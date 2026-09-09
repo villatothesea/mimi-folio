@@ -44,15 +44,39 @@ export function htmlPreviewSandbox(allowScripts: boolean): string {
 /**
  * 把预览 URL 赶到与父页不同的 loopback 主机上。
  * allow-same-origin 只让页自己跳 #锚点，摸不到 parent / 米素 fetch。
+ * 合入米米时 Cookie 只挂在入口主机上，换位后须把 ?token= 带给首包以种 Cookie。
  */
-export function previewFrameHref(previewUrl: string, parentOrigin: string): string {
+export function folioEntryToken(search = ''): string | null {
+    const raw = search || (typeof window !== 'undefined' ? window.location.search : '');
+    const token = new URLSearchParams(raw).get('token')?.trim();
+    return token || null;
+}
+
+export function previewFrameHref(
+    previewUrl: string,
+    parentOrigin: string,
+    opts?: { token?: string | null },
+): string {
     const abs = new URL(previewUrl, parentOrigin);
     const parent = new URL(parentOrigin);
-    if (abs.origin !== parent.origin) return abs.href;
-    const host = parent.hostname;
-    if (host === '127.0.0.1') abs.hostname = 'localhost';
-    else if (host === 'localhost') abs.hostname = '127.0.0.1';
-    else if (host === '::1' || host === '[::1]') abs.hostname = '127.0.0.1';
+    let swapped = false;
+    if (abs.origin === parent.origin) {
+        const host = parent.hostname;
+        if (host === '127.0.0.1') {
+            abs.hostname = 'localhost';
+            swapped = true;
+        } else if (host === 'localhost') {
+            abs.hostname = '127.0.0.1';
+            swapped = true;
+        } else if (host === '::1' || host === '[::1]') {
+            abs.hostname = '127.0.0.1';
+            swapped = true;
+        }
+    }
+    const token = opts?.token?.trim();
+    if (token && (swapped || abs.origin !== parent.origin)) {
+        abs.searchParams.set('token', token);
+    }
     return abs.href;
 }
 
