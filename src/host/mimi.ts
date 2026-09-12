@@ -82,6 +82,15 @@ export class MimiHost implements FolioHost {
         return this.json<FolioImage>(resp);
     }
 
+    async mkdir(path: FolioPath): Promise<void> {
+        const resp = await fetch('/folio/v1/mkdir', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path }),
+        });
+        await this.void(resp);
+    }
+
     async linkOutside(absSource: string): Promise<FolioPath> {
         const resp = await fetch('/folio/v1/link', {
             method: 'POST',

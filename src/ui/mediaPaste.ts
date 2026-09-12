@@ -89,15 +89,27 @@ export function attachMediaHandlers(
             }
             const net = host.saveRemoteImage ? imageUrlsFromClipboard(dt) : [];
             if (editor && net.length > 0) {
+                const bitmaps = files.filter((f) => f.type.startsWith('image/'));
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 void (async () => {
                     try {
                         for (const url of net) {
                             const { src } = await host.saveRemoteImage!(url);
-                            editor.pasteImage(src);
+                            await editor.pasteImage(src);
+                            return;
                         }
                     } catch (err) {
+                        if (bitmaps[0]) {
+                            try {
+                                const file = bitmaps[0];
+                                const { src } = await host.saveImage(await bytesOf(file), stampHint(file.name || '粘贴.png', '.png'));
+                                await editor.pasteImage(src);
+                                return;
+                            } catch {
+                                // 位图兜底也失败则落到下面报错
+                            }
+                        }
                         onError?.(`网络图片落盘失败：${(err as Error).message}`);
                     }
                 })();

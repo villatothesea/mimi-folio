@@ -35,6 +35,11 @@ export type FolioListItem = {
     ctimeMs?: number;
     /** 速记看法卡片流用的全文；list 只给 kind=memo 带上，避免把长文塞进清单 */
     markdown?: string;
+    /**
+     * 空目录占位：该路径下没有子孙文档时 list 仍给出这一项，侧栏据此画文件夹。
+     * 文档项不带此字段。合入后 daemon 同形。
+     */
+    folder?: true;
 };
 
 /** list 的筛选（单元 6）。合入后 daemon 按同样语义扫资产层。 */
@@ -90,6 +95,11 @@ export interface FolioHost {
     linkFolder?(absSource: string): Promise<{ dir: FolioPath; count: number }>;
     /** 更换顶层外链文件夹的源路径，vault 槽位名不变。 */
     relinkFolder?(dir: FolioPath, absSource: string): Promise<{ dir: FolioPath; count: number }>;
+    /**
+     * 建空文件夹（不写占位 md）。删光子文档后目录仍在盘上，list 用 `folder: true` 画出。
+     * 合入后 daemon 同名；页面 `if (!host.mkdir)` 降级提示，不暗塞未命名笔记。
+     */
+    mkdir?(path: FolioPath): Promise<void>;
     /** 文档管理（验收清单 14）；合入后 daemon 同名实现 */
     moveDoc?(from: FolioPath, to: FolioPath): Promise<FolioPath>;
     copyDoc?(from: FolioPath, to: FolioPath): Promise<FolioPath>;

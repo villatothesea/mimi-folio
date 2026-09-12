@@ -29,6 +29,7 @@ import {
 
 const PREFIX = '/folio/v1/';
 const DOC_RE = /\.(md|html)$/i; // 外链含 html（待评估 9.3）
+const MEDIA_DIRS = new Set(['attachments', 'pics']);
 const MAX_BODY = 10 * 1024 * 1024;
 
 let currentRoot = '';
@@ -564,17 +565,21 @@ async function loadVault(root: string): Promise<VaultCache> {
     const contents = new Map<string, string>();
     const mtimes = new Map<string, number>();
     const seen = new Set<string>();
+    const dirs: string[] = [];
     async function walk(dir: string): Promise<void> {
         const real = await fs.realpath(dir).catch(() => dir);
         if (seen.has(real)) return;
         seen.add(real);
+        const atRoot = path.relative(root, dir) === '';
         for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
             if (entry.name.startsWith('.')) continue;
             const abs = path.join(dir, entry.name);
             const rel = path.relative(root, abs).split(path.sep).join('/');
+            if (atRoot && MEDIA_DIRS.has(entry.name)) continue;
             if (entry.isDirectory() || entry.isSymbolicLink()) {
                 const st = await fs.stat(abs).catch(() => null);
                 if (st?.isDirectory()) {
+                    if (rel) dirs.push(rel);
                     await walk(abs);
                     continue;
                 }
@@ -603,6 +608,17 @@ async function loadVault(root: string): Promise<VaultCache> {
         }
     }
     await walk(root);
+    for (const d of dirs) {
+        if (MEDIA_DIRS.has(d.split('/')[0]!)) continue;
+        if (list.some((f) => f.path === d || f.path.startsWith(`${d}/`))) continue;
+        list.push({
+            path: d,
+            title: path.posix.basename(d),
+            folder: true,
+            kind: kindOf(d),
+            linked: (d === 'links' || d.startsWith('links/')) || undefined,
+        });
+    }
     const cache: VaultCache = { list, contents, mtimes };
     cacheByRoot.set(root, cache);
     return cache;
@@ -612,8 +628,8 @@ async function listMarkdown(root: string, opts: FolioListOpts): Promise<FolioLis
     const { list } = await loadVault(root);
     let result = list.map((f) => ({ ...f }));
     if (opts.dir) result = result.filter((f) => f.path.startsWith(`${opts.dir}/`));
-    if (opts.tag) result = result.filter((f) => f.tags?.includes(opts.tag!));
-    if (opts.kind) result = result.filter((f) => f.kind === opts.kind);
+    if (opts.tag) result = result.filter((f) => !f.folder && f.tags?.includes(opts.tag!));
+    if (opts.kind) result = result.filter((f) => !f.folder && f.kind === opts.kind);
     return result.sort((a, b) => a.path.localeCompare(b.path, 'zh'));
 }
 
@@ -642,16 +658,30 @@ async function saveAttachment(root: string, bytes: Buffer, hint: string): Promis
     return saveIntoDir(root, 'attachments', bytes, hint);
 }
 
+function sniffImageExt(bytes: Buffer): string | null {
+    if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50) return '.png';
+    if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8) return '.jpg';
+    if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return '.gif';
+    if (bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') return '.webp';
+    const head = bytes.toString('utf8', 0, Math.min(256, bytes.length));
+    if (/<svg[\s>]/i.test(head)) return '.svg';
+    return null;
+}
+
 function imageExtOf(urlPath: string, ctype: string, bytes: Buffer): string {
+    const sniffed = sniffImageExt(bytes);
+    if (sniffed) return sniffed;
     const fromPath = urlPath.match(/\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i)?.[0]?.toLowerCase();
     if (fromPath) return fromPath === '.jpeg' ? '.jpg' : fromPath;
-    if (/png/i.test(ctype) || bytes[0] === 0x89) return '.png';
-    if (/jpe?g/i.test(ctype) || bytes[0] === 0xff) return '.jpg';
-    if (/gif/i.test(ctype) || bytes[0] === 0x47) return '.gif';
-    if (/webp/i.test(ctype) || bytes.toString('ascii', 8, 12) === 'WEBP') return '.webp';
-    if (/svg/i.test(ctype) || bytes.toString('utf8', 0, 5).includes('<?xml') || bytes.toString('utf8', 0, 4).includes('<svg')) return '.svg';
+    if (/png/i.test(ctype)) return '.png';
+    if (/jpe?g/i.test(ctype)) return '.jpg';
+    if (/gif/i.test(ctype)) return '.gif';
+    if (/webp/i.test(ctype)) return '.webp';
+    if (/svg/i.test(ctype)) return '.svg';
     return '.png';
 }
+
+const PIC_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 
 /** 用户粘贴触发的拉取；不是后台出网。只 http(s)，落盘 pics/。 */
 async function saveRemotePic(root: string, urlRaw: string): Promise<string> {
@@ -666,18 +696,27 @@ async function saveRemotePic(root: string, urlRaw: string): Promise<string> {
     const timer = setTimeout(() => ac.abort(), 15_000);
     let res: Response;
     try {
-        res = await fetch(url, { signal: ac.signal, redirect: 'follow', headers: { accept: 'image/*,*/*;q=0.8' } });
+        res = await fetch(url, {
+            signal: ac.signal,
+            redirect: 'follow',
+            headers: {
+                accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+                'user-agent': PIC_UA,
+                referer: `${url.origin}/`,
+            },
+        });
     } catch (err) {
         throw new Error(ac.signal.aborted ? '下载超时' : `下载失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
         clearTimeout(timer);
     }
     if (!res.ok) throw new Error(`下载失败 HTTP ${res.status}`);
-    const ctype = (res.headers.get('content-type') ?? '').split(';')[0].trim();
-    if (ctype && !/^(image\/|application\/octet-stream$)/i.test(ctype)) throw new Error('不是图片');
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > MAX_BODY) throw new Error('图片过大');
     if (buf.length === 0) throw new Error('空文件');
+    const ctype = (res.headers.get('content-type') ?? '').split(';')[0].trim();
+    const sniffed = sniffImageExt(buf);
+    if (!sniffed && ctype && !/^(image\/|application\/octet-stream$)/i.test(ctype)) throw new Error('不是图片');
     const ext = imageExtOf(url.pathname, ctype, buf);
     let hint = path.posix.basename(url.pathname) || `pic${ext}`;
     if (!/\.[^.]+$/.test(hint)) hint += ext;
@@ -922,6 +961,22 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             return true;
         }
 
+        if (req.method === 'POST' && pathname === 'mkdir') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { path?: string };
+            const p = safeRel(body.path ?? '');
+            if (!p) return fail(res, 400, 'path 非法');
+            if (DOC_RE.test(p)) return fail(res, 400, '那是文档路径');
+            if (p.split('/').some((s) => s.startsWith('.'))) return fail(res, 400, 'path 非法');
+            if (MEDIA_DIRS.has(p.split('/')[0]!)) return fail(res, 400, '不能在附件目录建文件夹');
+            const abs = path.join(root, p);
+            const st = await fs.stat(abs).catch(() => null);
+            if (st?.isFile()) return fail(res, 400, '该路径已是文件');
+            if (!st) await fs.mkdir(abs, { recursive: true });
+            invalidate(root);
+            send(res, 204);
+            return true;
+        }
+
         if (req.method === 'GET' && pathname === 'search') {
             const q = (query.get('q') ?? '').trim();
             if (!q) {
@@ -932,6 +987,7 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             const { list, contents } = await loadVault(root);
             const results: (FolioListItem & { matches: { text: string; start: number }[] })[] = [];
             for (const item of list) {
+                if (item.folder) continue;
                 const markdown = contents.get(item.path) ?? '';
                 const matches: { text: string; start: number }[] = [];
                 const titleHit = item.title.toLowerCase().indexOf(needle);

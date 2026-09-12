@@ -79,6 +79,18 @@ export class StandaloneHost implements FolioHost {
         return this.json<FolioImage>(resp);
     }
 
+    async mkdir(path: FolioPath): Promise<void> {
+        const resp = await fetch(this.url('/folio/v1/mkdir'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path }),
+        });
+        if (!resp.ok) {
+            const err = (await resp.json().catch(() => ({}))) as { error?: string };
+            throw new Error(err.error ?? `HTTP ${resp.status}`);
+        }
+    }
+
     async index(path: FolioPath): Promise<FolioIndex> {
         const resp = await fetch(this.url(`/folio/v1/index?path=${encodeURIComponent(path)}`));
         return this.json<FolioIndex>(resp);

@@ -49,17 +49,26 @@ type DirNode = { dir: string; name: string; children: Map<string, DirNode>; file
 
 function buildTree(files: FolioListItem[]): DirNode {
     const root: DirNode = { dir: '', name: '', children: new Map(), files: [] };
-    for (const file of files) {
-        const segs = file.path.split('/');
+    const ensureDir = (rel: string): DirNode => {
+        if (!rel) return root;
         let node = root;
-        for (let i = 0; i < segs.length - 1; i++) {
-            const name = segs[i];
-            if (!node.children.has(name)) {
-                node.children.set(name, { dir: node.dir ? `${node.dir}/${name}` : name, name, children: new Map(), files: [] });
+        for (const name of rel.split('/')) {
+            let next = node.children.get(name);
+            if (!next) {
+                next = { dir: node.dir ? `${node.dir}/${name}` : name, name, children: new Map(), files: [] };
+                node.children.set(name, next);
             }
-            node = node.children.get(name)!;
+            node = next;
         }
-        node.files.push(file);
+        return node;
+    };
+    for (const file of files) {
+        if (file.folder) {
+            ensureDir(file.path);
+            continue;
+        }
+        const dir = file.path.split('/').slice(0, -1).join('/');
+        ensureDir(dir).files.push(file);
     }
     return root;
 }
@@ -94,6 +103,13 @@ export function setSiblingFoldersCollapsed(files: FolioListItem[], dir: string, 
         if (collapse) collapsedDirs.add(sib);
         else collapsedDirs.delete(sib);
     }
+}
+
+/** 把 `dir` 及其祖先从折叠里拿掉，新建后才能看见。 */
+export function expandDirPath(dir: string): void {
+    if (!dir) return;
+    const segs = dir.split('/');
+    for (let i = 1; i <= segs.length; i++) collapsedDirs.delete(segs.slice(0, i).join('/'));
 }
 
 /** 同级是否已经全开/全折，用来灰掉菜单项。 */

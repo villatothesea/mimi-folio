@@ -5,7 +5,7 @@ import { startMimiPresence } from './host/presence.ts';
 import { currentEditor, destroyEditor, focusEditorBody, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
-import { renderSidebar, setSiblingFoldersCollapsed, siblingFolderFoldState, visibleSideItems, markSelected, type SideItem } from './ui/sidebar.ts';
+import { renderSidebar, setSiblingFoldersCollapsed, siblingFolderFoldState, visibleSideItems, markSelected, markCurrent, expandDirPath, type SideItem } from './ui/sidebar.ts';
 import { focusComposer, isMemoBusy, paintMemoView, stageMemoDay } from './ui/memoView.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc, scrollToHeading } from './ui/toc.ts';
@@ -14,6 +14,7 @@ import { matchDocPath, matchHeadingIndex, parseDeepLink } from './shared/deepLin
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
 import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath } from './shared/docTitle.ts';
 import { joinRel } from './shared/dirPick.ts';
+import { joinOsAbs } from './shared/osPath.ts';
 import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, folioEntryToken, isHtmlPath, previewFrameHref, previewSrc } from './shared/htmlPreview.ts';
 import { readLastView, readLastViewFor, writeLastView as persistView, writeLastViewFor } from './shared/lastView.ts';
 import { applyViewFilters, nextViewFilters } from './shared/viewFilters.ts';
@@ -40,6 +41,13 @@ const host = createHost();
 startMimiPresence(); // mimi 模式下报存活：米米顶栏按钮高亮跟着它翻
 
 let activeWorkspaceId = '';
+/** 当前 vault 磁盘绝对路径（带盘符）；复制路径用，避免 await 后再写剪贴板丢掉用户手势。 */
+let vaultAbsDir = '';
+
+function rememberVaultRoot(ws: { items: { id: string; dir: string }[]; activeId: string }): void {
+    activeWorkspaceId = ws.activeId;
+    vaultAbsDir = ws.items.find((item) => item.id === ws.activeId)?.dir ?? '';
+}
 
 function writeLastView(view: Parameters<typeof persistView>[0]): void {
     if (activeWorkspaceId) writeLastViewFor(activeWorkspaceId, view);
@@ -675,20 +683,13 @@ async function open(path: string, anchor?: string): Promise<void> {
             docMtime = doc.mtimeMs;
             docCtime = doc.ctimeMs;
             lastLinks = { outgoing: [], backlinks: [] };
-            if (selectedDir !== null) {
-                selectedDir = null;
-                nav.querySelectorAll('.row-main[aria-current][data-dir]').forEach((b) => b.removeAttribute('aria-current'));
-            }
             writeLastView({ v: 'file', path: doc.path });
             mountHtmlPreview(doc.path, anchor);
             renderCenterBar();
             renderBreadcrumb('');
             renderStatusbar();
             saySave('预览');
-            nav.querySelectorAll<HTMLButtonElement>('button[data-path]').forEach((b) => {
-                if (b.dataset.path === openFile) b.setAttribute('aria-current', 'true');
-                else b.removeAttribute('aria-current');
-            });
+            showFileCurrent(openFile);
             return;
         }
 
@@ -696,10 +697,6 @@ async function open(path: string, anchor?: string): Promise<void> {
         clearHtmlPreview();
         const doc = await host.read(path);
         openFile = doc.path;
-        if (selectedDir !== null) {
-            selectedDir = null;
-            nav.querySelectorAll('.row-main[aria-current][data-dir]').forEach((b) => b.removeAttribute('aria-current'));
-        }
         lastSaved = doc.markdown;
         docMtime = doc.mtimeMs;
         docCtime = doc.ctimeMs;
@@ -715,10 +712,7 @@ async function open(path: string, anchor?: string): Promise<void> {
         paintToc();
         restoreScroll(doc.path);
         requestAnimationFrame(syncTocGutter);
-        nav.querySelectorAll<HTMLButtonElement>('button[data-path]').forEach((b) => {
-            if (b.dataset.path === openFile) b.setAttribute('aria-current', 'true');
-            else b.removeAttribute('aria-current');
-        });
+        showFileCurrent(openFile);
         void refreshBacklinks();
     } catch (err) {
         saySave(`读失败：${(err as Error).message}`);
@@ -974,6 +968,12 @@ function allDirs(): string[] {
     return [...dirs].sort((a, b) => a.localeCompare(b, 'zh'));
 }
 
+/** 点开文档：立刻拿掉文件夹高亮，不必等读盘/轮询重绘。 */
+function showFileCurrent(path: string | null): void {
+    selectedDir = null;
+    markCurrent(nav, path);
+}
+
 function paintNav(files: FolioListItem[] = lastShown): void {
     lastShown = files;
     if (isMemoView()) return;
@@ -983,7 +983,7 @@ function paintNav(files: FolioListItem[] = lastShown): void {
         selectedDirs,
         onOpen: (p, _btn, event) => {
             if (handleSideClick({ kind: 'file', id: p }, event)) return;
-            selectedDir = null;
+            showFileCurrent(p);
             void open(p);
         },
         selectedDir,
@@ -1144,11 +1144,17 @@ async function newMemo(): Promise<void> {
 }
 
 /** 新建动作（验收清单 7/10.4）：统一收进标题栏加号下拉。 */
-async function newNote(): Promise<void> {
-    const path = `${stamp()}.md`;
-    await host.write(path, newNoteMarkdown());
-    await open(path);
-    void refreshList();
+async function newNote(dir = ''): Promise<void> {
+    const path = joinRel(dir, `${stamp()}.md`);
+    try {
+        await host.write(path, newNoteMarkdown());
+        expandDirPath(dir);
+        selectedDir = null;
+        await open(path);
+        void refreshList();
+    } catch (err) {
+        saySave(`新建失败：${(err as Error).message}`);
+    }
 }
 
 async function newFolder(): Promise<void> {
@@ -1377,6 +1383,17 @@ attachImageFallback(wrap);
 // 白名单视频链接内嵌正文流（单元 9，按验收反馈从底部面板改入正文）
 attachInlineEmbeds(wrap);
 
+/** 右键「复制路径」：库内相对路径拼成 OS 绝对路径（带盘符）。 */
+async function copyAbsPath(rel: string): Promise<void> {
+    const text = vaultAbsDir ? joinOsAbs(vaultAbsDir, rel) : rel;
+    try {
+        await navigator.clipboard.writeText(text);
+        saySave(vaultAbsDir ? '已复制绝对路径' : '已复制路径');
+    } catch {
+        saySave('复制失败');
+    }
+}
+
 // ==== 右键菜单（验收清单 4/14）====
 blockNativeContextMenu(document.body);
 
@@ -1438,17 +1455,7 @@ nav.addEventListener('contextmenu', (event) => {
                 }
             }
         })() },
-        { ic: 'clipboard-text', label: '复制文档路径', run: () => void (async () => {
-            try {
-                const root = (await (await fetch('/folio/v1/root')).json()) as { root: string };
-                const abs = `${root.root.replace(/[\\/]+$/, '')}\\${path.replaceAll('/', '\\')}`;
-                await navigator.clipboard.writeText(abs);
-                saySave('已复制绝对路径');
-            } catch {
-                await navigator.clipboard.writeText(path);
-                saySave('已复制文档路径');
-            }
-        })() },
+        { ic: 'clipboard-text', label: '复制文档路径', run: () => void copyAbsPath(path) },
         { ic: 'robot', label: '添加到米米（合入后可用）', disabled: true },
         { sep: true },
         { ic: 'trash', label: '删除', danger: true, run: () => void (async () => {
@@ -1555,6 +1562,7 @@ function folderContextMenu(dir: string, x: number, y: number): void {
             label: '更换路径',
             run: () => void relinkFolder(dir),
         }] : []),
+        { ic: 'file-plus', label: '新建文档', run: () => void newNote(dir) },
         { ic: 'folder-plus', label: '添加子文件夹', run: () => void (async () => {
             const name = await folioPrompt(`在 ${dir} 下新建文件夹`);
             if (!name) return;
@@ -1562,6 +1570,7 @@ function folderContextMenu(dir: string, x: number, y: number): void {
             const p = `${dir}/${safe}/未命名笔记.md`;
             try {
                 await host.write(p, newNoteMarkdown());
+                expandDirPath(`${dir}/${safe}`);
                 selectedDir = `${dir}/${safe}`;
                 await open(p);
                 void refreshList();
@@ -1594,10 +1603,7 @@ function folderContextMenu(dir: string, x: number, y: number): void {
                 saySave(`移动失败：${(err as Error).message}`);
             }
         })() },
-        { ic: 'clipboard-text', label: '复制文件夹路径', run: () => {
-            void navigator.clipboard.writeText(dir);
-            saySave('已复制文件夹路径');
-        } },
+        { ic: 'clipboard-text', label: '复制文件夹路径', run: () => void copyAbsPath(dir) },
         { ic: 'chevrons-down', label: '展开全部同级文件夹', disabled: fold.allExpanded, run: () => {
             setSiblingFoldersCollapsed(lastShown, dir, false);
             paintNav();
@@ -2043,7 +2049,13 @@ async function switchToWorkspace(id: string): Promise<void> {
     }
     await leaveOpenDoc();
     if (id !== activeWorkspaceId) await host.setWorkspace(id);
-    activeWorkspaceId = id;
+    try {
+        const ws = await host.listWorkspaces?.();
+        if (ws) rememberVaultRoot(ws);
+        else activeWorkspaceId = id;
+    } catch {
+        activeWorkspaceId = id;
+    }
     await refreshList();
     const last = readLastViewFor(id);
     if (!last) return;
@@ -2100,7 +2112,7 @@ void (async () => {
     if (host.listWorkspaces) {
         try {
             const ws = await host.listWorkspaces();
-            activeWorkspaceId = ws.activeId;
+            rememberVaultRoot(ws);
         } catch {
             /* 服务还没起来时先按默认 vault */
         }
