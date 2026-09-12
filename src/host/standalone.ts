@@ -70,6 +70,15 @@ export class StandaloneHost implements FolioHost {
         return this.json<FolioAttachment>(resp);
     }
 
+    async saveRemoteImage(url: string): Promise<FolioImage> {
+        const resp = await fetch(this.url('/folio/v1/pic'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+        return this.json<FolioImage>(resp);
+    }
+
     async index(path: FolioPath): Promise<FolioIndex> {
         const resp = await fetch(this.url(`/folio/v1/index?path=${encodeURIComponent(path)}`));
         return this.json<FolioIndex>(resp);

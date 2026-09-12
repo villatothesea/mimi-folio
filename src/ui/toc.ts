@@ -1,5 +1,5 @@
 /**
- * 文档目录：第一行是文档标题（YAML title / 文件名），其后才是正文 H1–H6。
+ * 文档目录：第一行是文件名，其后才是正文 H1–H6。
  * 标题行滚到页头；标题块数据仍来自 muya.getTOC()。
  */
 import type { Muya } from '@muyajs/core';

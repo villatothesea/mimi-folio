@@ -1,7 +1,7 @@
 /**
  * 独立模式小服务：磁盘上的 vault ↔ HTTP /folio/v1/*。
  * 路径与合入后 daemon 提供的一致（docs/计划.md §合入），合入只换实现不换接口。
- * 只放行 vault 内的 .md 与 attachments/；越界路径一律 4xx。
+ * 只放行 vault 内的 .md 与 attachments/、pics/；越界路径一律 4xx。
  */
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -52,6 +52,7 @@ async function ensureVaultDirs(dir: string): Promise<void> {
     await fs.mkdir(path.join(dir, 'notes'), { recursive: true });
     await fs.mkdir(path.join(dir, 'memos'), { recursive: true });
     await fs.mkdir(path.join(dir, 'attachments'), { recursive: true });
+    await fs.mkdir(path.join(dir, 'pics'), { recursive: true });
 }
 
 async function persistWorkspaces(): Promise<void> {
@@ -623,18 +624,64 @@ async function buildWikilinkIndex(root: string): Promise<WikilinkIndex> {
 }
 
 /** 附件名只留安全字符；重名时塞时间戳，不覆盖。 */
-async function saveAttachment(root: string, bytes: Buffer, hint: string): Promise<string> {
+async function saveIntoDir(root: string, folder: 'attachments' | 'pics', bytes: Buffer, hint: string): Promise<string> {
     const base = path.posix.basename(hint.replaceAll('\\', '/'));
-    const stem = base.replace(/\.[^.]*$/, '').replace(/[^\p{L}\p{N}._-]+/gu, '_').slice(0, 80) || 'file';
+    const stem = base.replace(/\.[^.]*$/, '').replace(/[^\p{L}\p{N}._-]+/gu, '_').slice(0, 80) || (folder === 'pics' ? 'pic' : 'file');
     const ext = (base.match(/\.[^.]*$/)?.[0] ?? '.bin').slice(0, 16);
-    const dir = path.join(root, 'attachments');
+    const dir = path.join(root, folder);
     await fs.mkdir(dir, { recursive: true });
     let name = `${stem}${ext}`;
     for (let i = 0; await fileExists(path.join(dir, name)); i++) {
         name = `${stem}-${Date.now()}-${i}${ext}`;
     }
     await fs.writeFile(path.join(dir, name), bytes);
-    return `attachments/${name}`;
+    return `${folder}/${name}`;
+}
+
+async function saveAttachment(root: string, bytes: Buffer, hint: string): Promise<string> {
+    return saveIntoDir(root, 'attachments', bytes, hint);
+}
+
+function imageExtOf(urlPath: string, ctype: string, bytes: Buffer): string {
+    const fromPath = urlPath.match(/\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i)?.[0]?.toLowerCase();
+    if (fromPath) return fromPath === '.jpeg' ? '.jpg' : fromPath;
+    if (/png/i.test(ctype) || bytes[0] === 0x89) return '.png';
+    if (/jpe?g/i.test(ctype) || bytes[0] === 0xff) return '.jpg';
+    if (/gif/i.test(ctype) || bytes[0] === 0x47) return '.gif';
+    if (/webp/i.test(ctype) || bytes.toString('ascii', 8, 12) === 'WEBP') return '.webp';
+    if (/svg/i.test(ctype) || bytes.toString('utf8', 0, 5).includes('<?xml') || bytes.toString('utf8', 0, 4).includes('<svg')) return '.svg';
+    return '.png';
+}
+
+/** 用户粘贴触发的拉取；不是后台出网。只 http(s)，落盘 pics/。 */
+async function saveRemotePic(root: string, urlRaw: string): Promise<string> {
+    let url: URL;
+    try {
+        url = new URL(urlRaw);
+    } catch {
+        throw new Error('图片地址非法');
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('只支持 http(s) 图片');
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15_000);
+    let res: Response;
+    try {
+        res = await fetch(url, { signal: ac.signal, redirect: 'follow', headers: { accept: 'image/*,*/*;q=0.8' } });
+    } catch (err) {
+        throw new Error(ac.signal.aborted ? '下载超时' : `下载失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+        clearTimeout(timer);
+    }
+    if (!res.ok) throw new Error(`下载失败 HTTP ${res.status}`);
+    const ctype = (res.headers.get('content-type') ?? '').split(';')[0].trim();
+    if (ctype && !/^(image\/|application\/octet-stream$)/i.test(ctype)) throw new Error('不是图片');
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > MAX_BODY) throw new Error('图片过大');
+    if (buf.length === 0) throw new Error('空文件');
+    const ext = imageExtOf(url.pathname, ctype, buf);
+    let hint = path.posix.basename(url.pathname) || `pic${ext}`;
+    if (!/\.[^.]+$/.test(hint)) hint += ext;
+    return saveIntoDir(root, 'pics', buf, hint);
 }
 
 const ATTACH_MIME: Record<string, string> = {
@@ -680,19 +727,22 @@ function previewRel(pathname: string): string | null {
 }
 
 /**
- * GET /attachments/<name>：把 vault 附件端给 <img>/<video>/<audio>。
+ * GET /attachments/<name> 与 GET /pics/<name>：把 vault 媒体端给 <img>/<video>/<audio>。
  * md 里存的是相对路径，页面根就是 vault 根；合入后 daemon 按同样规则端。
  */
 export async function serveAttachment(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
     const raw = req.url ?? '';
-    if (req.method !== 'GET' || !raw.startsWith('/attachments/')) return false;
-    const name = decodeURIComponent(raw.slice('/attachments/'.length).split('?')[0]);
+    if (req.method !== 'GET') return false;
+    const prefix = raw.startsWith('/attachments/') ? '/attachments/' : raw.startsWith('/pics/') ? '/pics/' : '';
+    if (!prefix) return false;
+    const folder = prefix === '/pics/' ? 'pics' : 'attachments';
+    const name = decodeURIComponent(raw.slice(prefix.length).split('?')[0]);
     if (!name || name.includes('/') || name.includes('\\') || name.includes('..') || name.startsWith('.')) {
-        fail(res, 400, '附件名非法');
+        fail(res, 400, folder === 'pics' ? '图片名非法' : '附件名非法');
         return true;
     }
     try {
-        const abs = path.join(vaultRoot(), 'attachments', name);
+        const abs = path.join(vaultRoot(), folder, name);
         res.setHeader('content-type', ATTACH_MIME[path.extname(abs).toLowerCase()] ?? 'application/octet-stream');
         res.end(await fs.readFile(abs));
         return true;
@@ -995,6 +1045,14 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
                 // 客户端没编码也能落盘
             }
             const src = await saveAttachment(root, bytes, hint);
+            send(res, 200, { src });
+            return true;
+        }
+
+        if (req.method === 'POST' && pathname === 'pic') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { url?: string };
+            if (typeof body.url !== 'string' || !body.url.trim()) return fail(res, 400, '需要 {url}');
+            const src = await saveRemotePic(root, body.url.trim());
             send(res, 200, { src });
             return true;
         }

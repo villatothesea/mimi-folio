@@ -2,8 +2,10 @@
  * 自定义弹窗（验收清单 5）：替代浏览器原生 prompt/confirm/alert，直角矩形。
  * 全部 Promise 化：folioPrompt()/folioConfirm()。
  */
+import { dirPickRows } from '../shared/dirPick.ts';
+import { bindScrollFade, unbindScrollFade } from './scrollFade.ts';
 
-function shell(title: string, danger = false): { overlay: HTMLDivElement; box: HTMLDivElement; close(): void } {
+function shell(title: string, danger = false, onDismiss?: () => void): { overlay: HTMLDivElement; box: HTMLDivElement; close(): void } {
     const overlay = document.createElement('div');
     overlay.className = 'folio-modal';
     const box = document.createElement('div');
@@ -16,7 +18,9 @@ function shell(title: string, danger = false): { overlay: HTMLDivElement; box: H
     overlay.append(box);
     document.body.append(overlay);
     overlay.addEventListener('mousedown', (e) => {
-        if (e.target === overlay) overlay.remove();
+        if (e.target !== overlay) return;
+        if (onDismiss) onDismiss();
+        else overlay.remove();
     });
     return { overlay, box, close: () => overlay.remove() };
 }
@@ -73,23 +77,38 @@ export function folioConfirm(title: string, okText = '删除'): Promise<boolean>
     });
 }
 
-/** 列表选择弹窗（移动到/复制到选目标目录）。 */
+/** 列表选择弹窗（移动到/复制到选目标目录）。空串 = 库根；null = 取消。 */
 export function folioPick(title: string, options: string[], current?: string): Promise<string | null> {
     return new Promise((resolve) => {
-        const ui = shell(title);
         const list = document.createElement('div');
         list.className = 'folio-modal-list';
-        for (const option of options) {
+        let settled = false;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                done(null);
+            }
+        };
+        const done = (v: string | null) => {
+            if (settled) return;
+            settled = true;
+            unbindScrollFade(list);
+            window.removeEventListener('keydown', onKey);
+            ui.close();
+            resolve(v);
+        };
+        const ui = shell(title, false, () => done(null));
+        for (const row of dirPickRows(options)) {
             const b = document.createElement('button');
             b.type = 'button';
-            b.textContent = option;
-            b.disabled = option === current;
-            b.addEventListener('click', () => {
-                ui.close();
-                resolve(option);
-            });
+            b.textContent = row.name;
+            b.style.setProperty('--pick-depth', String(row.depth));
+            if (current !== undefined && row.path === current) b.disabled = true;
+            b.addEventListener('click', () => done(row.path));
             list.append(b);
         }
         ui.box.append(list);
+        window.addEventListener('keydown', onKey);
+        requestAnimationFrame(() => bindScrollFade(list));
     });
 }

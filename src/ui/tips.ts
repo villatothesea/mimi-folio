@@ -39,11 +39,13 @@ function place(el: HTMLElement): void {
     const rect = el.getBoundingClientRect();
     const tw = node.offsetWidth;
     const th = node.offsetHeight;
-    let top = preferBelow(el) ? rect.bottom + GAP : rect.top - th - GAP;
+    const below = preferBelow(el) || el.dataset.tipSide === 'below';
+    let top = below ? rect.bottom + GAP : rect.top - th - GAP;
     if (top + th > window.innerHeight - EDGE) top = rect.top - th - GAP;
     if (top < EDGE) top = rect.bottom + GAP;
     let left = rect.left + rect.width / 2 - tw / 2;
-    if (el.id === 'toc-fab' || el.closest('#toc-host')) left = rect.right - tw;
+    if (el.dataset.tipAlign === 'start') left = rect.left;
+    else if (el.id === 'toc-fab' || el.closest('#toc-host')) left = rect.right - tw;
     left = Math.min(window.innerWidth - tw - EDGE, Math.max(EDGE, left));
     node.style.top = `${Math.round(top)}px`;
     node.style.left = `${Math.round(left)}px`;

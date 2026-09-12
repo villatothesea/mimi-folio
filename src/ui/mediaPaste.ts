@@ -1,6 +1,7 @@
 /**
  * 本机多媒体进盘（单元 4）：
- *   - 截图/位图粘贴 → muya 原生 imageAction（editorHost 里接 host.saveImage）
+ *   - 截图/位图粘贴 → muya 原生 imageAction（editorHost 里接 host.saveImage → attachments/）
+ *   - 网页复制的网络图片（HTML <img src="https://…"> 或图片 URL）→ host.saveRemoteImage → pics/
  *   - 音视频文件粘贴/拖放 → host.saveFile 落盘，md 插 <video>/<audio> html-block
  *   - 图片文件拖放 → host.saveImage 后 pasteImage；其它文件插相对链接
  * 监听挂在编辑器外壳上用捕获阶段，拦下的不再进 muya 默认粘贴。
@@ -9,6 +10,7 @@ import type { Muya } from '@muyajs/core';
 
 import type { FolioHost } from '../host/types.ts';
 import { isMarkdownFile, looksLikeMarkdownSource } from '../shared/markdownPaste.ts';
+import { imageUrlsFromClipboard } from '../shared/netImage.ts';
 import { insertMarkdown } from './editorHost.ts';
 
 const AV_RE = /\.(mp4|webm|mp3|wav|ogg|m4a|flac)$/i;
@@ -33,7 +35,12 @@ async function insertAvBlock(editor: Muya, src: string, file: File): Promise<voi
     editor.insertParagraph('after', html);
 }
 
-export function attachMediaHandlers(container: HTMLElement, host: FolioHost, getEditor: () => Muya | null): void {
+export function attachMediaHandlers(
+    container: HTMLElement,
+    host: FolioHost,
+    getEditor: () => Muya | null,
+    onError?: (message: string) => void,
+): void {
     if (!host.saveFile) throw new Error('当前 FolioHost 未实现 saveFile，无法落盘音视频附件');
     const putFile = host.saveFile.bind(host);
     async function handleFiles(files: FileList | File[], isPaste: boolean): Promise<void> {
@@ -78,6 +85,22 @@ export function attachMediaHandlers(container: HTMLElement, host: FolioHost, get
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 insertMarkdown(editor, text, event);
+                return;
+            }
+            const net = host.saveRemoteImage ? imageUrlsFromClipboard(dt) : [];
+            if (editor && net.length > 0) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                void (async () => {
+                    try {
+                        for (const url of net) {
+                            const { src } = await host.saveRemoteImage!(url);
+                            editor.pasteImage(src);
+                        }
+                    } catch (err) {
+                        onError?.(`网络图片落盘失败：${(err as Error).message}`);
+                    }
+                })();
                 return;
             }
             if (files.length === 0) return;

@@ -7,17 +7,37 @@ import { fileName } from '../shared/docTitle.ts';
 import { icon } from './icons';
 import { applyTagColor } from './tagColors';
 
+export type SideItem = { kind: 'file'; id: string } | { kind: 'dir'; id: string };
+
 export type SidebarOptions = {
     activePath: string | null;
-    onOpen: (path: string, button: HTMLButtonElement) => void;
+    onOpen: (path: string, button: HTMLButtonElement, event: MouseEvent) => void;
     /** 点文件夹标题 = 选中该目录（bug4 2.2：只选中不过滤） */
     selectedDir?: string | null;
-    onDirSelect?: (dir: string | null) => void;
-    /** 拖拽移动文档（待评估 14） */
-    onMove?: (from: string, toDir: string) => void;
+    onDirSelect?: (dir: string, event: MouseEvent) => void;
+    /** Ctrl/Shift 多选：高亮，不等于当前打开篇 */
+    selectedFiles?: ReadonlySet<string>;
+    selectedDirs?: ReadonlySet<string>;
+    /** 拖拽移动文档（待评估 14）；可一次多篇 */
+    onMove?: (froms: string[], toDir: string) => void;
     /** 文件夹右键菜单（bug5） */
     onFolderContext?: (dir: string, x: number, y: number) => void;
 };
+
+/** 当前画出来的行（折叠里的不算），Shift 连选按这个顺序。 */
+export function visibleSideItems(nav: HTMLElement): SideItem[] {
+    return [...nav.querySelectorAll<HTMLElement>('.row-main[data-path], .row-main[data-dir]')].map((b) =>
+        b.dataset.path ? { kind: 'file' as const, id: b.dataset.path } : { kind: 'dir' as const, id: b.dataset.dir! },
+    );
+}
+
+export function markSelected(nav: HTMLElement, files: ReadonlySet<string>, dirs: ReadonlySet<string>): void {
+    nav.querySelectorAll<HTMLElement>('.row-main[data-path], .row-main[data-dir]').forEach((b) => {
+        const on = (b.dataset.path && files.has(b.dataset.path)) || (b.dataset.dir && dirs.has(b.dataset.dir));
+        if (on) b.setAttribute('aria-selected', 'true');
+        else b.removeAttribute('aria-selected');
+    });
+}
 
 /** 文档类型图标：外链 > 速记 > 笔记。 */
 function fileIcon(file: FolioListItem): string {
@@ -195,7 +215,11 @@ function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTM
     button.title = dir.dir;
     button.dataset.dir = dir.dir;
     if (dir.dir === opts.selectedDir) button.setAttribute('aria-current', 'true');
-    button.addEventListener('click', () => opts.onDirSelect?.(dir.dir));
+    if (opts.selectedDirs?.has(dir.dir)) button.setAttribute('aria-selected', 'true');
+    button.addEventListener('mousedown', (e) => {
+        if (e.shiftKey || e.ctrlKey || e.metaKey) e.preventDefault();
+    });
+    button.addEventListener('click', (e) => opts.onDirSelect?.(dir.dir, e));
     row.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         opts.onFolderContext?.(dir.dir, e.clientX, e.clientY);
@@ -210,8 +234,18 @@ function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTM
     row.addEventListener('drop', (e) => {
         e.preventDefault();
         row.classList.remove('drop-target');
+        const raw = e.dataTransfer?.getData('text/folio-paths');
         const from = e.dataTransfer?.getData('text/folio-path');
-        if (from) opts.onMove?.(from, dir.dir);
+        let froms: string[] = [];
+        if (raw) {
+            try {
+                froms = JSON.parse(raw) as string[];
+            } catch {
+                froms = [];
+            }
+        }
+        if (froms.length === 0 && from) froms = [from];
+        if (froms.length > 0) opts.onMove?.(froms, dir.dir);
     });
 
     row.append(toggle, button);
@@ -246,9 +280,17 @@ function renderGroup(files: FolioListItem[], opts: SidebarOptions, _depth: numbe
         button.title = file.path;
         button.dataset.path = file.path;
         if (!opts.selectedDir && file.path === opts.activePath) button.setAttribute('aria-current', 'true');
-        button.addEventListener('click', () => opts.onOpen(file.path, button));
+        if (opts.selectedFiles?.has(file.path)) button.setAttribute('aria-selected', 'true');
+        button.addEventListener('mousedown', (e) => {
+            if (e.shiftKey || e.ctrlKey || e.metaKey) e.preventDefault();
+        });
+        button.addEventListener('click', (e) => opts.onOpen(file.path, button, e));
         button.addEventListener('dragstart', (e) => {
+            const paths = opts.selectedFiles?.has(file.path) && (opts.selectedFiles.size ?? 0) > 0
+                ? [...opts.selectedFiles]
+                : [file.path];
             e.dataTransfer?.setData('text/folio-path', file.path);
+            e.dataTransfer?.setData('text/folio-paths', JSON.stringify(paths));
             e.dataTransfer!.effectAllowed = 'move';
         });
         row.append(button);
@@ -327,7 +369,7 @@ export function renderMemoTimeline(
         button.title = file.path;
         button.dataset.path = file.path;
         if (file.path === opts.activePath) button.setAttribute('aria-current', 'true');
-        button.addEventListener('click', () => opts.onOpen(file.path, button));
+        button.addEventListener('click', (e) => opts.onOpen(file.path, button, e));
         card.append(button);
 
         const tags = document.createElement('div');

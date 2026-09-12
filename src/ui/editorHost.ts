@@ -74,6 +74,8 @@ use(PreviewToolBar);
 let muya: TMuya | null = null;
 /** 图片选择器落盘用的 host（mountEditor 时更新）。 */
 let mediaHost: FolioHost | null = null;
+/** Ctrl+Z / Ctrl+Y 绑在 window 上，destroy 时卸掉。 */
+let historyKeys: AbortController | null = null;
 
 /** 浏览器文件选择框 → host.saveImage 落盘 → 回相对路径（muya 直接写进 md）。 */
 function pickImageFile(): Promise<string> {
@@ -128,6 +130,7 @@ export function mountEditor(wrap: HTMLElement, markdown: string, host: FolioHost
     editor.locale(zhCN);
     editor.init();
     focusEditorBody(editor);
+    attachHistoryKeys(editor);
     editor.on('json-change', () => {
         if (muya === editor) onChange(editor.getMarkdown());
     });
@@ -137,8 +140,32 @@ export function mountEditor(wrap: HTMLElement, markdown: string, host: FolioHost
 }
 
 export function destroyEditor(): void {
+    historyKeys?.abort();
+    historyKeys = null;
     muya?.destroy();
     muya = null;
+}
+
+function attachHistoryKeys(editor: TMuya): void {
+    historyKeys?.abort();
+    historyKeys = new AbortController();
+    window.addEventListener('keydown', (event) => {
+        if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+        const target = event.target as HTMLElement | null;
+        const tag = target?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        if (!editor.domNode.contains(target) && target !== editor.domNode) return;
+        const key = event.key.toLowerCase();
+        if (key === 'z' && !event.shiftKey) {
+            event.preventDefault();
+            editor.undo();
+            return;
+        }
+        if (key === 'y' || (key === 'z' && event.shiftKey)) {
+            event.preventDefault();
+            editor.redo();
+        }
+    }, { signal: historyKeys.signal });
 }
 
 type ContentLeaf = {

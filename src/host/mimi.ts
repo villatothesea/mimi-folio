@@ -73,6 +73,15 @@ export class MimiHost implements FolioHost {
         return this.json<FolioAttachment>(resp);
     }
 
+    async saveRemoteImage(url: string): Promise<FolioImage> {
+        const resp = await fetch('/folio/v1/pic', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+        return this.json<FolioImage>(resp);
+    }
+
     async linkOutside(absSource: string): Promise<FolioPath> {
         const resp = await fetch('/folio/v1/link', {
             method: 'POST',

@@ -1,15 +1,28 @@
 /**
  * 设置弹窗（验收清单 7）：顶部居中 + 灰蒙层，左项目右内容。
- * 默认格式 = 编号系统开关（CSS counters，见 app.css）；主题 = 页面色卡 + 文字主题 JSON。
- * 所有选择存 localStorage，应用层只挂 html data-* / 覆写 --folio-*（token 纪律）。
+ * 默认格式 = 编号系统开关（CSS counters，见 app.css）；特殊格式 = 加粗/编号/代码色板；
+ * 主题 = 页面色卡 + 文字主题 JSON。选择存 localStorage，只挂 html data-* / 覆写 --folio-*。
  */
 import { htmlPreviewScriptsEnabled, setHtmlPreviewScriptsEnabled } from '../shared/htmlPreview.ts';
+import {
+    DEFAULT_SPECIAL,
+    PALETTE_KEYS,
+    PALETTE_LABELS,
+    SPECIAL_ROLES,
+    mergeSpecial,
+    paletteVar,
+    specialCssVars,
+    type SpecialFmt,
+} from '../shared/specialFmt.ts';
 import { icon } from './icons';
 import { lockAppOverlay } from './overlayLock.ts';
 
+export type HeadNum = 'none' | 'outline' | 'cjk' | 'cjk-paren' | 'dec' | 'dec-paren' | 'dot' | 'paren';
+export type BodyNum = 'none' | 'cjk' | 'cjk-paren' | 'dec-paren' | 'dot' | 'paren';
+
 export type FmtSettings = {
-    numHead: 'none' | 'dot' | 'cjk' | 'paren';
-    numBody: 'none' | 'dot' | 'cjk' | 'paren';
+    numHead: HeadNum;
+    numBody: BodyNum;
     ul: ('disc' | 'circle' | 'square' | 'dash' | 'star' | 'plus')[];
 };
 
@@ -28,6 +41,7 @@ export type TypeTheme = {
 const FMT_KEY = 'folio-fmt';
 const TYPE_KEY = 'folio-type';
 const ACCENT_KEY = 'folio-accent';
+const SPECIAL_KEY = 'folio-special';
 
 const DEFAULT_FMT: FmtSettings = { numHead: 'none', numBody: 'none', ul: ['disc', 'circle', 'square'] };
 
@@ -71,6 +85,24 @@ export function applyType(theme: TypeTheme): void {
     for (const [k, cssVar] of map) root.setProperty(cssVar, theme[k] || '');
 }
 
+export function applySpecial(cfg: SpecialFmt): void {
+    const root = document.documentElement.style;
+    for (const [k, v] of Object.entries(specialCssVars(cfg))) root.setProperty(k, v);
+}
+
+function readSpecial(): SpecialFmt {
+    try {
+        return mergeSpecial(JSON.parse(localStorage.getItem(SPECIAL_KEY) ?? 'null'));
+    } catch {
+        return DEFAULT_SPECIAL;
+    }
+}
+
+function persistSpecial(cfg: SpecialFmt): void {
+    localStorage.setItem(SPECIAL_KEY, JSON.stringify(cfg));
+    applySpecial(cfg);
+}
+
 export function applyAccent(key: string): void {
     const root = document.documentElement.style;
     const acc = ACCENTS[key];
@@ -92,6 +124,7 @@ export function applyAccent(key: string): void {
 export function initSettings(): void {
     applyFmt(readJSON(FMT_KEY, DEFAULT_FMT));
     applyType(readJSON(TYPE_KEY, {}));
+    applySpecial(readSpecial());
     applyAccent(localStorage.getItem(ACCENT_KEY) ?? 'stone');
 }
 
@@ -138,8 +171,24 @@ export function openSettings(): void {
     addSection('默认格式', () => {
         const fmt = readJSON(FMT_KEY, DEFAULT_FMT);
         const box = document.createElement('div');
-        const headOpts: Array<[string, string]> = [['none', '不编号'], ['dot', '1. / 1.1 / 1.1.1（点分层）'], ['paren', '（1）（1.1）括号'], ['cjk', '一、二、三（中文）']];
-        const bodyOpts: Array<[string, string]> = [['none', '默认（1. 2. 3.）'], ['dot', '1.1 多级（点分层）'], ['paren', '（1.1）括号'], ['cjk', '一、二、三（中文）']];
+        const headOpts: Array<[string, string]> = [
+            ['none', '不编号'],
+            ['outline', '一、（一）1.（1）大纲'],
+            ['cjk', '一、二、三'],
+            ['cjk-paren', '（一）（二）（三）'],
+            ['dec', '1. 2. 3.'],
+            ['dec-paren', '（1）（2）（3）'],
+            ['dot', '1. / 1.1 / 1.1.1'],
+            ['paren', '(1) (1.1) 半角括号'],
+        ];
+        const bodyOpts: Array<[string, string]> = [
+            ['none', '默认（1. 2. 3.）'],
+            ['cjk', '一、二、三'],
+            ['cjk-paren', '（一）（二）（三）'],
+            ['dec-paren', '（1）（2）（3）'],
+            ['dot', '1.1 多级'],
+            ['paren', '(1.1) 半角括号'],
+        ];
         const ulOpts: Array<[string, string]> = [['disc', '● 实心圆'], ['circle', '○ 空心圆'], ['square', '■ 方块'], ['dash', '– 短横'], ['star', '* 星号'], ['plus', '+ 加号']];
         box.append(select('有序编号 · 标题', headOpts, fmt.numHead, (v) => {
             fmt.numHead = v as FmtSettings['numHead'];
@@ -175,6 +224,88 @@ export function openSettings(): void {
         note.className = 'set-note';
         note.textContent = '编号是渲染层样式，md 落盘仍是标准语法；Alt+1..6 快速设标题层级。';
         box.append(note);
+        content.replaceChildren(box);
+    });
+
+    addSection('特殊格式', () => {
+        const cfg = readSpecial();
+        const box = document.createElement('div');
+        const title = document.createElement('p');
+        title.className = 'set-group-title';
+        title.textContent = '加粗、斜体、编号、代码的颜色';
+        box.append(title);
+
+        const rows = document.createElement('div');
+        for (const [role, label] of SPECIAL_ROLES) {
+            const row = document.createElement('div');
+            row.className = 'set-fmt-row';
+            const name = document.createElement('span');
+            name.textContent = label;
+            const dots = document.createElement('div');
+            dots.className = 'set-fmt-swatches';
+            dots.setAttribute('role', 'group');
+            dots.setAttribute('aria-label', label);
+            for (const key of PALETTE_KEYS) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'set-fmt-dot';
+                b.title = PALETTE_LABELS[key];
+                b.setAttribute('aria-label', PALETTE_LABELS[key]);
+                if (cfg[role] === key) b.setAttribute('aria-pressed', 'true');
+                b.style.setProperty('--swatch', paletteVar(key));
+                b.addEventListener('click', () => {
+                    cfg[role] = key;
+                    persistSpecial(cfg);
+                    dots.querySelectorAll('button').forEach((x) => x.removeAttribute('aria-pressed'));
+                    b.setAttribute('aria-pressed', 'true');
+                });
+                dots.append(b);
+            }
+            row.append(name, dots);
+            rows.append(row);
+        }
+        box.append(rows);
+
+        const preview = document.createElement('div');
+        preview.className = 'set-fmt-preview';
+        const strong = document.createElement('strong');
+        strong.textContent = '加粗';
+        const em = document.createElement('em');
+        em.textContent = '斜体';
+        const num = document.createElement('span');
+        num.className = 'set-fmt-num';
+        num.textContent = '1. 编号';
+        const code = document.createElement('code');
+        code.textContent = '行内代码';
+        const pre = document.createElement('pre');
+        pre.className = 'set-fmt-codeblock';
+        pre.textContent = '代码块';
+        preview.append(strong, document.createTextNode(' '), em, document.createTextNode(' '), num, document.createTextNode(' '), code, pre);
+        box.append(preview);
+
+        const actions = document.createElement('div');
+        actions.className = 'set-actions';
+        const reset = document.createElement('button');
+        reset.type = 'button';
+        reset.textContent = '恢复默认';
+        reset.addEventListener('click', () => {
+            const next = { ...DEFAULT_SPECIAL };
+            persistSpecial(next);
+            Object.assign(cfg, next);
+            for (const [i, [role]] of SPECIAL_ROLES.entries()) {
+                const dots = rows.children[i]?.querySelectorAll('button');
+                dots?.forEach((btn, j) => {
+                    if (PALETTE_KEYS[j] === next[role]) btn.setAttribute('aria-pressed', 'true');
+                    else btn.removeAttribute('aria-pressed');
+                });
+            }
+        });
+        actions.append(reset);
+        box.append(actions);
+        const hint = document.createElement('p');
+        hint.className = 'set-note';
+        hint.textContent = '只改显示颜色，md 落盘仍是普通加粗/代码。色值在主题 token，这里只选色板。';
+        box.append(hint);
         content.replaceChildren(box);
     });
 
@@ -224,6 +355,7 @@ export function openSettings(): void {
                 const theme = JSON.parse(ta.value || '{}') as TypeTheme;
                 localStorage.setItem(TYPE_KEY, JSON.stringify(theme));
                 applyType(theme);
+                applySpecial(readSpecial());
             } catch {
                 ta.classList.add('set-json-bad');
                 setTimeout(() => ta.classList.remove('set-json-bad'), 600);
@@ -236,12 +368,13 @@ export function openSettings(): void {
             ta.value = '{}';
             localStorage.removeItem(TYPE_KEY);
             applyType({});
+            applySpecial(readSpecial());
         });
         applyRow.append(applyBtn, resetBtn);
         box.append(applyRow);
         const keys = document.createElement('p');
         keys.className = 'set-note';
-        keys.textContent = '可用键：em strong del marker h1 h2 h3 codeBg inlineCodeBg（值为 #RRGGBB）';
+        keys.textContent = '可用键：del h1 h2 h3（值为色值）。加粗/斜体/编号/代码请到「特殊格式」。';
         box.append(keys);
         content.replaceChildren(box);
     });

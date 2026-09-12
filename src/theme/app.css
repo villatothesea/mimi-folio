@@ -34,6 +34,10 @@ body {
     opacity: 1;
 }
 
+.folio-sb.is-float {
+    z-index: 90;
+}
+
 .folio-sb-thumb {
     position: absolute;
     top: 0;
@@ -867,7 +871,7 @@ body.is-col-resizing iframe {
     color: var(--folio-fg);
 }
 
-/* ===== 文档列：标题 + 属性 + 正文同一滚动、同一列宽（Ob 式文件头）
+/* ===== 文档列：页标题（md 外）+ 属性 + 正文同一滚动、同一列宽
    放大：zoom 整栏变宽。缩小：只缩字号，栏宽与位置不动。 */
 #doc-scroll {
     flex: 1;
@@ -880,7 +884,7 @@ body.is-col-resizing iframe {
     --folio-font-size-sm: calc(var(--folio-fs-sm) * var(--folio-text-font));
     --folio-font-size-xs: calc(var(--folio-fs-xs) * var(--folio-text-font));
     --folio-font-size-code: calc(var(--folio-fs-code) * var(--folio-text-font));
-    --folio-title-size: var(--folio-font-size);
+    --folio-title-size: calc(var(--folio-font-size) * var(--folio-title-scale));
     --folio-link-size: var(--folio-font-size-sm);
     --mu-font-size: var(--folio-font-size);
     --mu-code-font-size: var(--folio-font-size-code);
@@ -910,8 +914,7 @@ body.is-col-resizing iframe {
     box-sizing: border-box;
     max-width: var(--folio-measure);
     margin: 0 auto;
-    padding: var(--folio-space-3) var(--folio-doc-pad) var(--folio-space-2);
-    border-bottom: 1px solid var(--folio-border);
+    padding: var(--folio-space-4) var(--folio-doc-pad) var(--folio-space-2);
     background: var(--folio-bg);
 }
 
@@ -920,6 +923,12 @@ body.is-col-resizing iframe {
     background: transparent;
     padding: 0;
     border: 0;
+    text-align: left;
+}
+
+#props:not(.collapsed) {
+    border-bottom: 1px solid var(--folio-border);
+    padding-bottom: var(--folio-space-2);
 }
 
 html[data-width='wide'] #doc-head {
@@ -931,24 +940,73 @@ html[data-width='wide'] #doc-head {
 .prop-row {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: var(--folio-space-3);
     min-height: calc(var(--folio-font-size-sm) * 2);
 }
 
 .prop-key {
     flex: none;
-    width: 6em;
-    color: var(--folio-fg-muted);
-    font-size: var(--folio-font-size-sm);
-    text-align: right;
+    min-width: 4em;
+    width: auto;
+    color: var(--folio-fg);
+    font-size: var(--folio-font-size);
+    text-align: left;
 }
 
 .prop-value {
     color: var(--folio-fg);
-    font-size: var(--folio-font-size-sm);
+    font-size: var(--folio-font-size);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.prop-value-input,
+.prop-key-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    box-sizing: border-box;
+    border: 0;
+    border-bottom: 1px solid transparent;
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size);
+    padding: 0;
+    outline: none;
+    cursor: text;
+}
+
+.prop-key-input {
+    flex: none;
+    min-width: 4em;
+    width: 6em;
+}
+
+.prop-value-input:hover,
+.prop-key-input:hover {
+    border-bottom-color: var(--folio-border);
+}
+
+.prop-value-input:focus,
+.prop-key-input:focus {
+    border-bottom-color: var(--folio-border-strong);
+}
+
+.prop-add {
+    border: 0;
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size);
+    padding: 0;
+    cursor: pointer;
+}
+
+.prop-key-input::placeholder,
+.prop-value-input::placeholder {
+    color: var(--folio-fg-muted);
 }
 
 .prop-tags {
@@ -1508,6 +1566,78 @@ span.mu-inline-image.folio-img-fixed {
     font-weight: 600;
 }
 
+.set-fmt-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--folio-space-2);
+    padding: var(--folio-space-2) 0;
+    font-size: var(--folio-font-size-sm);
+}
+
+.set-fmt-swatches {
+    display: flex;
+    gap: var(--folio-space-1);
+}
+
+.set-fmt-dot {
+    width: var(--folio-icon-size);
+    height: var(--folio-icon-size);
+    padding: 0;
+    border: 1px solid var(--folio-border);
+    border-radius: 50%;
+    background: var(--swatch, var(--folio-fg-muted));
+    cursor: pointer;
+}
+
+.set-fmt-dot[aria-pressed='true'] {
+    border-color: var(--folio-fg);
+    box-shadow: 0 0 0 1px var(--folio-fg);
+}
+
+.set-fmt-preview {
+    margin-top: var(--folio-space-3);
+    padding: var(--folio-space-2);
+    border: 1px solid var(--folio-border);
+    font-size: var(--folio-font-size-sm);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--folio-space-2);
+}
+
+.set-fmt-preview strong {
+    color: var(--folio-fg-strong);
+}
+
+.set-fmt-preview em {
+    color: var(--folio-fg-em);
+}
+
+.set-fmt-preview .set-fmt-num {
+    color: var(--folio-fg-marker);
+}
+
+.set-fmt-preview code {
+    color: var(--folio-fg-inline-code);
+    background: var(--folio-inline-code-bg);
+    font-family: var(--folio-font-mono);
+    padding: 0 var(--folio-space-1);
+}
+
+.set-fmt-preview .set-fmt-codeblock {
+    flex: 1 1 100%;
+    margin: 0;
+    padding: var(--folio-space-2);
+    background: var(--folio-code-bg);
+    font-family: var(--folio-font-mono);
+    font-size: var(--folio-font-size-xs);
+}
+
+.settings-content > div > .set-group-title:first-child {
+    margin-top: 0;
+}
+
 .set-json {
     width: 100%;
     box-sizing: border-box;
@@ -1573,6 +1703,25 @@ span.mu-inline-image.folio-img-fixed {
 }
 
 /* ===== 编号系统（验收清单 13，CSS 渲染层，md 落盘保持标准语法） ===== */
+/* 标题编号与文字同一行：Muya 的 .mu-content 是 block，::before 会被挤到上一行。 */
+.mu-editor .mu-container :is(h1, h2, h3, h4, h5, h6) {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+}
+
+.mu-editor .mu-container :is(h1, h2, h3, h4, h5, h6) > .mu-content {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+html[data-num-h]:not([data-num-h='none']) .mu-editor .mu-container :is(h1, h2, h3, h4, h5, h6)::before {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    color: var(--folio-fg-marker, var(--folio-fg-muted));
+    margin-right: var(--folio-space-1);
+}
+
 /* 标题自动编号：点分层 1. / 1.1 / 1.1.1 */
 html[data-num-h='dot'] .mu-editor {
     counter-reset: folio-h1 folio-h2 folio-h3 folio-h4 folio-h5 folio-h6;
@@ -1705,6 +1854,7 @@ html[data-ul-3='plus'] .mu-editor ul ul ul { list-style-type: '+  '; }
 }
 
 .mu-editor code.mu-inline-rule {
+    color: var(--folio-fg-inline-code, inherit);
     background: var(--folio-inline-code-bg, var(--code-block-bg-color));
 }
 
@@ -1732,10 +1882,33 @@ html[data-width='wide'] .mu-editor .mu-container {
     word-break: break-word;
 }
 
-.mu-editor table.mu-table-inner td {
+.mu-editor table.mu-table-inner td,
+.mu-editor table.mu-table-inner th {
     min-width: var(--folio-table-cell-min);
+    overflow: hidden;
     overflow-wrap: anywhere;
     font-weight: inherit;
+}
+
+/* Muya 给格子内容 min-width:10em，定宽表列更窄时字会画到邻格上 */
+.mu-editor .mu-table-cell-content {
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* 链接芯片默认 nowrap + inline-flex，长链接撑穿格子 */
+.mu-editor table.mu-table-inner a.mu-inline-rule,
+.mu-editor table.mu-table-inner span.mu-inline-rule.mu-link,
+.mu-editor table.mu-table-inner .folio-wikilink {
+    max-width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.mu-editor table.mu-table-inner .folio-wikilink-text {
+    white-space: normal;
 }
 
 /* Muya 用 td::before 宽高 +1px 叠边；末列那 1px 会逼出假横条 */
@@ -1815,7 +1988,9 @@ html[data-width='wide'] .mu-editor .mu-container {
     flex-direction: column;
     min-width: 130px;
     max-height: 280px;
+    overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior: contain;
     border: 1px solid var(--folio-border-strong);
     background: var(--folio-bg);
     box-shadow: var(--folio-shadow);
@@ -1903,6 +2078,7 @@ html[data-width='wide'] .mu-editor .mu-container {
     font-size: var(--folio-font-size-sm);
     text-align: left;
     padding: var(--folio-space-2);
+    padding-left: calc(var(--folio-space-2) + var(--tree-step) * var(--pick-depth, 0));
     cursor: pointer;
 }
 
@@ -1952,25 +2128,43 @@ html[data-width='wide'] .mu-editor .mu-container {
 }
 
 .doc-title-row {
-    padding: var(--folio-space-3) 0 var(--folio-space-1);
+    display: flex;
+    align-items: baseline;
+    flex-wrap: nowrap;
+    padding: 0 0 var(--folio-space-3);
 }
 
 .doc-title-input {
-    width: 100%;
-    box-sizing: border-box;
+    field-sizing: content;
+    width: auto;
+    min-width: 1ch;
+    flex: 0 1 auto;
+    box-sizing: content-box;
     border: 0;
     background: none;
     color: var(--folio-fg);
     font: inherit;
     font-size: var(--folio-title-size);
     font-weight: var(--folio-title-weight);
-    line-height: 1.3;
+    line-height: 1.2;
     padding: 0;
     outline: none;
+    text-align: left;
 }
 
 .doc-title-input:focus {
     border-bottom: 1px solid var(--folio-border-strong);
+}
+
+.doc-title-ext {
+    flex: none;
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-title-size);
+    font-weight: var(--folio-title-weight);
+    line-height: 1.2;
+    pointer-events: none;
+    user-select: none;
 }
 
 .tag-color-input {
@@ -2101,6 +2295,188 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
     color: var(--folio-fg-marker, var(--folio-fg-muted));
 }
 
+/* 标题：一、（一）、1.、（1）按层级混排 */
+html[data-num-h='outline'] .mu-editor {
+    counter-reset: folio-h1 folio-h2 folio-h3 folio-h4 folio-h5 folio-h6;
+}
+
+html[data-num-h='outline'] .mu-editor h1::before {
+    counter-increment: folio-h1;
+    counter-reset: folio-h2 folio-h3 folio-h4 folio-h5 folio-h6;
+    content: counter(folio-h1, cjk-decimal) '、';
+}
+
+html[data-num-h='outline'] .mu-editor h2::before {
+    counter-increment: folio-h2;
+    counter-reset: folio-h3 folio-h4 folio-h5 folio-h6;
+    content: '（' counter(folio-h2, cjk-decimal) '）';
+}
+
+html[data-num-h='outline'] .mu-editor h3::before {
+    counter-increment: folio-h3;
+    counter-reset: folio-h4 folio-h5 folio-h6;
+    content: counter(folio-h3) '. ';
+}
+
+html[data-num-h='outline'] .mu-editor h4::before {
+    counter-increment: folio-h4;
+    counter-reset: folio-h5 folio-h6;
+    content: '（' counter(folio-h4) '）';
+}
+
+html[data-num-h='outline'] .mu-editor h5::before {
+    counter-increment: folio-h5;
+    counter-reset: folio-h6;
+    content: counter(folio-h5, lower-alpha) '. ';
+}
+
+html[data-num-h='outline'] .mu-editor h6::before {
+    counter-increment: folio-h6;
+    content: '（' counter(folio-h6, lower-alpha) '）';
+}
+
+/* 标题：每级独立 1. 2. 3. */
+html[data-num-h='dec'] .mu-editor {
+    counter-reset: folio-h1 folio-h2 folio-h3 folio-h4 folio-h5 folio-h6;
+}
+
+html[data-num-h='dec'] .mu-editor h1::before {
+    counter-increment: folio-h1;
+    counter-reset: folio-h2 folio-h3 folio-h4 folio-h5 folio-h6;
+    content: counter(folio-h1) '. ';
+}
+
+html[data-num-h='dec'] .mu-editor h2::before {
+    counter-increment: folio-h2;
+    counter-reset: folio-h3 folio-h4 folio-h5 folio-h6;
+    content: counter(folio-h2) '. ';
+}
+
+html[data-num-h='dec'] .mu-editor h3::before {
+    counter-increment: folio-h3;
+    counter-reset: folio-h4 folio-h5 folio-h6;
+    content: counter(folio-h3) '. ';
+}
+
+html[data-num-h='dec'] .mu-editor h4::before {
+    counter-increment: folio-h4;
+    counter-reset: folio-h5 folio-h6;
+    content: counter(folio-h4) '. ';
+}
+
+html[data-num-h='dec'] .mu-editor h5::before {
+    counter-increment: folio-h5;
+    counter-reset: folio-h6;
+    content: counter(folio-h5) '. ';
+}
+
+html[data-num-h='dec'] .mu-editor h6::before {
+    counter-increment: folio-h6;
+    content: counter(folio-h6) '. ';
+}
+
+/* 标题：（1）（2）（3）全角括号，每级独立 */
+html[data-num-h='dec-paren'] .mu-editor {
+    counter-reset: folio-h1 folio-h2 folio-h3 folio-h4 folio-h5 folio-h6;
+}
+
+html[data-num-h='dec-paren'] .mu-editor h1::before {
+    counter-increment: folio-h1;
+    counter-reset: folio-h2 folio-h3 folio-h4 folio-h5 folio-h6;
+    content: '（' counter(folio-h1) '）';
+}
+
+html[data-num-h='dec-paren'] .mu-editor h2::before {
+    counter-increment: folio-h2;
+    counter-reset: folio-h3 folio-h4 folio-h5 folio-h6;
+    content: '（' counter(folio-h2) '）';
+}
+
+html[data-num-h='dec-paren'] .mu-editor h3::before {
+    counter-increment: folio-h3;
+    counter-reset: folio-h4 folio-h5 folio-h6;
+    content: '（' counter(folio-h3) '）';
+}
+
+html[data-num-h='dec-paren'] .mu-editor h4::before {
+    counter-increment: folio-h4;
+    counter-reset: folio-h5 folio-h6;
+    content: '（' counter(folio-h4) '）';
+}
+
+html[data-num-h='dec-paren'] .mu-editor h5::before {
+    counter-increment: folio-h5;
+    counter-reset: folio-h6;
+    content: '（' counter(folio-h5) '）';
+}
+
+html[data-num-h='dec-paren'] .mu-editor h6::before {
+    counter-increment: folio-h6;
+    content: '（' counter(folio-h6) '）';
+}
+
+/* 标题：（一）（二）（三），每级独立 */
+html[data-num-h='cjk-paren'] .mu-editor {
+    counter-reset: folio-h1 folio-h2 folio-h3 folio-h4 folio-h5 folio-h6;
+}
+
+html[data-num-h='cjk-paren'] .mu-editor h1::before {
+    counter-increment: folio-h1;
+    counter-reset: folio-h2 folio-h3 folio-h4 folio-h5 folio-h6;
+    content: '（' counter(folio-h1, cjk-decimal) '）';
+}
+
+html[data-num-h='cjk-paren'] .mu-editor h2::before {
+    counter-increment: folio-h2;
+    counter-reset: folio-h3 folio-h4 folio-h5 folio-h6;
+    content: '（' counter(folio-h2, cjk-decimal) '）';
+}
+
+html[data-num-h='cjk-paren'] .mu-editor h3::before {
+    counter-increment: folio-h3;
+    counter-reset: folio-h4 folio-h5 folio-h6;
+    content: '（' counter(folio-h3, cjk-decimal) '）';
+}
+
+html[data-num-h='cjk-paren'] .mu-editor h4::before {
+    counter-increment: folio-h4;
+    counter-reset: folio-h5 folio-h6;
+    content: '（' counter(folio-h4, cjk-decimal) '）';
+}
+
+html[data-num-h='cjk-paren'] .mu-editor h5::before {
+    counter-increment: folio-h5;
+    counter-reset: folio-h6;
+    content: '（' counter(folio-h5, cjk-decimal) '）';
+}
+
+html[data-num-h='cjk-paren'] .mu-editor h6::before {
+    counter-increment: folio-h6;
+    content: '（' counter(folio-h6, cjk-decimal) '）';
+}
+
+/* 正文：（1） / （一），每份列表独立计数 */
+html[data-num-b='dec-paren'] .mu-editor ol.mu-order-list,
+html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list {
+    list-style-type: none;
+    counter-reset: folio-ol calc(var(--folio-ol-start, 1) - 1);
+}
+
+html[data-num-b='dec-paren'] .mu-editor ol.mu-order-list > li.mu-list-item,
+html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item {
+    counter-increment: folio-ol;
+}
+
+html[data-num-b='dec-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
+    content: '（' counter(folio-ol) '） ';
+    color: var(--folio-fg-marker, var(--folio-fg-muted));
+}
+
+html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
+    content: '（' counter(folio-ol, cjk-decimal) '） ';
+    color: var(--folio-fg-marker, var(--folio-fg-muted));
+}
+
 /* 速记时间线（日期头 + 卡片） */
 .memo-day {
     position: sticky;
@@ -2176,6 +2552,7 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
 #files {
     overflow-x: hidden;
     padding: var(--folio-space-1) 0;
+    user-select: none;
 }
 
 #files .tree-row {
@@ -2290,6 +2667,28 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
 
 .folio-wikilink-text {
     white-space: nowrap;
+}
+
+/* `[[wikilink]]` 落在行内代码里时，只留淡黄芯片，不要代码的青蓝底 */
+.mu-editor code.mu-inline-rule:has(.folio-wikilink) {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: inherit;
+    font-family: inherit;
+}
+
+.mu-editor span.mu-inline-rule.mu-link:has(.folio-wikilink),
+.mu-editor a.mu-inline-rule:has(.folio-wikilink) {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    gap: 0;
+    font-size: inherit;
+}
+
+.mu-editor span.mu-inline-rule.mu-link:has(.folio-wikilink)::before {
+    content: none;
 }
 
 .wiki-ac {
@@ -2423,11 +2822,13 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
     background: color-mix(in srgb, var(--folio-fg) 5%, transparent);
 }
 
-.tree-row:has(> .row-main[aria-current='true']) {
+.tree-row:has(> .row-main[aria-current='true']),
+.tree-row:has(> .row-main[aria-selected='true']) {
     background: color-mix(in srgb, var(--folio-fg) 9%, transparent);
 }
 
-.tree-row:has(> .row-main[aria-current='true'])::after {
+.tree-row:has(> .row-main[aria-current='true'])::after,
+.tree-row:has(> .row-main[aria-selected='true'])::after {
     content: '';
     position: absolute;
     top: 0;
@@ -2440,7 +2841,8 @@ html[data-num-b='paren'] .mu-editor ol.mu-order-list > li.mu-list-item::marker {
 }
 
 .folder-row:hover .folder-toggle,
-.folder-row:has(> .row-main[aria-current='true']) .folder-toggle {
+.folder-row:has(> .row-main[aria-current='true']) .folder-toggle,
+.folder-row:has(> .row-main[aria-selected='true']) .folder-toggle {
     background: transparent;
 }
 

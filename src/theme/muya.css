@@ -20,7 +20,7 @@
     /* 附件界面元素 */
     --delete-color: var(--folio-danger);
     --icon-color: var(--folio-fg-muted);
-    --code-block-bg-color: var(--folio-bg-alt);
+    --code-block-bg-color: var(--folio-code-bg, var(--folio-bg-alt));
     --table-border-color: var(--folio-border);
     --input-bg-color: var(--folio-bg-alt);
 
@@ -53,9 +53,9 @@
     --h6-color: var(--folio-fg);
     --blockquote-text-color: var(--folio-fg-muted);
     --blockquote-border-color: var(--folio-border-strong);
-    --strong-color: inherit;
-    --em-color: inherit;
-    --list-marker-color: inherit;
+    --strong-color: var(--folio-fg-strong);
+    --em-color: var(--folio-fg-em);
+    --list-marker-color: var(--folio-fg-marker);
     --hr-color: var(--folio-border);
 
     /* 排版，来自 tokens.css */
@@ -190,4 +190,10 @@
 .mu-editor .mu-table-inner tr td.mu-table-cell-selected > .mu-table-cell-content {
     position: relative;
     z-index: 1;
+}
+
+/* 行内代码：字色走特殊格式；盖掉 Muya 的 --editor-color */
+.mu-editor code.mu-inline-rule {
+    color: var(--folio-fg-inline-code, var(--editor-color));
+    background-color: var(--folio-inline-code-bg, var(--code-block-bg-color));
 }

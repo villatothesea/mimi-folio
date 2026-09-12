@@ -96,11 +96,11 @@ describe('GET /folio/v1/*', () => {
         assert.deepEqual(files.map((f) => f.path), ['memos/m1.md']);
     });
 
-    it('标题取自 YAML title，不用正文 H1；没有 title: 则露出文件名', async () => {
+    it('标题就是文件名，不用 YAML title、不用正文 H1', async () => {
         const res = await fetch(`${base}/folio/v1/list`);
         const files = (await res.json()) as { path: string; title: string }[];
-        assert.equal(files.find((f) => f.path === 'memos/m1.md')!.title, '一条速记');
-        assert.equal(files.find((f) => f.path === 'notes/named.md')!.title, 'YAML标题');
+        assert.equal(files.find((f) => f.path === 'memos/m1.md')!.title, 'm1.md');
+        assert.equal(files.find((f) => f.path === 'notes/named.md')!.title, 'named.md');
         assert.equal(files.find((f) => f.path === 'notes/orphan.md')!.title, 'orphan.md');
         assert.equal(files.find((f) => f.path === 'notes/tagged.md')!.title, 'tagged.md');
     });
@@ -325,11 +325,12 @@ describe('全文搜索（单元 13/验收批）', () => {
         assert.equal(hit.matches[0].text.indexOf('甲烷'), hit.matches[0].start);
     });
 
-    it('标题命中排第一', async () => {
-        const res = await fetch(`${base}/folio/v1/search?q=${encodeURIComponent('速记')}`);
-        const results = (await res.json()) as { title: string; matches: { text: string }[] }[];
-        const memo = results.find((r) => r.title === '一条速记')!;
-        assert.equal(memo.matches[0].text, '一条速记');
+    it('文件名命中排第一', async () => {
+        const res = await fetch(`${base}/folio/v1/search?q=${encodeURIComponent('m1')}`);
+        const results = (await res.json()) as { path: string; title: string; matches: { text: string }[] }[];
+        const memo = results.find((r) => r.path === 'memos/m1.md')!;
+        assert.equal(memo.title, 'm1.md');
+        assert.equal(memo.matches[0].text, 'm1.md');
     });
 
     it('空查询返回空数组', async () => {
@@ -463,6 +464,47 @@ describe('附件（saveImage/saveFile）', () => {
 
     it('GET /attachments 越界 400', async () => {
         const res = await fetch(`${base}/attachments/..%2F..%2Fpackage.json`);
+        assert.equal(res.status, 400);
+    });
+});
+
+describe('网络图片 pics/', () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02, 0x03]);
+
+    it('POST pic 拉取 http 图并落盘 pics/', async () => {
+        await fs.mkdir(path.join(vault, 'attachments'), { recursive: true });
+        await fs.writeFile(path.join(vault, 'attachments', 'src.png'), png);
+        const res = await fetch(`${base}/folio/v1/pic`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ url: `${base}/attachments/src.png` }),
+        });
+        assert.equal(res.status, 200);
+        const { src } = (await res.json()) as { src: string };
+        assert.match(src, /^pics\/src\.png$/);
+        const onDisk = await fs.readFile(path.join(vault, 'pics', path.basename(src)));
+        assert.deepEqual([...onDisk], [...png]);
+    });
+
+    it('GET /pics/<name> 端文件', async () => {
+        await fs.mkdir(path.join(vault, 'pics'), { recursive: true });
+        await fs.writeFile(path.join(vault, 'pics', 'web.webp'), Buffer.from('RIFF....WEBP'));
+        const res = await fetch(`${base}/pics/web.webp`);
+        assert.equal(res.status, 200);
+        assert.equal(res.headers.get('content-type'), 'image/webp');
+    });
+
+    it('POST pic 拒绝非 http(s)', async () => {
+        const res = await fetch(`${base}/folio/v1/pic`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ url: 'file:///tmp/a.png' }),
+        });
+        assert.equal(res.status, 400);
+    });
+
+    it('GET /pics 越界 400', async () => {
+        const res = await fetch(`${base}/pics/..%2F..%2Fpackage.json`);
         assert.equal(res.status, 400);
     });
 });

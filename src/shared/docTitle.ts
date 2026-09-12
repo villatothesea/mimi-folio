@@ -1,8 +1,8 @@
 /**
- * 三条线，不许混：
- * - 文件名 = 操作系统 basename（含 .md）。左栏清单露出它；改名才是 fs rename / move。
- * - 文档标题 = YAML `title:`（Jekyll / Hugo / Pandoc / Eleventy 同一套）。标题栏、底栏、目录第一行用这个。
- * - 正文标题 = ATX `#`–`######`，只是正文结构。不当文档标题，改标题不改 H1。
+ * 两条线，不许混：
+ * - 文件名 = 操作系统 basename（含 .md）。左栏、页顶大标题、搜索、底栏、目录第一行都用它。改名才是 fs rename / move。
+ * - 正文标题 = ATX `#`–`######`，只是正文结构。不当文档标题，改文件名不改 H1。
+ * YAML `title:` 若文件里已有就原样留着，界面不读、不写、不当第二套名字。
  */
 import { getScalar, setScalar, splitFrontmatter } from './frontmatter.ts';
 
@@ -63,21 +63,21 @@ export function firstHeading(markdown: string): string | null {
     return null;
 }
 
-/** 搜索/底栏/目录第一行：有 YAML title 用它；否则露出真文件名。不读 H1。 */
-export function displayTitle(rel: string, markdown: string): string {
-    return yamlTitle(markdown) ?? fileName(rel);
+/** 文档标题 = 文件名。不读 YAML title:、不读 H1。 */
+export function displayTitle(rel: string, _markdown?: string): string {
+    return fileName(rel);
 }
 
-/** 只写 YAML title:，不改正文标题、不改文件名。 */
+/** 只写 YAML title:，不改正文标题、不改文件名。界面不用这条线。 */
 export function setDisplayTitle(markdown: string, text: string): string {
     const title = text.trim();
     if (!title) return markdown;
     return setScalar(markdown, 'title', title);
 }
 
-/** 新建笔记的种子：只有 title:，正文空着。 */
-export function newNoteMarkdown(title = '未命名笔记'): string {
-    return setDisplayTitle('', title);
+/** 新建笔记：空正文。标题就是文件名，不写 title:。 */
+export function newNoteMarkdown(_title?: string): string {
+    return '';
 }
 
 /** 改第一个标题的文字，保留原级别；没有标题则在正文开头插 H1。不碰文件名、不写 title:。 */

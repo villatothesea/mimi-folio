@@ -72,9 +72,10 @@
     --folio-cal-dot: 4px;
     --folio-composer-min-h: 5.5rem;
     --folio-memo-img-max: 240px;
-    /* 文档标题栏：与正文字号同级、略加重——不做大号粗体。 */
-    --folio-title-size: var(--folio-font-size);
-    --folio-title-weight: 600;
+    /* 页标题（md 外）：比正文 H1（1.875em）更大，标题栏快捷改 YAML title: */
+    --folio-title-scale: 2.25;
+    --folio-title-size: calc(var(--folio-font-size) * var(--folio-title-scale));
+    --folio-title-weight: 700;
     --folio-icon-size: 18px;
     --folio-icon-stroke: 1.5;
     --folio-measure: 800px;
@@ -113,6 +114,23 @@
     /* 出链/反链色块：同款几何，莫兰迪淡黄 */
     --folio-graph-chip: #eee6c4;
     --folio-graph-fg: #6a5e36;
+
+    /* 特殊格式色板（设置里按 key 选；组件只写 var(--folio-palette-*)） */
+    --folio-palette-warm-red: #e85a4f;
+    --folio-palette-orange-red: #ff8c42;
+    --folio-palette-base-yellow: #ffbc00;
+    --folio-palette-light-green: #73c088;
+    --folio-palette-cyan-blue: #4fb4c8;
+    --folio-palette-light-blue: #4a86c8;
+    --folio-palette-soft-purple: #9179d3;
+
+    /* 特殊格式默认挂点（出厂：加粗暖红 / 斜体橙红 / 编号浅蓝 / 行内青蓝 / 代码块柔紫） */
+    --folio-fg-strong: var(--folio-palette-warm-red);
+    --folio-fg-em: var(--folio-palette-orange-red);
+    --folio-fg-marker: var(--folio-palette-light-blue);
+    --folio-fg-inline-code: var(--folio-palette-cyan-blue);
+    --folio-inline-code-bg: color-mix(in srgb, var(--folio-palette-cyan-blue) 16%, var(--folio-bg));
+    --folio-code-bg: color-mix(in srgb, var(--folio-palette-soft-purple) 14%, var(--folio-bg-alt));
 
     /* 标签色板（索引由 tagColors 分配，色值只在这里改） */
     --folio-tag-0: #a54d62;

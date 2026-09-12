@@ -32,13 +32,13 @@ function tokenMs(name: string, fallback: number): number {
 
 function railWidth(el: HTMLElement): number {
     if (el.id === 'files') return tokenPx('--folio-files-scrollbar-size', 1);
-    if (el.id === 'toc-list') return tokenPx('--folio-toc-scrollbar-size', 1);
+    if (el.id === 'toc-list' || el.classList.contains('ctx-sub') || el.classList.contains('folio-modal-list')) return tokenPx('--folio-toc-scrollbar-size', 1);
     return tokenPx('--folio-scrollbar-size', 8);
 }
 
 function railEnd(el: HTMLElement): number {
     if (el.id === 'files') return tokenPx('--folio-files-scrollbar-end', 3);
-    if (el.id === 'toc-list') return tokenPx('--folio-toc-scrollbar-end', 2);
+    if (el.id === 'toc-list' || el.classList.contains('ctx-sub') || el.classList.contains('folio-modal-list')) return tokenPx('--folio-toc-scrollbar-end', 2);
     return tokenPx('--folio-scrollbar-end', 2);
 }
 
@@ -84,8 +84,8 @@ function ensure(el: HTMLElement): BarRec {
     el.dataset.folioSb = '1';
 
     const rail = document.createElement('div');
-    rail.className = 'folio-sb';
-    rail.dataset.scrollFor = el.id || '';
+    rail.className = el.classList.contains('ctx-sub') || el.classList.contains('folio-modal-list') ? 'folio-sb is-float' : 'folio-sb';
+    rail.dataset.scrollFor = el.id || el.className;
     rail.setAttribute('aria-hidden', 'true');
     const thumb = document.createElement('div');
     thumb.className = 'folio-sb-thumb';
@@ -109,6 +109,7 @@ function paint(el: HTMLElement): void {
     layout(el, rec.rail, rec.thumb);
     rec.rail.classList.add('is-on');
     window.clearTimeout(rec.timer);
+    if (el.classList.contains('ctx-sub') || el.classList.contains('folio-modal-list')) return;
     rec.timer = window.setTimeout(() => rec.rail.classList.remove('is-on'), tokenMs('--folio-scrollbar-hide', 1000));
 }
 
@@ -128,4 +129,20 @@ function relayoutAll(): void {
 export function attachScrollFade(): void {
     document.addEventListener('scroll', onScroll, { capture: true, passive: true });
     window.addEventListener('resize', relayoutAll, { passive: true });
+}
+
+/** 弹出层刚显示时立刻画一条（不必等用户先滚一下）。 */
+export function bindScrollFade(el: HTMLElement): void {
+    paint(el);
+}
+
+export function unbindScrollFade(el: HTMLElement): void {
+    const rec = bars.get(el);
+    if (!rec) return;
+    rec.ro.disconnect();
+    window.clearTimeout(rec.timer);
+    rec.rail.remove();
+    bars.delete(el);
+    delete el.dataset.folioSb;
+    el.classList.remove('folio-scroll');
 }

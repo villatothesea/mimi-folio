@@ -4,6 +4,7 @@
  * （上方插入/下方插入/改为/删除）都在这层，muya 与浏览器原生菜单一律屏蔽。
  */
 import { icon } from './icons';
+import { bindScrollFade, unbindScrollFade } from './scrollFade.ts';
 
 export type MenuItem = {
     ic?: string;
@@ -19,7 +20,10 @@ export type MenuItem = {
 let open: HTMLDivElement | null = null;
 
 function close(): void {
-    open?.remove();
+    if (open) {
+        open.querySelectorAll<HTMLElement>('.ctx-sub').forEach(unbindScrollFade);
+        open.remove();
+    }
     open = null;
 }
 
@@ -53,6 +57,10 @@ export function showContextMenu(x: number, y: number, items: MenuItem[]): void {
                 });
                 sub.append(subRow);
             }
+            row.addEventListener('mouseenter', () => {
+                requestAnimationFrame(() => requestAnimationFrame(() => bindScrollFade(sub)));
+            });
+            row.addEventListener('mouseleave', () => unbindScrollFade(sub));
             row.append(sub);
         } else if (!item.disabled) {
             row.addEventListener('click', () => {

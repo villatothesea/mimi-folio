@@ -108,10 +108,12 @@ export function attachWikiAutocomplete(wrap: HTMLElement, opts: AutocompleteOpti
             row.className = i === state.index ? 'wiki-ac-row active' : 'wiki-ac-row';
             const label = document.createElement('span');
             label.className = 'wiki-ac-title';
-            label.textContent = file.title;
+            label.textContent = fileName(file.path);
             const dir = document.createElement('span');
             dir.className = 'wiki-ac-dir';
-            dir.textContent = fileName(file.path);
+            const posix = file.path.replaceAll('\\', '/');
+            const slash = posix.lastIndexOf('/');
+            dir.textContent = slash >= 0 ? posix.slice(0, slash) : '';
             row.append(label, dir);
             row.addEventListener('mousedown', (e) => {
                 e.preventDefault();
@@ -130,10 +132,8 @@ export function attachWikiAutocomplete(wrap: HTMLElement, opts: AutocompleteOpti
         close();
         if (!editor) return;
         const typed = `[[${state.query}`;
-        const stem = fileStem(file.path);
-        const inner = file.title && file.title !== stem ? `${stem}|${file.title}` : stem;
         try {
-            editor.replaceCurrentWordInlineUnsafe(typed, `[[${inner}]]`);
+            editor.replaceCurrentWordInlineUnsafe(typed, `[[${fileStem(file.path)}]]`);
         } catch {
             // 边缘情况静默：手输 ]] 也能达成
         }

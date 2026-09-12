@@ -17,7 +17,7 @@ export type FolioDoc = {
 
 export type FolioListItem = {
     path: FolioPath;
-    /** YAML `title:`；没有则文件名。搜索/底栏用。左栏清单走 path 文件名（含扩展名）。 */
+    /** 文件名（含扩展名）。搜索/底栏/目录用。左栏清单同一套。不读 YAML title:。 */
     title: string;
     /** frontmatter tags:（单元 6），无 frontmatter 时为空 */
     tags?: string[];
@@ -74,6 +74,11 @@ export interface FolioHost {
     saveImage(bytes: Uint8Array, hint: string): Promise<FolioImage>;
     /** 音视频等附件落盘（单元 4）；合入后由 daemon 提供同名能力 */
     saveFile?(bytes: Uint8Array, hint: string): Promise<FolioAttachment>;
+    /**
+     * 粘贴的网络图片：服务端拉取，落盘 vault/pics/，回相对路径。
+     * 合入后 daemon 同名；页面 `if (!host.saveRemoteImage)` 降级（不拦粘贴）。
+     */
+    saveRemoteImage?(url: string): Promise<FolioImage>;
     /**
      * 库外 md 链入 vault（单元 10）：在 vault/links/ 建指向库外文件的链接，
      * 读写穿透回原文件；**失败抛错，绝不拷贝正文**。合入后 daemon 同名实现。

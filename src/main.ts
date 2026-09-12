@@ -2,21 +2,22 @@ import { wordCount } from '@muyajs/core';
 import { applyTextScale, readTextScale } from './shared/textScale.ts';
 import { createHost } from './host/index.ts';
 import { startMimiPresence } from './host/presence.ts';
-import { currentEditor, destroyEditor, mountEditor } from './ui/editorHost.ts';
+import { currentEditor, destroyEditor, focusEditorBody, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
 import { attachImageFallback } from './ui/imageFallback.ts';
-import { renderSidebar, setSiblingFoldersCollapsed, siblingFolderFoldState } from './ui/sidebar.ts';
+import { renderSidebar, setSiblingFoldersCollapsed, siblingFolderFoldState, visibleSideItems, markSelected, type SideItem } from './ui/sidebar.ts';
 import { focusComposer, isMemoBusy, paintMemoView, stageMemoDay } from './ui/memoView.ts';
 import { attachInlineEmbeds } from './ui/embeds.ts';
 import { highlightActive, renderToc, scrollToHeading } from './ui/toc.ts';
 import { memoDayFromPath } from './shared/memoMd.ts';
 import { matchDocPath, matchHeadingIndex, parseDeepLink } from './shared/deepLink.ts';
 import { attachWikilinkHandlers } from './ui/wikilink.ts';
-import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath, setDisplayTitle, yamlTitle } from './shared/docTitle.ts';
+import { displayTitle, fileName, fileNameStem, newNoteMarkdown, renamedPath } from './shared/docTitle.ts';
+import { joinRel } from './shared/dirPick.ts';
 import { htmlPreviewSandbox, htmlPreviewScriptsEnabled, folioEntryToken, isHtmlPath, previewFrameHref, previewSrc } from './shared/htmlPreview.ts';
 import { readLastView, readLastViewFor, writeLastView as persistView, writeLastViewFor } from './shared/lastView.ts';
 import { applyViewFilters, nextViewFilters } from './shared/viewFilters.ts';
-import { setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
+import { getScalar, setScalar, setTags, splitFrontmatter } from './shared/frontmatter.ts';
 import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
 import { attachWikiAutocomplete, attachWikilinkDecor } from './ui/wikilinkDecor.ts';
@@ -71,6 +72,10 @@ let allFiles: FolioListItem[] = [];
 /** 底栏五枚筛选：默认单选；Ctrl/Cmd 点选为并集。空集合 = 全部。 */
 let activeFilters = new Set<string>();
 let selectedDir: string | null = null;
+/** 侧栏 Ctrl/Shift 多选；打开篇仍走 aria-current。 */
+let selectedFiles = new Set<string>();
+let selectedDirs = new Set<string>();
+let sideAnchor: SideItem | null = null;
 
 function saySave(message: string): void {
     saveStateEl.textContent = message;
@@ -122,8 +127,8 @@ function syncTocGutter(): void {
 }
 
 /**
- * 文档头：YAML title:（行业通用的文档标题）+ 属性。
- * 只经标题栏和左栏右键改；不改正文 H1、不改操作系统文件名。
+ * 页标题在 markdown 外：显示并改操作系统文件名（不含扩展名）。
+ * 不写 YAML title:、不改正文 H1。字号大于正文一级标题。
  */
 function renderTitle(): void {
     const editor = currentEditor();
@@ -132,6 +137,7 @@ function renderTitle(): void {
         hideDocHead();
         return;
     }
+    const path = openFile;
     titleEl.hidden = false;
     docHead.hidden = false;
 
@@ -139,27 +145,54 @@ function renderTitle(): void {
     titleRow.className = 'doc-title-row';
     const titleInput = document.createElement('input');
     titleInput.className = 'doc-title-input';
-    titleInput.placeholder = fileName(openFile);
-    titleInput.setAttribute('aria-label', '文档标题');
-    titleInput.value = yamlTitle(editor.getMarkdown()) ?? '';
-    titleInput.addEventListener('change', () => {
-        const ed = currentEditor();
-        if (!ed || !openFile) return;
+    titleInput.setAttribute('aria-label', '文件名');
+    titleInput.value = fileNameStem(path);
+    titleInput.size = Math.max(titleInput.value.length, 1);
+    titleInput.spellcheck = false;
+    titleInput.autocomplete = 'off';
+    titleInput.readOnly = !host.moveDoc;
+    const ext = /\.[^.]+$/.exec(fileName(path))?.[0] ?? '';
+    const fit = () => {
+        titleInput.size = Math.max(titleInput.value.length, 1);
+    };
+    titleInput.addEventListener('input', fit);
+    const commitName = () => {
+        if (!openFile) return;
         const next = titleInput.value.trim();
-        if (!next) return;
-        ed.replaceContent(setDisplayTitle(ed.getMarkdown(), next));
-        onEditorChange(ed.getMarkdown());
-        void refreshList();
+        if (!next) {
+            titleInput.value = fileNameStem(path);
+            fit();
+            return;
+        }
+        void renameCurrentDoc(next);
+    };
+    titleInput.addEventListener('change', commitName);
+    titleInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            titleInput.blur();
+            const ed = currentEditor();
+            if (ed) queueMicrotask(() => focusEditorBody(ed));
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            titleInput.value = fileNameStem(path);
+            fit();
+            titleInput.blur();
+        }
     });
     titleRow.append(titleInput);
+    if (ext) {
+        const extEl = document.createElement('span');
+        extEl.className = 'doc-title-ext';
+        extEl.textContent = ext;
+        extEl.title = '扩展名随文件类型，不能改';
+        titleRow.append(extEl);
+    }
+    titleRow.addEventListener('click', () => {
+        if (!titleInput.readOnly) titleInput.focus();
+    });
     titleEl.append(titleRow);
-}
-
-function syncTitleFromBody(markdown: string): void {
-    const input = titleEl.querySelector<HTMLInputElement>('.doc-title-input');
-    if (!input || document.activeElement === input) return;
-    const next = yamlTitle(markdown) ?? '';
-    if (input.value !== next) input.value = next;
 }
 
 function hideDocHead(): void {
@@ -170,9 +203,131 @@ function hideDocHead(): void {
     paintToc();
 }
 
+function propsBusy(): boolean {
+    return Boolean(propsEl.querySelector('input:focus, textarea:focus'));
+}
+
+function commitProp(key: string, raw: string, keepEmpty = false): boolean {
+    const ed = currentEditor();
+    if (!ed || !openFile) return false;
+    const next = raw.trim();
+    const value = next ? next : (keepEmpty ? '' : null);
+    try {
+        ed.replaceContent(setScalar(ed.getMarkdown(), key, value));
+    } catch (err) {
+        saySave((err as Error).message);
+        return false;
+    }
+    onEditorChange(ed.getMarkdown());
+    if (key === 'title') void refreshList();
+    return true;
+}
+
+function beginAddProp(addRow: HTMLElement): void {
+    const line = document.createElement('div');
+    line.className = 'prop-row';
+    const keyInput = document.createElement('input');
+    keyInput.className = 'prop-key-input';
+    keyInput.setAttribute('aria-label', '属性名');
+    keyInput.placeholder = '键名';
+    const valInput = document.createElement('input');
+    valInput.className = 'prop-value-input';
+    valInput.setAttribute('aria-label', '属性值');
+    valInput.placeholder = '值';
+    let finished = false;
+    const cancel = () => {
+        if (finished) return;
+        finished = true;
+        renderProps();
+    };
+    const save = () => {
+        if (finished) return;
+        const key = keyInput.value.trim();
+        if (!key) {
+            cancel();
+            return;
+        }
+        const lower = key.toLowerCase();
+        if (lower === 'title') {
+            saySave('标题就是文件名，请改页顶大标题');
+            keyInput.focus();
+            return;
+        }
+        if (lower === 'tags') {
+            saySave('标签请用 tags 行的 ＋');
+            keyInput.focus();
+            return;
+        }
+        if (lower === 'favorite') {
+            saySave('收藏请点右上角星标');
+            keyInput.focus();
+            return;
+        }
+        if (!commitProp(key, valInput.value, true)) {
+            keyInput.focus();
+            return;
+        }
+        finished = true;
+        renderProps();
+    };
+    keyInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            valInput.focus();
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            cancel();
+        }
+    });
+    valInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            save();
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            cancel();
+        }
+    });
+    const onBlur = () => {
+        window.setTimeout(() => {
+            if (finished) return;
+            if (document.activeElement === keyInput || document.activeElement === valInput) return;
+            if (!keyInput.value.trim() && !valInput.value.trim()) cancel();
+            else save();
+        }, 0);
+    };
+    keyInput.addEventListener('blur', onBlur);
+    valInput.addEventListener('blur', onBlur);
+    line.append(keyInput, valInput);
+    addRow.replaceWith(line);
+    keyInput.focus();
+}
+
+function propInput(key: string, value: string): HTMLInputElement {
+    const input = document.createElement('input');
+    input.className = 'prop-value-input';
+    input.dataset.prop = key;
+    input.setAttribute('aria-label', key);
+    input.value = value;
+    input.addEventListener('change', () => commitProp(key, input.value));
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            input.blur();
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            renderProps();
+        }
+    });
+    return input;
+}
+
 /**
- * 属性区（Ob 式文件头）：跟标题栏、正文同一列，不是独立灰面板。
- * tags 行是芯片可增删，其余键只读展示；编辑器里的 frontmatter 块仍收起。
+ * 属性区（Ob 式文件头）：跟标题栏、正文同一列。
+ * YAML 标量键点进去改（空值删键）；title 就是文件名不在这里改；tags 行是芯片；favorite 仍走星标。编辑器里的 frontmatter 块仍收起。
  */
 function renderProps(): void {
     const editor = currentEditor();
@@ -187,6 +342,7 @@ function renderProps(): void {
     paintPropsFold();
     if (propsCollapsed) return;
 
+    const markdown = editor.getMarkdown();
     const commit = (next: string[]) => {
         const ed = currentEditor();
         if (!ed || !openFile) return;
@@ -194,25 +350,29 @@ function renderProps(): void {
         onEditorChange(ed.getMarkdown());
     };
 
-    const { frontmatter } = splitFrontmatter(editor.getMarkdown());
+    const { frontmatter } = splitFrontmatter(markdown);
 
-    const row = (key: string, value: Node): void => {
+    const row = (key: string, value: Node): HTMLDivElement => {
         const line = document.createElement('div');
         line.className = 'prop-row';
         const k = document.createElement('span');
         k.className = 'prop-key';
         k.textContent = key;
         line.append(k, value);
+        line.addEventListener('click', (event) => {
+            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLButtonElement) return;
+            line.querySelector('input')?.focus();
+        });
         propsEl.append(line);
+        return line;
     };
 
+    const seen = new Set(['title', 'tags', 'favorite']);
     for (const lineText of (frontmatter ?? '').split('\n')) {
-        const pair = lineText.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
-        if (!pair || ['tags', 'title', 'favorite'].includes(pair[1].toLowerCase())) continue;
-        const v = document.createElement('span');
-        v.className = 'prop-value';
-        v.textContent = pair[2] || '—';
-        row(pair[1], v);
+        const pair = lineText.match(/^([A-Za-z_][\w-]*)\s*:/);
+        if (!pair || seen.has(pair[1].toLowerCase())) continue;
+        seen.add(pair[1].toLowerCase());
+        row(pair[1], propInput(pair[1], getScalar(markdown, pair[1]) ?? ''));
     }
 
     // tags 行：芯片（点击换色）+ ＋，固定最下
@@ -260,6 +420,17 @@ function renderProps(): void {
     });
     tagsValue.append(add);
     row('tags', tagsValue);
+
+    const addRow = document.createElement('div');
+    addRow.className = 'prop-row';
+    const addProp = document.createElement('button');
+    addProp.className = 'prop-add';
+    addProp.type = 'button';
+    addProp.textContent = '＋ 属性';
+    addProp.title = '添加 YAML 字段';
+    addProp.addEventListener('click', () => beginAddProp(addRow));
+    addRow.append(addProp);
+    propsEl.append(addRow);
 }
 
 let propsCollapsed = localStorage.getItem('folio-props-fold') === 'true';
@@ -434,7 +605,6 @@ async function createAndOpen(path: string): Promise<void> {
 }
 
 function onEditorChange(markdown: string): void {
-    syncTitleFromBody(markdown);
     renderBreadcrumb(markdown);
     renderStatusbar(markdown);
     if (markdown === lastSaved) return;
@@ -628,9 +798,11 @@ function paintPropsFold(): void {
     }
     propsFoldSlot.hidden = false;
     propsFoldBtn.innerHTML = icon(propsCollapsed ? 'chevron-down' : 'chevron-up');
-    const tip = propsCollapsed ? '展开文档属性' : '收起文档属性';
+    const tip = '展开/收起YAML';
     propsFoldBtn.title = tip;
     propsFoldBtn.dataset.tip = tip;
+    propsFoldBtn.dataset.tipSide = 'below';
+    propsFoldBtn.dataset.tipAlign = 'start';
     propsFoldBtn.setAttribute('aria-label', tip);
     propsFoldBtn.classList.toggle('breathe', propsCollapsed);
 }
@@ -701,14 +873,122 @@ async function syncMemoMode(): Promise<void> {
     }
 }
 
+function sameSide(a: SideItem, b: SideItem): boolean {
+    return a.kind === b.kind && a.id === b.id;
+}
+
+function itemSelected(item: SideItem): boolean {
+    return item.kind === 'file' ? selectedFiles.has(item.id) : selectedDirs.has(item.id);
+}
+
+function paintSideSel(): void {
+    markSelected(nav, selectedFiles, selectedDirs);
+}
+
+function setSingleSide(item: SideItem): void {
+    selectedFiles = item.kind === 'file' ? new Set([item.id]) : new Set();
+    selectedDirs = item.kind === 'dir' ? new Set([item.id]) : new Set();
+    sideAnchor = item;
+}
+
+function toggleSide(item: SideItem): void {
+    const set = item.kind === 'file' ? selectedFiles : selectedDirs;
+    if (set.has(item.id)) set.delete(item.id);
+    else set.add(item.id);
+    sideAnchor = item;
+}
+
+function rangeSide(item: SideItem): void {
+    const items = visibleSideItems(nav);
+    const anchor = sideAnchor ?? item;
+    const i0 = items.findIndex((x) => sameSide(x, anchor));
+    const i1 = items.findIndex((x) => sameSide(x, item));
+    if (i0 < 0 || i1 < 0) {
+        setSingleSide(item);
+        return;
+    }
+    const lo = Math.min(i0, i1);
+    const hi = Math.max(i0, i1);
+    selectedFiles = new Set();
+    selectedDirs = new Set();
+    for (let i = lo; i <= hi; i++) {
+        const it = items[i];
+        if (it.kind === 'file') selectedFiles.add(it.id);
+        else selectedDirs.add(it.id);
+    }
+}
+
+/** 有修饰键则只改多选，调用方不要打开/切目录。 */
+function handleSideClick(item: SideItem, event: MouseEvent): boolean {
+    if (event.shiftKey) {
+        rangeSide(item);
+        paintSideSel();
+        return true;
+    }
+    if (event.ctrlKey || event.metaKey) {
+        toggleSide(item);
+        paintSideSel();
+        return true;
+    }
+    setSingleSide(item);
+    paintSideSel();
+    return false;
+}
+
+function ensureContextTarget(item: SideItem): void {
+    if (!itemSelected(item)) {
+        setSingleSide(item);
+        paintSideSel();
+    }
+}
+
+function selCount(): number {
+    return selectedFiles.size + selectedDirs.size;
+}
+
+function pruneSideSel(): void {
+    const paths = new Set(allFiles.map((f) => f.path));
+    const dirs = new Set<string>();
+    for (const f of allFiles) {
+        const segs = f.path.split('/');
+        for (let i = 1; i < segs.length; i++) dirs.add(segs.slice(0, i).join('/'));
+    }
+    for (const p of [...selectedFiles]) if (!paths.has(p)) selectedFiles.delete(p);
+    for (const d of [...selectedDirs]) if (!dirs.has(d)) selectedDirs.delete(d);
+}
+
+/** 选了父文件夹就不再单独处理里面的文件/子夹。 */
+function pruneNestedSel(): { files: string[]; dirs: string[] } {
+    const dirList = [...selectedDirs].sort((a, b) => a.length - b.length);
+    const dirs = dirList.filter((d) => !dirList.some((p) => p !== d && d.startsWith(`${p}/`)));
+    const files = [...selectedFiles].filter((f) => !dirs.some((d) => f.startsWith(`${d}/`)));
+    return { files, dirs };
+}
+
+function allDirs(): string[] {
+    const dirs = new Set<string>(['notes', 'memos']);
+    for (const f of allFiles) {
+        const dir = f.path.split('/').slice(0, -1).join('/');
+        if (dir) dirs.add(dir);
+    }
+    return [...dirs].sort((a, b) => a.localeCompare(b, 'zh'));
+}
+
 function paintNav(files: FolioListItem[] = lastShown): void {
     lastShown = files;
     if (isMemoView()) return;
     renderSidebar(nav, files, {
         activePath: selectedDir ? null : openFile,
-        onOpen: (p) => void open(p),
+        selectedFiles,
+        selectedDirs,
+        onOpen: (p, _btn, event) => {
+            if (handleSideClick({ kind: 'file', id: p }, event)) return;
+            selectedDir = null;
+            void open(p);
+        },
         selectedDir,
-        onDirSelect: (dir) => {
+        onDirSelect: (dir, event) => {
+            if (handleSideClick({ kind: 'dir', id: dir }, event)) return;
             selectedDir = dir;
             nav.querySelectorAll<HTMLElement>('.row-main[data-dir]').forEach((b) => {
                 if (b.dataset.dir === dir) b.setAttribute('aria-current', 'true');
@@ -717,19 +997,12 @@ function paintNav(files: FolioListItem[] = lastShown): void {
             nav.querySelectorAll('.row-main[data-path][aria-current]').forEach((b) => b.removeAttribute('aria-current'));
             lastListSig = listSignature(allFiles);
         },
-        onFolderContext: (dir, x, y) => folderContextMenu(dir, x, y),
-        onMove: (from, toDir) => void (async () => {
-            if (!host.moveDoc) return;
-            const name = from.split('/').pop()!;
-            const to = `${toDir}/${name}`;
-            if (to === from) return;
-            try {
-                await host.moveDoc(from, to);
-                void refreshList();
-            } catch (err) {
-                saySave(`移动失败：${(err as Error).message}`);
-            }
-        })(),
+        onFolderContext: (dir, x, y) => {
+            ensureContextTarget({ kind: 'dir', id: dir });
+            if (selCount() > 1) multiContextMenu(x, y);
+            else folderContextMenu(dir, x, y);
+        },
+        onMove: (froms, toDir) => void movePaths(froms, toDir),
     });
 }
 
@@ -737,9 +1010,10 @@ async function refreshList(): Promise<void> {
     try {
         const files = await host.list();
         allFiles = files;
+        pruneSideSel();
         const sig = listSignature(files);
         if (sig === lastListSig) return;
-        if (nav.querySelector('input:focus, textarea:focus') || titleEl.querySelector('input:focus') || isMemoBusy()) return;
+        if (nav.querySelector('input:focus, textarea:focus') || titleEl.querySelector('input:focus') || propsBusy() || isMemoBusy()) return;
         lastListSig = sig;
         const shown = applyViewFilters(files, activeFilters);
         renderPills();
@@ -871,20 +1145,21 @@ async function newMemo(): Promise<void> {
 
 /** 新建动作（验收清单 7/10.4）：统一收进标题栏加号下拉。 */
 async function newNote(): Promise<void> {
-    const path = `notes/${stamp()}.md`;
+    const path = `${stamp()}.md`;
     await host.write(path, newNoteMarkdown());
     await open(path);
     void refreshList();
 }
 
 async function newFolder(): Promise<void> {
-    const name = await folioPrompt('新文件夹名（建在 notes/ 下）');
+    const name = await folioPrompt('新文件夹名（建在库根）');
     if (!name) return;
     const safe = name.trim().replace(/[\\/:*?"<>|]/g, '_');
-    const path = `notes/${safe}/未命名笔记.md`;
+    if (!safe) return;
+    const path = `${safe}/未命名笔记.md`;
     try {
         await host.write(path, newNoteMarkdown());
-        selectedDir = `notes/${safe}`;
+        selectedDir = safe;
         await open(path);
         void refreshList();
     } catch (err) {
@@ -1094,7 +1369,7 @@ attachWikilinkHandlers(wrap, {
 });
 
 // 音视频/图片文件的粘贴与拖放落盘（单元 4）；外壳常驻，编辑器重建不受影响
-attachMediaHandlers(wrap, host, currentEditor);
+attachMediaHandlers(wrap, host, currentEditor, (msg) => saySave(msg));
 
 // muya 在浏览器里把相对图片路径转成 file:// 必然失败，宿主层兜底补同源 img
 attachImageFallback(wrap);
@@ -1111,23 +1386,20 @@ nav.addEventListener('contextmenu', (event) => {
     if (!button) return;
     event.preventDefault();
     const path = button.dataset.path!;
+    ensureContextTarget({ kind: 'file', id: path });
+    if (selCount() > 1) {
+        multiContextMenu(event.clientX, event.clientY);
+        return;
+    }
     const item = allFiles.find((f) => f.path === path);
 
-    const dirsOf = () => {
-        const dirs = new Set<string>(['notes', 'memos']);
-        for (const f of allFiles) {
-            const dir = f.path.split('/').slice(0, -1).join('/');
-            if (dir) dirs.add(dir);
-        }
-        return [...dirs].sort((a, b) => a.localeCompare(b, 'zh'));
-    };
     const targetOf = async (verb: string) => {
-        const dirs = dirsOf();
-        const current = path.split('/').slice(0, -1).join('/') || undefined;
+        const dirs = allDirs();
+        const current = path.split('/').slice(0, -1).join('/');
         const dir = await folioPick(`${verb}到…`, dirs, current);
-        if (!dir) return null;
+        if (dir === null) return null;
         const name = path.split('/').pop()!;
-        return `${dir}/${name}`;
+        return joinRel(dir, name);
     };
     const withDoc = async (op: 'move' | 'copy' | 'delete', run: () => Promise<unknown>, retry: boolean) => {
         try {
@@ -1198,16 +1470,84 @@ nav.addEventListener('contextmenu', (event) => {
     ]);
 });
 
+nav.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'a') return;
+    const t = event.target;
+    if (!(t instanceof Node) || !nav.contains(t)) return;
+    event.preventDefault();
+    selectedFiles = new Set();
+    selectedDirs = new Set();
+    for (const it of visibleSideItems(nav)) {
+        if (it.kind === 'file') selectedFiles.add(it.id);
+        else selectedDirs.add(it.id);
+    }
+    paintSideSel();
+});
+
+function closeIfDeleted(files: string[], dirs: string[]): void {
+    if (!openFile) return;
+    if (!files.includes(openFile) && !dirs.some((d) => openFile === d || openFile!.startsWith(`${d}/`))) return;
+    openFile = null;
+    destroyEditor();
+    document.querySelector<HTMLElement>('#app')?.classList.remove('html-mode');
+    clearHtmlPreview();
+    breadcrumbEl.textContent = '未打开';
+    hideDocHead();
+    renderCenterBar();
+    writeLastView(null);
+}
+
+async function movePaths(froms: string[], toDir: string): Promise<void> {
+    if (!host.moveDoc) return;
+    for (const from of froms) {
+        const name = from.split('/').pop()!;
+        const to = joinRel(toDir, name);
+        if (to === from) continue;
+        try {
+            await host.moveDoc(from, to);
+        } catch (err) {
+            saySave(`移动失败：${(err as Error).message}`);
+        }
+    }
+    void refreshList();
+}
+
+function multiContextMenu(x: number, y: number): void {
+    const n = selCount();
+    showContextMenu(x, y, [
+        { ic: 'arrow-move-up', label: `移动 ${n} 项到…`, run: () => void (async () => {
+            const target = await folioPick('移动到…', allDirs());
+            if (target === null || !host.moveDoc) return;
+            const { files, dirs } = pruneNestedSel();
+            const froms = [
+                ...dirs.filter((dir) => target !== dir && !target.startsWith(`${dir}/`)),
+                ...files,
+            ];
+            await movePaths(froms, target);
+        })() },
+        { sep: true },
+        { ic: 'trash', label: `删除 ${n} 项`, danger: true, run: () => void (async () => {
+            if (!(await folioConfirm(`删除选中的 ${n} 项？`))) return;
+            const { files, dirs } = pruneNestedSel();
+            closeIfDeleted(files, dirs);
+            if (host.deleteDoc) {
+                for (const dir of dirs) {
+                    await host.deleteDoc(dir).catch((err: Error) => saySave(`删除失败：${err.message}`));
+                    if (selectedDir === dir) selectedDir = null;
+                }
+                for (const path of files) {
+                    await host.deleteDoc(path).catch((err: Error) => saySave(`删除失败：${err.message}`));
+                }
+            }
+            selectedFiles = new Set();
+            selectedDirs = new Set();
+            await refreshList();
+        })() },
+    ]);
+}
+
 /** 文件夹右键（bug5）：与文档同款 + 顶部"添加子文件夹"。 */
 function folderContextMenu(dir: string, x: number, y: number): void {
-    const dirsOf = () => {
-        const dirs = new Set<string>(['notes', 'memos']);
-        for (const f of allFiles) {
-            const d = f.path.split('/').slice(0, -1).join('/');
-            if (d) dirs.add(d);
-        }
-        return [...dirs].sort((a, b) => a.localeCompare(b, 'zh'));
-    };
     const fold = siblingFolderFoldState(lastShown, dir);
     showContextMenu(x, y, [
         ...(dir.split('/').length === 2 && dir.startsWith('links/') ? [{
@@ -1243,11 +1583,12 @@ function folderContextMenu(dir: string, x: number, y: number): void {
             }
         })() },
         { ic: 'arrow-move-up', label: '移动到…', run: () => void (async () => {
-            const target = await folioPick('移动文件夹到…', dirsOf().filter((d) => d !== dir && !d.startsWith(`${dir}/`)), dir);
-            if (!target || !host.moveDoc) return;
+            const target = await folioPick('移动文件夹到…', allDirs().filter((d) => d !== dir && !d.startsWith(`${dir}/`)), dir);
+            if (target === null || !host.moveDoc) return;
             try {
-                await host.moveDoc(dir, `${target}/${dir.split('/').pop()}`);
-                selectedDir = `${target}/${dir.split('/').pop()}`;
+                const dest = joinRel(target, dir.split('/').pop()!);
+                await host.moveDoc(dir, dest);
+                selectedDir = dest;
                 void refreshList();
             } catch (err) {
                 saySave(`移动失败：${(err as Error).message}`);
@@ -1282,6 +1623,29 @@ function folderContextMenu(dir: string, x: number, y: number): void {
             await refreshList();
         })() },
     ]);
+}
+
+/** 页顶大标题提交：只改当前打开文件的 stem，扩展名原样。不写 YAML title:。 */
+async function renameCurrentDoc(stem: string): Promise<void> {
+    if (!openFile || !host.moveDoc) return;
+    const dest = renamedPath(openFile, stem);
+    if (!dest) {
+        renderTitle();
+        return;
+    }
+    try {
+        const from = openFile;
+        const to = await host.moveDoc(from, dest);
+        openFile = to;
+        writeLastView({ v: 'file', path: to });
+        renderBreadcrumb();
+        paintToc();
+        renderTitle();
+        void refreshList();
+    } catch (err) {
+        saySave(`重命名失败：${(err as Error).message}`);
+        renderTitle();
+    }
 }
 
 /** 重命名：只改操作系统文件名，扩展名原样保留。不写 YAML title:、不改正文 H1。 */

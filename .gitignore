@@ -8,6 +8,8 @@ vault/**
 !vault/notes/
 !vault/memos/
 !vault/attachments/
+!vault/pics/
 !vault/notes/欢迎.md
 !vault/memos/示例速记.md
 !vault/attachments/.gitkeep
+!vault/pics/.gitkeep
