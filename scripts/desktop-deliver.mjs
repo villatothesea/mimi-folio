@@ -13,4 +13,8 @@ const out = path.join(targetDir, 'mimi-folio.exe');
 
 fs.mkdirSync(targetDir, { recursive: true });
 fs.copyFileSync(exe, out);
-console.log(`portable → ${out}`);
+// 分发合规：exe 内嵌了 muya 全家桶编译产物，许可通告随交付目录走
+for (const f of ['LICENSE', 'THIRD-PARTY-NOTICES.md']) {
+    fs.copyFileSync(path.join(repoRoot, f), path.join(targetDir, f));
+}
+console.log(`portable → ${out}（+ LICENSE / THIRD-PARTY-NOTICES.md）`);

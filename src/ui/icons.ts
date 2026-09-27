@@ -1,5 +1,6 @@
 /**
  * 图标库：Tabler Icons（MIT，https://tabler.io/icons）outline 系，24 视窗描边 1.5。
+ * Copyright (c) 2018-2025 Tabler — MIT 许可全文见 THIRD-PARTY-NOTICES.md。
  * 图标源文件 Mimi/docs/icons/tabler-icons.html；业务一律走 icon(name)，
  * currentColor 吃 --folio-fg，尺寸吃 --folio-icon-size。
  */

@@ -507,7 +507,7 @@ export function openSettings(info?: VaultInfo): void {
 <tr><td>图标</td><td><a href="https://tabler.io/icons" target="_blank" rel="noopener noreferrer">Tabler Icons</a></td><td>MIT</td></tr>
 <tr><td>构建</td><td>Vite · TypeScript</td><td>MIT / Apache-2.0</td></tr>
 </table>
-<p class="set-note">速记看法参照 Memos 官方交互（左栏日历筛日、中区卡片流），未嵌其代码。感谢以上开源库的贡献者。</p>`;
+<p class="set-note">速记看法参照 Memos 官方交互（左栏日历筛日、中区卡片流），未嵌其代码。完整第三方许可清单见仓库 THIRD-PARTY-NOTICES.md。感谢以上开源库的贡献者。</p>`;
         content.replaceChildren(box);
     });
 

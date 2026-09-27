@@ -41,3 +41,8 @@
 
 
 对，就这么简单，我也想不出还能写什么介绍文字了。毕竟这个产品，就需要如此简单。
+
+
+## 许可
+
+MIT，见 [LICENSE](LICENSE)。第三方开源组件清单与许可全文见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。

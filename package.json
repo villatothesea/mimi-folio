@@ -2,6 +2,7 @@
   "name": "mimi-folio",
   "private": true,
   "version": "0.0.0",
+  "license": "MIT",
   "description": "米素：一页可写的 markdown（folio）",
   "type": "module",
   "scripts": {

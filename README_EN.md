@@ -41,3 +41,8 @@ If you're genuinely interested, there are two ways to run it.
 
 
 Yes, that's all. I can't think of anything else to write either. A product like this deserves to be this simple.
+
+
+## License
+
+MIT — see [LICENSE](LICENSE). Third-party components and their license texts: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
