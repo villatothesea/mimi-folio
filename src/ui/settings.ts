@@ -3,6 +3,7 @@
  * 默认格式 = 编号系统开关（CSS counters，见 app.css）；特殊格式 = 加粗/编号/代码色板；
  * 主题 = 页面色卡 + 文字主题 JSON。选择存 localStorage，只挂 html data-* / 覆写 --folio-*。
  */
+import type { FolioFileAssoc } from '../host/types.ts';
 import { htmlPreviewScriptsEnabled, setHtmlPreviewScriptsEnabled } from '../shared/htmlPreview.ts';
 import {
     DEFAULT_SPECIAL,
@@ -150,6 +151,11 @@ function select(label: string, options: Array<[string, string]>, value: string, 
 export type VaultInfo = {
     vault: { name: string; dir: string };
     libraries: { label: string; dir: string; count: number | null }[];
+    /** 桌面壳才有：.md 默认程序的状态探测与注册；没有就当浏览器模式隐藏按钮。 */
+    fileAssoc?: {
+        status(): Promise<FolioFileAssoc>;
+        register(): Promise<FolioFileAssoc>;
+    };
 };
 
 export function openSettings(info?: VaultInfo): void {
@@ -431,6 +437,61 @@ export function openSettings(info?: VaultInfo): void {
         note.textContent = '库 = vault 下的固定子目录：长文写进 notes/，速记写进 memos/，库外文件链进 links/，图片附件分别落 pics/ 与 attachments/。';
         if (info?.vault.dir) note.textContent += ` 当前 vault：${info.vault.dir}`;
         box.append(note);
+        content.replaceChildren(box);
+    });
+
+    addSection('系统', () => {
+        const box = document.createElement('div');
+        const head = document.createElement('p');
+        head.className = 'set-group-title';
+        head.textContent = '双击 .md 用米素打开';
+        const status = document.createElement('p');
+        status.className = 'set-note';
+        status.textContent = '正在读取当前关联…';
+        const actions = document.createElement('div');
+        actions.className = 'set-actions';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = '设为默认打开方式';
+        actions.append(btn);
+        const hint = document.createElement('p');
+        hint.className = 'set-note';
+        hint.textContent = '写入注册表立即生效，不用管理员。若 .md 已默认给别的程序，Windows 会要求到「设置 → 默认应用」里再确认一步——按钮会直接把那页打开。';
+        box.append(head, status, actions, hint);
+
+        const render = (s: FolioFileAssoc | undefined) => {
+            if (!s?.supported) {
+                status.textContent = '仅桌面版（mimi-folio.exe）可用。';
+                btn.disabled = true;
+                return;
+            }
+            if (s.isDefault) {
+                status.textContent = '当前状态：已是 .md 默认打开方式。';
+            } else if (s.registered) {
+                status.textContent = '关联已写入；系统里 .md 还指向别的程序，请在刚打开的系统「默认应用」页里把它选为米素 Folio。';
+            } else {
+                status.textContent = '当前状态：未设为默认。';
+            }
+        };
+        if (info?.fileAssoc) {
+            void info.fileAssoc.status().then(render).catch(() => {
+                status.textContent = '读取关联状态失败。';
+            });
+        } else {
+            render(undefined);
+        }
+        btn.addEventListener('click', async () => {
+            const assoc = info?.fileAssoc;
+            if (!assoc) return;
+            btn.disabled = true;
+            try {
+                render(await assoc.register());
+            } catch (err) {
+                status.textContent = `注册失败：${err instanceof Error ? err.message : String(err)}`;
+            } finally {
+                btn.disabled = !info?.fileAssoc;
+            }
+        });
         content.replaceChildren(box);
     });
 

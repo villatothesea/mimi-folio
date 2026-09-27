@@ -1,4 +1,4 @@
-import type { FolioAttachment, FolioDoc, FolioHost, FolioImage, FolioIndex, FolioListItem, FolioListOpts, FolioPath, FolioSearchItem, FolioWorkspace } from './types';
+import type { FolioAttachment, FolioDoc, FolioFileAssoc, FolioHost, FolioImage, FolioIndex, FolioListItem, FolioListOpts, FolioPath, FolioSearchItem, FolioWorkspace } from './types';
 
 /**
  * 合入米米的浏览器侧实现：同源 fetch daemon 的 /folio/v1/*。
@@ -99,6 +99,25 @@ export class MimiHost implements FolioHost {
         });
         const out = await this.json<{ path: FolioPath }>(resp);
         return out.path;
+    }
+
+    async openExternal(absPath: string): Promise<{ path: FolioPath }> {
+        const resp = await fetch('/folio/v1/open-external', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: absPath }),
+        });
+        return this.json<{ path: FolioPath }>(resp);
+    }
+
+    async defaultMdStatus(): Promise<FolioFileAssoc> {
+        const resp = await fetch('/folio/v1/file-assoc');
+        return this.json<FolioFileAssoc>(resp);
+    }
+
+    async registerDefaultMd(): Promise<FolioFileAssoc> {
+        const resp = await fetch('/folio/v1/file-assoc', { method: 'POST' });
+        return this.json<FolioFileAssoc>(resp);
     }
 
     async linkFolder(absSource: string): Promise<{ dir: FolioPath; count: number }> {

@@ -60,6 +60,14 @@ export type FolioAttachment = FolioImage;
 /** 搜索命中（单元 13/验收批）：text 为上下文行，start 是命中在 text 里的起点 */
 export type FolioSearchItem = FolioListItem & { matches: { text: string; start: number }[] };
 
+/** .md/.markdown 默认程序状态（桌面壳才有）：needsSettings = 已注册但系统默认仍是别家，要到设置页确认 */
+export type FolioFileAssoc = {
+    supported: boolean;
+    registered: boolean;
+    isDefault: boolean;
+    needsSettings?: boolean;
+};
+
 export type FolioIndex = {
     outgoing: FolioPath[];
     backlinks: FolioPath[];
@@ -89,6 +97,15 @@ export interface FolioHost {
      * 读写穿透回原文件；**失败抛错，绝不拷贝正文**。合入后 daemon 同名实现。
      */
     linkOutside?(absSource: string): Promise<FolioPath>;
+    /**
+     * 双击关联打开：库外绝对路径落成 vault 里可读写的 path（库内原样回，库外链 links/，幂等）。
+     * 页面 `if (!host.openExternal)` 降级；合入后 daemon 同名实现。
+     */
+    openExternal?(absPath: string): Promise<{ path: FolioPath }>;
+    /** .md/.markdown 默认程序状态（仅桌面壳 supported）；页面 `if (!host.defaultMdStatus)` 隐藏入口。 */
+    defaultMdStatus?(): Promise<FolioFileAssoc>;
+    /** 点「设为默认」：写 HKCU 关联；系统已有别家默认时 needsSettings=true 且已打开设置页。 */
+    registerDefaultMd?(): Promise<FolioFileAssoc>;
     /** 系统选文件夹窗；取消回 null。合入后由宿主原生对话框提供。 */
     pickFolder?(): Promise<string | null>;
     /** 文件夹整体链入 vault/links/<原名>/，不拷贝。 */

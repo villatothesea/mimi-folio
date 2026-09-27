@@ -9,6 +9,8 @@ import { createAppServer } from './main.ts';
 
 const vault = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-vault-'));
 process.env.FOLIO_VAULT = vault;
+// file-assoc 行为受这个桌面壳注入变量影响，测试里固定摘掉（supported:false 路径）
+delete process.env.FOLIO_APP_EXE;
 
 await fs.mkdir(path.join(vault, 'notes'), { recursive: true });
 await fs.mkdir(path.join(vault, 'memos'), { recursive: true });
@@ -572,5 +574,72 @@ describe('工作区（切换 vault 根，不写进 md）', () => {
 
         const del = await fetch(`${base}/folio/v1/workspaces?id=${encodeURIComponent(item.id)}`, { method: 'DELETE' });
         assert.equal(del.status, 204);
+    });
+});
+
+describe('POST /folio/v1/open-external（双击关联打开）', () => {
+    it('库内文件直接回相对路径，不链入', async () => {
+        const res = await fetch(`${base}/folio/v1/open-external`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: path.join(vault, 'notes', 'a.md') }),
+        });
+        assert.equal(res.status, 200);
+        assert.deepEqual(await res.json(), { path: 'notes/a.md' });
+    });
+
+    it('库外文件链进 links/，重复打开幂等回同一条目', async () => {
+        // outsideMd 此前已被 /link 链进 links/ → 幂等路径；换个新文件再验首次链入
+        const fresh = path.join(outsideDir, '双击打开.md');
+        await fs.writeFile(fresh, '# 双击打开\n', 'utf8');
+        for (const src of [outsideMd, fresh, fresh]) {
+            const res = await fetch(`${base}/folio/v1/open-external`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ path: src }),
+            });
+            assert.equal(res.status, 200);
+            const { path: rel } = (await res.json()) as { path: string };
+            const want = src === outsideMd ? 'links/外部文档.md' : 'links/双击打开.md';
+            assert.equal(rel, want);
+        }
+        // 链入条目的正文就是真源
+        const doc = (await (await fetch(`${base}/folio/v1/doc?path=${encodeURIComponent('links/双击打开.md')}`)).json()) as { markdown: string };
+        assert.ok(doc.markdown.includes('双击打开'));
+    });
+
+    it('同名但不同源的库外文件自动加序号，互不覆盖', async () => {
+        const dirB = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-outside-b-'));
+        const dup = path.join(dirB, '双击打开.md');
+        await fs.writeFile(dup, '# 另一个同名\n', 'utf8');
+        const res = await fetch(`${base}/folio/v1/open-external`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: dup }),
+        });
+        assert.equal(res.status, 200);
+        assert.deepEqual(await res.json(), { path: 'links/双击打开-1.md' });
+    });
+
+    it('相对路径/不存在/非文档类型一律 400', async () => {
+        for (const p of ['notes/a.md', path.join(outsideDir, '没有.md'), path.join(outsideDir, 'x.txt')]) {
+            const res = await fetch(`${base}/folio/v1/open-external`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ path: p }),
+            });
+            assert.equal(res.status, 400, p);
+        }
+    });
+});
+
+describe('file-assoc（.md 默认程序关联）', () => {
+    it('无 FOLIO_APP_EXE：GET 回 supported:false，POST 400', async () => {
+        const get = await fetch(`${base}/folio/v1/file-assoc`);
+        assert.equal(get.status, 200);
+        assert.deepEqual(await get.json(), { supported: false, registered: false, isDefault: false });
+
+        const post = await fetch(`${base}/folio/v1/file-assoc`, { method: 'POST' });
+        assert.equal(post.status, 400);
     });
 });

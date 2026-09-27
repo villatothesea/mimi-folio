@@ -4,7 +4,7 @@
  * doc 永远只在清单里匹配，不与盘上路径拼接——清单匹配即安全边界，天然防穿越。
  */
 
-export type DeepLink = { doc: string | null; anchor: string | null };
+export type DeepLink = { doc: string | null; anchor: string | null; open: string | null };
 
 /** 坏编码（如 %zz）经 URLSearchParams 解不出有效值，顶多匹配不上 → 默认流程。 */
 export function parseDeepLink(search: string): DeepLink {
@@ -13,7 +13,8 @@ export function parseDeepLink(search: string): DeepLink {
         const value = params.get(key)?.trim();
         return value ? value : null;
     };
-    return { doc: read('doc'), anchor: read('anchor') };
+    // open = 桌面壳双击关联文件传来的绝对路径，走 host.openExternal 落库再开
+    return { doc: read('doc'), anchor: read('anchor'), open: read('open') };
 }
 
 /** doc 参数 → 清单里的真实 path：先原样精确，再归一化 /↔\\（米米壳可能按 Windows 习惯拼反斜杠）。 */

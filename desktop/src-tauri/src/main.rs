@@ -83,6 +83,19 @@ fn silent(cmd: &mut Command) -> &mut Command {
     cmd
 }
 
+/// 双击关联文件启动：第一个非旗标、磁盘上存在的参数当成要打开的文件路径。
+fn open_file_arg() -> Option<String> {
+    for arg in std::env::args().skip(1) {
+        if arg.starts_with('-') || arg.starts_with('/') {
+            continue;
+        }
+        if Path::new(&arg).is_file() {
+            return Some(arg);
+        }
+    }
+    None
+}
+
 fn parse_pak() -> Result<(PakManifest, usize), String> {
     if RUNTIME_PAK.len() < 4 {
         return Err("runtime.pak 为空或损坏".into());
@@ -152,7 +165,9 @@ fn start_api(data: &Path, child_state: &ServerProc) -> Result<(), String> {
             .env("PORT", PORT.to_string())
             .env("FOLIO_DIST", &dist)
             .env("FOLIO_VAULT", data.join("vault"))
-            .env("FOLIO_WORKSPACES", data.join("workspaces.json")),
+            .env("FOLIO_WORKSPACES", data.join("workspaces.json"))
+            // 主程序路径给 server：设置 .md 默认打开方式时拿它写注册表 open command
+            .env("FOLIO_APP_EXE", std::env::current_exe().unwrap_or_default()),
     )
     .spawn()
     .map_err(|e| format!("启动 folio API 失败：{e}"))?;
@@ -160,6 +175,15 @@ fn start_api(data: &Path, child_state: &ServerProc) -> Result<(), String> {
     *child_state.0.lock().unwrap() = Some(child);
     wait_api(PORT);
     Ok(())
+}
+
+/// 首页地址；双击关联文件启动时把绝对路径编进 ?open= 传给页面。
+fn app_url(base: &str) -> tauri::Url {
+    let mut url = tauri::Url::parse(base).unwrap();
+    if let Some(file) = open_file_arg() {
+        url.query_pairs_mut().append_pair("open", &file);
+    }
+    url
 }
 
 /// 启动失败不留黑盒：写 boot-error.txt 并用系统默认程序打开它。
@@ -199,10 +223,10 @@ fn main() {
                 if let Err((e, data)) = boot {
                     return Err(boot_fail(data.as_deref(), e).into());
                 }
-                let _ = win.navigate(tauri::Url::parse("http://127.0.0.1:3790").unwrap());
+                let _ = win.navigate(app_url("http://127.0.0.1:3790"));
             }
             #[cfg(debug_assertions)]
-            let _ = win.navigate(tauri::Url::parse("http://127.0.0.1:5174").unwrap());
+            let _ = win.navigate(app_url("http://127.0.0.1:5174"));
             Ok(())
         })
         .build(tauri::generate_context!())

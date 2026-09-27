@@ -205,6 +205,113 @@ async function linkOutside(root: string, absSource: string): Promise<string> {
     return `links/${name}`;
 }
 
+const OPENABLE_RE = /\.(md|markdown|html?)$/i;
+
+/**
+ * 双击关联打开：把盘上任一 md/html 落成 vault 里可读写的相对路径。
+ * 库内文件直接回相对路径；库外按 links/ 规矩链入——幂等：同一文件重复打开回同一条目，
+ * 同名但指向别处的文件自动加 -2/-3 序号，断链占位腾名字复用。
+ */
+async function openExternalDoc(root: string, absSource: string): Promise<string> {
+    if (!path.isAbsolute(absSource)) throw new Error('必须是绝对路径');
+    const resolved = path.resolve(absSource);
+    if (!OPENABLE_RE.test(resolved)) throw new Error('只开 .md/.markdown/.html 文件');
+    const stat = await fs.stat(resolved).catch(() => null);
+    if (!stat?.isFile()) throw new Error('文件不存在');
+    if (!isOutsideVault(root, resolved)) {
+        const rel = path.relative(root, resolved).split(path.sep).join('/');
+        if (!safeRel(rel)) throw new Error('路径非法');
+        return rel;
+    }
+    const linksDir = path.join(root, 'links');
+    await fs.mkdir(linksDir, { recursive: true });
+    const ext = path.extname(resolved);
+    const base = path.basename(resolved, ext);
+    for (let i = 0; ; i++) {
+        const name = i === 0 ? `${base}${ext}` : `${base}-${i}${ext}`;
+        const dest = path.join(linksDir, name);
+        if (await fs.lstat(dest).catch(() => null)) {
+            // stat 跟随链接拿到真源：dev+ino 一致 = 同一文件（symlink/硬链都满足）→ 幂等回它
+            const dst = await fs.stat(dest).catch(() => null);
+            if (dst && dst.dev === stat.dev && dst.ino === stat.ino) return `links/${name}`;
+            if (dst) continue; // 同名不同文件 → 下一个序号
+            await fs.rm(dest, { force: true }); // 断链占位，腾出来复用
+        }
+        await linkFileInto(resolved, dest);
+        invalidate(root);
+        return `links/${name}`;
+    }
+}
+
+/** ── 桌面壳：.md 默认程序关联（HKCU 写注册表，免管理员） ─────────── */
+
+const PROG_ID = 'MimiFolio.md';
+const ASSOC_EXTS = ['.md', '.markdown'] as const;
+
+type FileAssoc = { supported: boolean; registered: boolean; isDefault: boolean; needsSettings?: boolean };
+
+/** 桌面壳注入的主程序 exe 路径；没注入 = 独立/daemon 模式，不支持注册。 */
+function appExe(): string | null {
+    const exe = process.env.FOLIO_APP_EXE;
+    return exe && path.isAbsolute(exe) ? exe : null;
+}
+
+async function regAdd(key: string, name: string | null, value: string): Promise<void> {
+    const args = ['add', key, ...(name === null ? ['/ve'] : ['/v', name]), '/d', value, '/f'];
+    await execFileP('reg', args);
+}
+
+/** 读某键的 REG_SZ 值；键不存在/不是 SZ 返回 null。name=null 读 (Default)。 */
+async function regRead(key: string, name: string | null): Promise<string | null> {
+    try {
+        const { stdout } = await execFileP('reg', ['query', key, ...(name === null ? ['/ve'] : ['/v', name])]);
+        const m = /REG_SZ\s+(.+)/.exec(stdout);
+        return m?.[1]?.trim() ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/** .md 是否已归我们：Explorer 的 UserChoice 优先；没有就按 Classes\.md 默认值算。 */
+async function fileAssocStatus(): Promise<FileAssoc> {
+    const exe = appExe();
+    if (process.platform !== 'win32' || !exe) {
+        return { supported: false, registered: false, isDefault: false };
+    }
+    const openCmd = await regRead(`HKCU\\Software\\Classes\\${PROG_ID}\\shell\\open\\command`, null);
+    const registered = openCmd !== null && openCmd.toLowerCase().includes(exe.toLowerCase());
+    const userChoice = await regRead(
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.md\\UserChoice',
+        'ProgId',
+    );
+    const classesDefault = await regRead('HKCU\\Software\\Classes\\.md', null);
+    const isDefault = userChoice !== null ? userChoice === PROG_ID : classesDefault === PROG_ID;
+    return { supported: true, registered, isDefault };
+}
+
+/** HKCU 写 ProgID + 能力声明 + RegisteredApplications；写不进 Explorer 设置页就查不到我们。 */
+async function registerFileAssoc(): Promise<void> {
+    const exe = appExe();
+    if (process.platform !== 'win32' || !exe) throw new Error('仅桌面版可用');
+    const progKey = `HKCU\\Software\\Classes\\${PROG_ID}`;
+    await regAdd(progKey, null, 'Markdown 文档');
+    await regAdd(`${progKey}\\DefaultIcon`, null, `"${exe}",0`);
+    await regAdd(`${progKey}\\shell\\open\\command`, null, `"${exe}" "%1"`);
+    for (const ext of ASSOC_EXTS) {
+        await regAdd(`HKCU\\Software\\Classes\\${ext}`, null, PROG_ID);
+        await regAdd(`HKCU\\Software\\Classes\\${ext}\\OpenWithProgids`, PROG_ID, '');
+    }
+    const cap = 'HKCU\\Software\\MimiFolio\\Capabilities';
+    await regAdd(cap, 'ApplicationName', '米素 Folio');
+    await regAdd(cap, 'ApplicationDescription', '本地 markdown 记忆库');
+    for (const ext of ASSOC_EXTS) {
+        await regAdd(`${cap}\\FileAssociations`, ext, PROG_ID);
+    }
+    await regAdd('HKCU\\Software\\RegisteredApplications', 'MimiFolio', 'SOFTWARE\\MimiFolio\\Capabilities');
+    // Explorer 关联缓存刷新；老系统命令，失败不致命
+    await execFileP('ie4uinit', ['-show']).catch(() => undefined);
+}
+
 async function writeOrigin(destDir: string, srcDir: string): Promise<void> {
     await fs.writeFile(path.join(destDir, ORIGIN_FILE), `${srcDir}\n`, 'utf8');
 }
@@ -1081,6 +1188,41 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
                 return true;
             } catch (err) {
                 return fail(res, 400, err instanceof Error ? err.message : String(err));
+            }
+        }
+
+        // 桌面壳传入的文件路径（双击 .md 启动）：库内原样回，库外按 links/ 规矩链入（幂等）
+        if (req.method === 'POST' && pathname === 'open-external') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { path?: string };
+            if (typeof body.path !== 'string') return fail(res, 400, '需要 {path: 绝对路径}');
+            try {
+                send(res, 200, { path: await openExternalDoc(root, body.path) });
+            } catch (err) {
+                return fail(res, 400, err instanceof Error ? err.message : String(err));
+            }
+            return true;
+        }
+
+        // .md/.markdown 默认程序关联：GET 探状态，POST 写 HKCU 注册
+        if (pathname === 'file-assoc') {
+            if (req.method === 'GET') {
+                send(res, 200, await fileAssocStatus());
+                return true;
+            }
+            if (req.method === 'POST') {
+                try {
+                    await registerFileAssoc();
+                    const status = await fileAssocStatus();
+                    const needsSettings = status.registered && !status.isDefault;
+                    if (needsSettings) {
+                        // 已有别家 UserChoice：Windows 只允许在设置页改默认，直接帮用户开到那页
+                        await execFileP('cmd', ['/c', 'start', '', 'ms-settings:defaultapps']).catch(() => undefined);
+                    }
+                    send(res, 200, { ...status, needsSettings });
+                } catch (err) {
+                    return fail(res, 400, err instanceof Error ? err.message : String(err));
+                }
+                return true;
             }
         }
 

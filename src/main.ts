@@ -1328,7 +1328,14 @@ document.querySelector<HTMLButtonElement>('#btn-settings')!.addEventListener('cl
         const countable = i < 3;
         return { label, dir: `${dir}/`, count: countable ? allFiles.filter((f) => f.path === dir || f.path.startsWith(`${dir}/`)).length : null };
     });
-    openSettings({ vault: { name: vaultName, dir: vaultAbsDir }, libraries: libs });
+    openSettings({
+        vault: { name: vaultName, dir: vaultAbsDir },
+        libraries: libs,
+        fileAssoc:
+            host.defaultMdStatus && host.registerDefaultMd
+                ? { status: () => host.defaultMdStatus!(), register: () => host.registerDefaultMd!() }
+                : undefined,
+    });
 });
 
 window.addEventListener('beforeunload', (event) => {
@@ -2158,8 +2165,19 @@ void (async () => {
         }
     }
     await refreshList();
-    // 深链（?doc=&anchor=）优先于上次视图；匹配不上静默落默认流程，参数留在 URL 里刷新仍落原位
+    // 双击关联文件启动（?open=绝对路径）优先于深链与上次视图：库外先按 links/ 规矩链入再开
     const deep = parseDeepLink(location.search);
+    if (deep.open && host.openExternal) {
+        try {
+            const { path } = await host.openExternal(deep.open);
+            await refreshList();
+            await open(path);
+            return;
+        } catch (err) {
+            saySave(`打开失败：${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+    // 深链（?doc=&anchor=）优先于上次视图；匹配不上静默落默认流程，参数留在 URL 里刷新仍落原位
     const deepPath = deep.doc ? matchDocPath(allFiles, deep.doc) : null;
     if (deepPath) {
         await revealDeepTarget(deepPath, deep.anchor);

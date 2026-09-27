@@ -34,6 +34,14 @@ test('坏编码不炸：解不出就原样拿着，匹配不上走默认流程',
     assert.equal(link.doc, '%zz%%');
 });
 
+test('open 参数（桌面壳双击文件传入的绝对路径）解码取出', () => {
+    const link = parseDeepLink('?open=D%3A%5Cdocs%5C%E7%AC%94%E8%AE%B0.md');
+    assert.equal(link.open, 'D:\\docs\\笔记.md');
+    assert.equal(link.doc, null);
+    const none = parseDeepLink('?doc=notes/a.md');
+    assert.equal(none.open, null);
+});
+
 // ==== doc 匹配 ====
 
 const FILES = [{ path: 'notes/色卡.md' }, { path: 'memos/2026-09-07-10-20-30.md' }, { path: 'links/周报\\存档.md' }];
