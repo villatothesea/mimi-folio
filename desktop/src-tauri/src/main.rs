@@ -139,6 +139,102 @@ fn open_file_arg() -> Option<String> {
     None
 }
 
+/// 上个实例被强杀/崩溃后，它的 msedgewebview2 浏览器进程会变孤儿、继续持有
+/// 本应用的 user-data 目录；新实例建 webview 要等 WV2 把它清场（实测 17-53s）。
+/// 启动时把「父进程已死」的浏览器根进程收掉；父进程活着说明另一实例在跑，
+/// 共享同一 UDF，不许碰。
+#[cfg(windows)]
+fn reap_orphan_webviews() {
+    // 快路径：Toolhelp 快照找「父进程已死」的 webview 进程（<1ms），
+    // 没有嫌疑就直接返回——不起 PowerShell。
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
+    let t = Instant::now();
+    let suspects: Vec<u32> = unsafe {
+        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            return;
+        };
+        let mut e = PROCESSENTRY32W::default();
+        e.dwSize = size_of::<PROCESSENTRY32W>() as u32;
+        let mut out = Vec::new();
+        if Process32FirstW(snap, &mut e).is_ok() {
+            loop {
+                let end = e
+                    .szExeFile
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(e.szExeFile.len());
+                if String::from_utf16_lossy(&e.szExeFile[..end])
+                    .eq_ignore_ascii_case("msedgewebview2.exe")
+                    && e.th32ParentProcessID != 0
+                    && OpenProcess(
+                        PROCESS_QUERY_LIMITED_INFORMATION,
+                        false,
+                        e.th32ParentProcessID,
+                    )
+                    .map(|h| {
+                        let _ = CloseHandle(h);
+                    })
+                    .is_err()
+                {
+                    out.push(e.th32ProcessID);
+                }
+                if Process32NextW(snap, &mut e).is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = CloseHandle(snap);
+        out
+    };
+
+    if suspects.is_empty() {
+        stamp(&format!("wv2 orphan sweep {}ms clean", t.elapsed().as_millis()));
+        return;
+    }
+
+    let udf = match std::env::var("LOCALAPPDATA") {
+        Ok(d) => format!("{d}\\com.mimi.folio.desktop\\EBWebView"),
+        Err(_) => return,
+    };
+    let pids = suspects
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let ps = format!(
+        "$udf='{udf}'
+foreach ($p in {pids}) {{
+  $c = (Get-CimInstance Win32_Process -Filter \"ProcessId=$p\").CommandLine
+  if ($c -like \"*$udf*\") {{
+    Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
+    \"reaped $p\"
+  }}
+}}",
+        udf = udf.replace('\'', "''")
+    );
+    match no_window(Command::new("powershell").args(["-NoProfile", "-Command", &ps])).output() {
+        Ok(o) => {
+            let out = String::from_utf8_lossy(&o.stdout).trim().replace('\n', " ");
+            stamp(&format!(
+                "wv2 orphan sweep {}ms {}",
+                t.elapsed().as_millis(),
+                if out.is_empty() {
+                    "suspects not ours"
+                } else {
+                    out.as_str()
+                }
+            ));
+        }
+        Err(e) => stamp(&format!("wv2 orphan sweep failed: {e}")),
+    }
+}
+
 fn parse_pak() -> Result<(PakManifest, usize), String> {
     if RUNTIME_PAK.len() < 4 {
         return Err("runtime.pak 为空或损坏".into());
@@ -381,6 +477,16 @@ fn main() {
     // epoch 也落账：进程创建时刻（WMI）对得上它时，差值就是 OS/杀软的 pre-main 耗时
     stamp(&format!("main enter @{}", BOOT_EPOCH_MS.get().copied().unwrap_or_default()));
 
+    // 孤儿 webview 清扫必须在 webview 创建前完成（否则 WV2 清场白等 17-50s），
+    // 但 WMI 查询本身要 ~1.5s——后台跑，setup 建窗前 join，常态零成本。
+    #[cfg(all(windows, not(debug_assertions)))]
+    let (sweep_tx, sweep_rx) = std::sync::mpsc::channel::<()>();
+    #[cfg(all(windows, not(debug_assertions)))]
+    std::thread::spawn(move || {
+        reap_orphan_webviews();
+        let _ = sweep_tx.send(());
+    });
+
     let prevent = PreventDefaultBuilder::new()
         .with_flags(Flags::CONTEXT_MENU)
         .platform(PlatformOptions::new().default_context_menus(false))
@@ -421,6 +527,17 @@ fn main() {
             .inner_size(1280.0, 840.0)
             .decorations(false)
             .build()?;
+            #[cfg(all(windows, not(debug_assertions)))]
+            {
+                let t = Instant::now();
+                let _ = sweep_rx.recv_timeout(Duration::from_secs(10));
+                let waited = t.elapsed().as_millis();
+                if waited > 50 {
+                    stamp(&format!("wv2 sweep waited {waited}ms"));
+                }
+            }
+            #[cfg(not(debug_assertions))]
+            stamp("setup begin");
             #[cfg(not(debug_assertions))]
             let win = tauri::WebviewWindowBuilder::new(
                 app,
@@ -431,6 +548,13 @@ fn main() {
             .inner_size(1280.0, 840.0)
             .decorations(false)
             .visible(false)
+            // 纯本地应用不需要网络栈：本机存在流量过滤时，WV2 建 webview 时的
+            // 组件更新/CRL/代理探测都会走重传超时（实测偶发 17-20s），全掐掉。
+            .additional_browser_args(
+                "--no-proxy-server --disable-background-networking \
+                 --disable-component-update --disable-sync --disable-metrics \
+                 --no-first-run --no-default-browser-check",
+            )
             .on_page_load(|w, payload| {
                 if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                     // 首个 Finished = 开屏页加载完（DOM 就绪，show 后首帧即开屏）
@@ -444,7 +568,7 @@ fn main() {
             .build()?;
             #[cfg(not(debug_assertions))]
             {
-                stamp("setup enter");
+                stamp("window built");
                 // 兜底：信标不来也按时亮窗
                 let w3 = win.clone();
                 std::thread::spawn(move || {

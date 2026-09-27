@@ -825,6 +825,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-prevent-default",
+ "windows",
 ]
 
 [[package]]
