@@ -225,8 +225,50 @@ body.is-toc-resizing iframe {
     gap: 0;
 }
 
+/* 顶栏让给标题栏后，应用名挪到左底栏最前（需求速记 2） */
+#app-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--folio-space-1);
+    padding: 0 var(--folio-space-2);
+    flex: none;
+    white-space: nowrap;
+}
+
 #bar-left #stat-count {
     padding: 0 var(--folio-space-2);
+}
+
+/* 桌面壳窗控钮：顶栏最右满高贴边，三钮无缝；X 悬停红底白图标 */
+#win-controls {
+    display: inline-flex;
+    align-items: stretch;
+    align-self: stretch;
+    gap: 0;
+    flex: none;
+    margin-left: var(--folio-space-2);
+    margin-right: calc(-1 * var(--folio-space-3));
+}
+
+#win-controls .icon-btn {
+    width: var(--folio-win-btn-w);
+    height: auto;
+    align-self: stretch;
+}
+
+#win-controls .icon-btn:hover {
+    background: var(--folio-hover);
+    color: var(--folio-fg);
+}
+
+#win-controls .icon-btn.win-close:hover {
+    background: var(--folio-close-hover-bg);
+    color: var(--folio-close-hover-fg);
+}
+
+.drag-region {
+    cursor: default;
+    user-select: none;
 }
 
 #bar-left #filterbar {
@@ -514,6 +556,7 @@ body.folio-overlay-open .folio-modal {
 .head-actions {
     display: inline-flex;
     gap: var(--folio-space-1);
+    margin-left: auto;
 }
 
 #app-icon,
@@ -1531,6 +1574,21 @@ span.mu-inline-image.folio-img-fixed {
     font-size: var(--folio-font-size-sm);
     font-weight: 600;
     margin: var(--folio-space-3) 0 var(--folio-space-2);
+}
+
+.set-libs {
+    border-collapse: collapse;
+    font-size: var(--folio-font-size-sm);
+}
+
+.set-libs td {
+    padding: var(--folio-space-1) var(--folio-space-3) var(--folio-space-1) 0;
+    color: var(--folio-fg-muted);
+    border-bottom: 1px solid var(--folio-border);
+}
+
+.set-libs td:first-child {
+    color: var(--folio-fg);
 }
 
 .set-swatches {

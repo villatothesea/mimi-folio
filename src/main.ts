@@ -1,5 +1,6 @@
 import { wordCount } from '@muyajs/core';
 import { installDesktopShellGuards } from './shared/desktopShell.ts';
+import { installTitlebar } from './ui/titlebar.ts';
 import { applyTextScale, readTextScale } from './shared/textScale.ts';
 import { createHost } from './host/index.ts';
 import { startMimiPresence } from './host/presence.ts';
@@ -44,10 +45,14 @@ startMimiPresence(); // mimi 模式下报存活：米米顶栏按钮高亮跟着
 let activeWorkspaceId = '';
 /** 当前 vault 磁盘绝对路径（带盘符）；复制路径用，避免 await 后再写剪贴板丢掉用户手势。 */
 let vaultAbsDir = '';
+/** 当前工作区名；底栏面包屑首段用它。 */
+let vaultName = '';
 
-function rememberVaultRoot(ws: { items: { id: string; dir: string }[]; activeId: string }): void {
+function rememberVaultRoot(ws: { items: { id: string; dir: string; name: string }[]; activeId: string }): void {
     activeWorkspaceId = ws.activeId;
-    vaultAbsDir = ws.items.find((item) => item.id === ws.activeId)?.dir ?? '';
+    const active = ws.items.find((item) => item.id === ws.activeId);
+    vaultAbsDir = active?.dir ?? '';
+    vaultName = active?.name ?? '';
 }
 
 function writeLastView(view: Parameters<typeof persistView>[0]): void {
@@ -720,16 +725,44 @@ async function open(path: string, anchor?: string): Promise<void> {
     }
 }
 
-/** 面包屑（单元 13）：路径逐级可点，点哪层就把清单筛到哪层。 */
+/** 面包屑（单元 13）：首段是 vault（工作区）名，其后路径逐级可点，点哪层就把清单筛到哪层。 */
+function crumbSep(): HTMLSpanElement {
+    const sep = document.createElement('span');
+    sep.className = 'crumb-sep';
+    sep.textContent = '\\';
+    return sep;
+}
+
+function vaultCrumb(): HTMLElement {
+    const crumb = document.createElement('button');
+    crumb.type = 'button';
+    crumb.className = 'crumb';
+    crumb.textContent = vaultName;
+    crumb.title = vaultAbsDir;
+    crumb.addEventListener('click', () => {
+        selectedDir = null;
+        void refreshList();
+    });
+    return crumb;
+}
+
+/** 速记看法 / 未打开等非文档态：底栏仍带 vault 名。 */
+function leafCrumb(text: string): void {
+    breadcrumbEl.replaceChildren();
+    if (vaultName) breadcrumbEl.append(vaultCrumb(), crumbSep());
+    breadcrumbEl.append(Object.assign(document.createElement('span'), { className: 'crumb-file', textContent: text }));
+}
+
 function renderBreadcrumb(markdown?: string): void {
     breadcrumbEl.replaceChildren();
     if (!openFile) {
-        breadcrumbEl.textContent = '未打开';
+        leafCrumb('未打开');
         return;
     }
     const path = openFile;
     const md = markdown ?? currentEditor()?.getMarkdown() ?? lastSaved;
     const segments = path.split('/');
+    if (vaultName) breadcrumbEl.append(vaultCrumb(), crumbSep());
     segments.forEach((seg, i) => {
         const isLast = i === segments.length - 1;
         if (!isLast) {
@@ -742,10 +775,7 @@ function renderBreadcrumb(markdown?: string): void {
                 selectedDir = dir;
                 void refreshList();
             });
-            const sep = document.createElement('span');
-            sep.className = 'crumb-sep';
-            sep.textContent = '/';
-            breadcrumbEl.append(crumb, sep);
+            breadcrumbEl.append(crumb, crumbSep());
         } else {
             const crumb = document.createElement('span');
             crumb.className = 'crumb-file';
@@ -847,7 +877,7 @@ async function syncMemoMode(): Promise<void> {
             clearHtmlPreview();
             root.classList.add('memo-mode');
             writeLastView({ v: 'memos' });
-            breadcrumbEl.textContent = '速记';
+            leafCrumb('速记');
             lastLinks = { outgoing: [], backlinks: [] };
             renderCenterBar();
         }
@@ -862,7 +892,7 @@ async function syncMemoMode(): Promise<void> {
     } else if (root.classList.contains('memo-mode')) {
         root.classList.remove('memo-mode');
         if (!openFile) {
-            breadcrumbEl.textContent = '未打开';
+            leafCrumb('未打开');
             writeLastView(null);
         }
     }
@@ -1237,7 +1267,7 @@ async function relinkFolder(dir: string): Promise<void> {
         if (openFile?.startsWith(`${dir}/`) && !allFiles.some((f) => f.path === openFile)) {
             openFile = null;
             destroyEditor();
-            breadcrumbEl.textContent = '未打开';
+            leafCrumb('未打开');
             hideDocHead();
             renderCenterBar();
             writeLastView(null);
@@ -1292,7 +1322,14 @@ document.querySelector<HTMLButtonElement>('#btn-plus')!.addEventListener('click'
     else openPlusMenu(e.currentTarget as HTMLElement);
 });
 document.querySelector<HTMLButtonElement>('#btn-settings')!.innerHTML = icon('settings');
-document.querySelector<HTMLButtonElement>('#btn-settings')!.addEventListener('click', () => openSettings());
+document.querySelector<HTMLButtonElement>('#btn-settings')!.addEventListener('click', () => {
+    const libs = (['笔记', '速记', '外链', '图片', '附件'] as const).map((label, i) => {
+        const dir = ['notes', 'memos', 'links', 'pics', 'attachments'][i];
+        const countable = i < 3;
+        return { label, dir: `${dir}/`, count: countable ? allFiles.filter((f) => f.path === dir || f.path.startsWith(`${dir}/`)).length : null };
+    });
+    openSettings({ vault: { name: vaultName, dir: vaultAbsDir }, libraries: libs });
+});
 
 window.addEventListener('beforeunload', (event) => {
     if (openFile && currentEditor() && currentEditor()!.getMarkdown() !== lastSaved) {
@@ -1397,6 +1434,7 @@ async function copyAbsPath(rel: string): Promise<void> {
 
 // ==== 右键菜单（验收清单 4/14）====
 installDesktopShellGuards();
+installTitlebar();
 blockNativeContextMenu(document.body);
 
 /** 左栏文档右键。 */
@@ -1468,7 +1506,7 @@ nav.addEventListener('contextmenu', (event) => {
                 destroyEditor();
                 document.querySelector<HTMLElement>('#app')?.classList.remove('html-mode');
                 clearHtmlPreview();
-                breadcrumbEl.textContent = '未打开';
+                leafCrumb('未打开');
                 hideDocHead();
                 renderCenterBar();
                 writeLastView(null);
@@ -1500,7 +1538,7 @@ function closeIfDeleted(files: string[], dirs: string[]): void {
     destroyEditor();
     document.querySelector<HTMLElement>('#app')?.classList.remove('html-mode');
     clearHtmlPreview();
-    breadcrumbEl.textContent = '未打开';
+    leafCrumb('未打开');
     hideDocHead();
     renderCenterBar();
     writeLastView(null);
@@ -1621,7 +1659,7 @@ function folderContextMenu(dir: string, x: number, y: number): void {
             if (openFile?.startsWith(`${dir}/`)) {
                 openFile = null;
                 destroyEditor();
-                breadcrumbEl.textContent = '未打开';
+                leafCrumb('未打开');
                 hideDocHead();
                 renderCenterBar();
                 writeLastView(null);
@@ -2040,7 +2078,7 @@ async function leaveOpenDoc(): Promise<void> {
     lastListSig = '';
     lastShown = [];
     lastLinks = { outgoing: [], backlinks: [] };
-    breadcrumbEl.textContent = '未打开';
+    leafCrumb('未打开');
     renderCenterBar();
 }
 

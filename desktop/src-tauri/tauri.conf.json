@@ -10,13 +10,15 @@
     "frontendDist": "../stub-frontend"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
         "title": "米素",
         "width": 1280,
         "height": 840,
-        "url": "about:blank"
+        "url": "about:blank",
+        "decorations": false
       }
     ],
     "security": {
