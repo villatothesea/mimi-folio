@@ -42,6 +42,14 @@ function walk(dir, base = dir) {
     return rels.sort();
 }
 
+// dist 必须是桌面构建（VITE_FOLIO_DESKTOP=1，index.html 会带上 meta 标记）——
+// 打过无标记的包会丢标题栏（无边框窗的拖窗/最小化/关闭全是前端自绘的）。
+const indexHtml = fs.readFileSync(path.join(distDir, 'index.html'), 'utf8');
+if (!indexHtml.includes('name="folio-desktop" content="1"')) {
+    console.error('dist/ 不是桌面构建（缺 folio-desktop=1 标记）——先跑 scripts/desktop-build.mjs');
+    process.exit(1);
+}
+
 const inputs = [
     serverEntry,
     ...walk(distDir).map((rel) => [`dist/${rel}`, path.join(distDir, rel)]),
