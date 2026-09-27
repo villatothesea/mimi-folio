@@ -1965,6 +1965,12 @@ html[data-width='wide'] .mu-editor .mu-container {
     width: 100%;
 }
 
+/* 同机理：末行 ::before 高 +1px 的下溢被 figure overflow-x:auto 纵裁 → 底边线消失 */
+.mu-editor table.mu-table-inner tr:last-child td::before,
+.mu-editor table.mu-table-inner tr:last-child th::before {
+    height: 100%;
+}
+
 .mu-editor .mu-table:not(.mu-table-header-row) table.mu-table-inner tr:first-child td {
     font-weight: inherit;
 }
