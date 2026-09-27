@@ -20,6 +20,8 @@ export type SidebarOptions = {
     selectedDirs?: ReadonlySet<string>;
     /** 拖拽移动文档（待评估 14）；可一次多篇 */
     onMove?: (froms: string[], toDir: string) => void;
+    /** 拖拽移动文件夹；可一次多个（选中集里的其它文件夹一起） */
+    onMoveDirs?: (dirs: string[], toDir: string) => void;
     /** 文件夹右键菜单（bug5） */
     onFolderContext?: (dir: string, x: number, y: number) => void;
 };
@@ -97,6 +99,82 @@ function siblingDirs(files: FolioListItem[], dir: string): string[] {
     return [...node.children.values()].map((ch) => ch.dir);
 }
 
+/** 拖拽影：整行（图标+名+计数/星）克隆跟鼠标。放在 #files 内但 fixed 出屏，行样式原样生效。 */
+function attachDragGhost(e: DragEvent, row: HTMLElement, anchor: HTMLElement): void {
+    const ghost = row.cloneNode(true) as HTMLElement;
+    ghost.classList.add('drag-ghost');
+    ghost.querySelectorAll('[data-path], [data-dir]').forEach((el) => {
+        el.removeAttribute('data-path');
+        el.removeAttribute('data-dir');
+    });
+    const rect = row.getBoundingClientRect();
+    ghost.style.width = `${Math.round(rect.width)}px`;
+    const nav = row.closest('nav');
+    (nav instanceof HTMLElement ? nav : document.body).append(ghost);
+    e.dataTransfer?.setDragImage(ghost, e.clientX - rect.left, e.clientY - rect.top);
+    anchor.addEventListener('dragend', () => ghost.remove(), { once: true });
+}
+
+/** 文件夹行 + 它展开的子区（tree-children）是同一投放区。 */
+function dropZoneRegion(el: HTMLElement): HTMLElement[] {
+    const row = el.classList.contains('folder-row') ? el : el.previousElementSibling;
+    const children = el.classList.contains('tree-children') ? el : el.nextElementSibling;
+    const region: HTMLElement[] = [];
+    if (row instanceof HTMLElement && row.classList.contains('folder-row')) region.push(row);
+    if (children instanceof HTMLElement && children.classList.contains('tree-children')) region.push(children);
+    return region.length ? region : [el];
+}
+
+function clearDropMarks(scope: ParentNode | null, keep: HTMLElement[]): void {
+    scope?.querySelectorAll('.drop-target').forEach((el) => {
+        if (!keep.includes(el as HTMLElement)) el.classList.remove('drop-target');
+    });
+}
+
+function readTransfer(e: DragEvent, manyKey: string, oneKey: string): string[] {
+    const raw = e.dataTransfer?.getData(manyKey);
+    if (raw) {
+        try {
+            const parsed = JSON.parse(raw) as unknown;
+            if (Array.isArray(parsed)) return parsed.filter((p): p is string => typeof p === 'string');
+        } catch {
+            // 落回单值
+        }
+    }
+    const one = e.dataTransfer?.getData(oneKey);
+    return one ? [one] : [];
+}
+
+/** 把 `el` 注册成 `dir` 的投放面：悬停整块区域高亮，落下交给 onMove/onMoveDirs。 */
+function bindDropZone(el: HTMLElement, dir: string, opts: SidebarOptions): void {
+    el.addEventListener('dragover', (e) => {
+        if (![...(e.dataTransfer?.types ?? [])].some((t) => t.startsWith('text/folio-'))) return;
+        e.preventDefault();
+        e.stopPropagation(); // 嵌套文件夹时最内层胜出
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        const region = dropZoneRegion(el);
+        clearDropMarks(el.closest('nav'), region);
+        for (const r of region) r.classList.add('drop-target');
+    });
+    el.addEventListener('dragleave', (e) => {
+        const next = e.relatedTarget;
+        if (next instanceof Node && dropZoneRegion(el).some((r) => r.contains(next))) return;
+        for (const r of dropZoneRegion(el)) r.classList.remove('drop-target');
+    });
+    el.addEventListener('drop', (e) => {
+        if (![...(e.dataTransfer?.types ?? [])].some((t) => t.startsWith('text/folio-'))) return;
+        e.preventDefault();
+        e.stopPropagation();
+        clearDropMarks(el.closest('nav'), []);
+        // 文件已在该目录 = 空移动；文件夹不能进自己/子孙/原父目录
+        const files = readTransfer(e, 'text/folio-paths', 'text/folio-path').filter((p) => parentDir(p) !== dir);
+        const dirs = readTransfer(e, 'text/folio-dirs', 'text/folio-dir')
+            .filter((d) => d !== dir && !dir.startsWith(`${d}/`) && parentDir(d) !== dir);
+        if (files.length) opts.onMove?.(files, dir);
+        if (dirs.length) opts.onMoveDirs?.(dirs, dir);
+    });
+}
+
 /** 展开/折叠与 `dir` 同级的全部文件夹（不含孙级）。 */
 export function setSiblingFoldersCollapsed(files: FolioListItem[], dir: string, collapse: boolean): void {
     for (const sib of siblingDirs(files, dir)) {
@@ -144,6 +222,7 @@ function toggleFolder(row: HTMLElement, dir: DirNode, depth: number, opts: Sideb
         children.className = 'tree-children';
         renderTree(children, dir, depth + 1, opts);
         row.after(children);
+        bindDropZone(children, dir.dir, opts);
     }
     const collapsed = collapsedDirs.has(dir.dir);
     const toggle = row.querySelector<HTMLElement>('.folder-toggle');
@@ -181,6 +260,7 @@ function renderTree(host: HTMLElement, node: DirNode, depth: number, opts: Sideb
             children.className = 'tree-children';
             renderTree(children, dir, depth + 1, opts);
             host.append(children);
+            bindDropZone(children, dir.dir, opts);
         }
     }
     host.append(renderGroup(node.files, opts, depth));
@@ -211,6 +291,7 @@ function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTM
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'row-main';
+    button.draggable = true;
     const count = dir.files.length + [...dir.children.values()].reduce((sum, ch) => sum + ch.files.length, 0);
     const ic = document.createElement('span');
     ic.className = 'file-icon';
@@ -240,29 +321,18 @@ function renderFolderRow(dir: DirNode, depth: number, opts: SidebarOptions): HTM
         e.preventDefault();
         opts.onFolderContext?.(dir.dir, e.clientX, e.clientY);
     });
+    button.addEventListener('dragstart', (e) => {
+        const dirs = opts.selectedDirs?.has(dir.dir) && (opts.selectedDirs.size ?? 0) > 0
+            ? [...opts.selectedDirs]
+            : [dir.dir];
+        e.dataTransfer?.setData('text/folio-dir', dir.dir);
+        e.dataTransfer?.setData('text/folio-dirs', JSON.stringify(dirs));
+        e.dataTransfer!.effectAllowed = 'move';
+        attachDragGhost(e, row, button);
+    });
 
-    // 拖文件到此文件夹 = 移动
-    row.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        row.classList.add('drop-target');
-    });
-    row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
-    row.addEventListener('drop', (e) => {
-        e.preventDefault();
-        row.classList.remove('drop-target');
-        const raw = e.dataTransfer?.getData('text/folio-paths');
-        const from = e.dataTransfer?.getData('text/folio-path');
-        let froms: string[] = [];
-        if (raw) {
-            try {
-                froms = JSON.parse(raw) as string[];
-            } catch {
-                froms = [];
-            }
-        }
-        if (froms.length === 0 && from) froms = [from];
-        if (froms.length > 0) opts.onMove?.(froms, dir.dir);
-    });
+    // 文件夹行及其展开的管辖子区是同一投放区（children 在 renderTree/toggleFolder 里补绑）
+    bindDropZone(row, dir.dir, opts);
 
     row.append(toggle, button);
     return row;
@@ -308,6 +378,7 @@ function renderGroup(files: FolioListItem[], opts: SidebarOptions, _depth: numbe
             e.dataTransfer?.setData('text/folio-path', file.path);
             e.dataTransfer?.setData('text/folio-paths', JSON.stringify(paths));
             e.dataTransfer!.effectAllowed = 'move';
+            attachDragGhost(e, row, button);
         });
         row.append(button);
         frag.append(row);

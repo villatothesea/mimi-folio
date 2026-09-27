@@ -1034,6 +1034,7 @@ function paintNav(files: FolioListItem[] = lastShown): void {
             else folderContextMenu(dir, x, y);
         },
         onMove: (froms, toDir) => void movePaths(froms, toDir),
+        onMoveDirs: (dirs, toDir) => void movePaths(dirs, toDir),
     });
 }
 
@@ -1174,7 +1175,18 @@ async function newMemo(): Promise<void> {
     await enterMemos();
 }
 
-/** 新建动作（验收清单 7/10.4）：统一收进标题栏加号下拉。 */
+/** 行内改名入口：清单里找到该路径/目录的行，把名字换输入框。 */
+function startSidebarRename(target: { path?: string; dir?: string }): void {
+    const sel = target.path
+        ? `.row-main[data-path="${CSS.escape(target.path)}"]`
+        : `.row-main[data-dir="${CSS.escape(target.dir!)}"]`;
+    const button = nav.querySelector<HTMLElement>(sel);
+    if (!button) return;
+    if (target.path) renameInline(button as HTMLButtonElement, target.path);
+    else renameDirInline(button, target.dir!);
+}
+
+/** 新建动作（验收清单 7/10.4）：统一收进标题栏加号下拉；落盘后行内改名。 */
 async function newNote(dir = ''): Promise<void> {
     const path = joinRel(dir, `${stamp()}.md`);
     try {
@@ -1182,23 +1194,30 @@ async function newNote(dir = ''): Promise<void> {
         expandDirPath(dir);
         selectedDir = null;
         await open(path);
-        void refreshList();
+        await refreshList();
+        startSidebarRename({ path });
     } catch (err) {
         saySave(`新建失败：${(err as Error).message}`);
     }
 }
 
-async function newFolder(): Promise<void> {
-    const name = await folioPrompt('新文件夹名（建在库根）');
-    if (!name) return;
-    const safe = name.trim().replace(/[\\/:*?"<>|]/g, '_');
-    if (!safe) return;
-    const path = `${safe}/未命名笔记.md`;
+/** 新建文件夹：mkdir 空目录（不塞占位 md），落「新建文件夹」默认名后行内改名。 */
+async function newFolder(dir = ''): Promise<void> {
+    if (!host.mkdir) {
+        saySave('当前宿主不支持空文件夹');
+        return;
+    }
+    const taken = new Set(allDirs());
+    for (const f of allFiles) if (f.folder) taken.add(f.path);
+    let name = '新建文件夹';
+    for (let i = 2; taken.has(joinRel(dir, name)); i++) name = `新建文件夹 ${i}`;
+    const dirPath = joinRel(dir, name);
     try {
-        await host.write(path, newNoteMarkdown());
-        selectedDir = safe;
-        await open(path);
-        void refreshList();
+        await host.mkdir(dirPath);
+        expandDirPath(dirPath);
+        selectedDir = dirPath;
+        await refreshList();
+        startSidebarRename({ dir: dirPath });
     } catch (err) {
         saySave(`建文件夹失败：${(err as Error).message}`);
     }
@@ -1556,7 +1575,7 @@ async function movePaths(froms: string[], toDir: string): Promise<void> {
     for (const from of froms) {
         const name = from.split('/').pop()!;
         const to = joinRel(toDir, name);
-        if (to === from) continue;
+        if (to === from || to.startsWith(`${from}/`)) continue;
         try {
             await host.moveDoc(from, to);
         } catch (err) {
@@ -1610,34 +1629,8 @@ function folderContextMenu(dir: string, x: number, y: number): void {
             run: () => void relinkFolder(dir),
         }] : []),
         { ic: 'file-plus', label: '新建文档', run: () => void newNote(dir) },
-        { ic: 'folder-plus', label: '添加子文件夹', run: () => void (async () => {
-            const name = await folioPrompt(`在 ${dir} 下新建文件夹`);
-            if (!name) return;
-            const safe = name.replace(/[\/:*?"<>|]/g, '_');
-            const p = `${dir}/${safe}/未命名笔记.md`;
-            try {
-                await host.write(p, newNoteMarkdown());
-                expandDirPath(`${dir}/${safe}`);
-                selectedDir = `${dir}/${safe}`;
-                await open(p);
-                void refreshList();
-            } catch (err) {
-                saySave(`建子文件夹失败：${(err as Error).message}`);
-            }
-        })() },
-        { ic: 'pencil', label: '重命名文件夹', run: () => void (async () => {
-            const name = await folioPrompt('文件夹新名', dir.split('/').pop() ?? '');
-            if (!name) return;
-            const parent = dir.split('/').slice(0, -1).join('/');
-            const to = `${parent ? `${parent}/` : ''}${name.replace(/[\/:*?"<>|]/g, '_')}`;
-            try {
-                if (host.moveDoc) await host.moveDoc(dir, to);
-                selectedDir = to;
-                void refreshList();
-            } catch (err) {
-                saySave(`重命名失败：${(err as Error).message}`);
-            }
-        })() },
+        { ic: 'folder-plus', label: '添加子文件夹', run: () => void newFolder(dir) },
+        { ic: 'pencil', label: '重命名文件夹', run: () => startSidebarRename({ dir }) },
         { ic: 'arrow-move-up', label: '移动到…', run: () => void (async () => {
             const target = await folioPick('移动文件夹到…', allDirs().filter((d) => d !== dir && !d.startsWith(`${dir}/`)), dir);
             if (target === null || !host.moveDoc) return;
@@ -1701,14 +1694,19 @@ async function renameCurrentDoc(stem: string): Promise<void> {
     }
 }
 
-/** 重命名：只改操作系统文件名，扩展名原样保留。不写 YAML title:、不改正文 H1。 */
-async function renameInline(button: HTMLButtonElement, path: string): Promise<void> {
+/**
+ * 清单行内改名：.file-name 换成输入框，回车/失焦提交、Esc 取消。
+ * 输入框在 <button> 里：必须拦住点击，否则当成打开文档/选中目录，焦点被带走。
+ */
+function inlineEditRow(
+    button: HTMLElement,
+    opts: { value: string; commit: (text: string) => Promise<void> | void },
+): void {
     const nameSpan = button.querySelector<HTMLElement>('.file-name');
-    if (!nameSpan || button.querySelector('.rename-input') || !host.moveDoc) return;
+    if (!nameSpan || button.querySelector('.rename-input')) return;
     const input = document.createElement('input');
     input.className = 'rename-input';
-    input.value = fileNameStem(path);
-    // 输入框在 <button> 里：必须拦住点击，否则会当成打开文档，焦点被带走。
+    input.value = opts.value;
     const stay = (event: Event) => event.stopPropagation();
     input.addEventListener('mousedown', stay);
     input.addEventListener('pointerdown', stay);
@@ -1718,8 +1716,8 @@ async function renameInline(button: HTMLButtonElement, path: string): Promise<vo
         event.stopImmediatePropagation();
     };
     button.addEventListener('click', blockOpen, true);
-    const wasDrag = button.draggable;
-    button.draggable = false;
+    const wasDrag = button instanceof HTMLButtonElement ? button.draggable : false;
+    if (button instanceof HTMLButtonElement) button.draggable = false;
     nameSpan.replaceWith(input);
     input.focus();
     input.select();
@@ -1728,24 +1726,11 @@ async function renameInline(button: HTMLButtonElement, path: string): Promise<vo
         if (finished) return;
         finished = true;
         button.removeEventListener('click', blockOpen, true);
-        button.draggable = wasDrag;
+        if (button instanceof HTMLButtonElement) button.draggable = wasDrag;
         const value = input.value.trim();
         if (input.isConnected) input.replaceWith(nameSpan);
         if (!commit || !value) return;
-        const dest = renamedPath(path, value);
-        if (!dest) return;
-        try {
-            const to = await host.moveDoc!(path, dest);
-            if (openFile === path) {
-                openFile = to;
-                writeLastView({ v: 'file', path: to });
-                renderBreadcrumb();
-                paintToc();
-            }
-            void refreshList();
-        } catch (err) {
-            saySave(`重命名失败：${(err as Error).message}`);
-        }
+        await opts.commit(value);
     };
     input.addEventListener('keydown', (e) => {
         e.stopPropagation();
@@ -1756,6 +1741,59 @@ async function renameInline(button: HTMLButtonElement, path: string): Promise<vo
     window.setTimeout(() => {
         if (!finished) input.addEventListener('blur', () => void done(true));
     }, 0);
+}
+
+/** 重命名：只改操作系统文件名，扩展名原样保留。不写 YAML title:、不改正文 H1。 */
+function renameInline(button: HTMLButtonElement, path: string): void {
+    if (!host.moveDoc) return;
+    inlineEditRow(button, {
+        value: fileNameStem(path),
+        commit: async (stem) => {
+            const dest = renamedPath(path, stem);
+            if (!dest) return;
+            try {
+                const to = await host.moveDoc!(path, dest);
+                if (openFile === path) {
+                    openFile = to;
+                    writeLastView({ v: 'file', path: to });
+                    renderBreadcrumb();
+                    paintToc();
+                }
+                void refreshList();
+            } catch (err) {
+                saySave(`重命名失败：${(err as Error).message}`);
+            }
+        },
+    });
+}
+
+/** 文件夹行内改名：只改目录名，里面文档的路径整体跟着走。 */
+function renameDirInline(button: HTMLElement, dir: string): void {
+    if (!host.moveDoc) return;
+    inlineEditRow(button, {
+        value: dir.split('/').pop() ?? '',
+        commit: async (name) => {
+            const safe = name.replace(/[\\/:*?"<>|]/g, '_').trim();
+            if (!safe || safe === dir.split('/').pop()) return;
+            const parent = dir.split('/').slice(0, -1).join('/');
+            const to = joinRel(parent, safe);
+            try {
+                await host.moveDoc!(dir, to);
+                const shift = (p: string) => (p === dir ? to : `${to}${p.slice(dir.length)}`);
+                selectedDirs = new Set([...selectedDirs].map((d) => (d === dir || d.startsWith(`${dir}/`) ? shift(d) : d)));
+                if (selectedDir === dir || selectedDir?.startsWith(`${dir}/`)) selectedDir = shift(selectedDir);
+                if (openFile?.startsWith(`${dir}/`)) {
+                    openFile = shift(openFile);
+                    writeLastView({ v: 'file', path: openFile });
+                    renderBreadcrumb();
+                    paintToc();
+                }
+                void refreshList();
+            } catch (err) {
+                saySave(`重命名失败：${(err as Error).message}`);
+            }
+        },
+    });
 }
 
 /** 中区右键（验收清单 14.2）：段落级插入/改型/删除，二级菜单与斜杠同源。 */

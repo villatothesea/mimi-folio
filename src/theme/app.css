@@ -225,16 +225,6 @@ body.is-toc-resizing iframe {
     gap: 0;
 }
 
-/* 顶栏让给标题栏后，应用名挪到左底栏最前（需求速记 2） */
-#app-brand {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--folio-space-1);
-    padding: 0 var(--folio-space-2);
-    flex: none;
-    white-space: nowrap;
-}
-
 #bar-left #stat-count {
     padding: 0 var(--folio-space-2);
 }
@@ -2902,6 +2892,33 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
 .folder-row:has(> .row-main[aria-current='true']) .folder-toggle,
 .folder-row:has(> .row-main[aria-selected='true']) .folder-toggle {
     background: transparent;
+}
+
+/* 拖拽投放：文件夹行连同其展开的管辖子区整块高亮（区域 = folder-row + tree-children） */
+.folder-row.drop-target,
+.tree-children.drop-target {
+    background: color-mix(in srgb, var(--folio-fg) 9%, transparent);
+}
+
+.folder-row.drop-target::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: auto;
+    width: var(--folio-sel-bar);
+    background: var(--folio-fg);
+    pointer-events: none;
+}
+
+/* 拖拽影：整行克隆体，fixed 抬出屏外让浏览器截图跟鼠标（#files 前缀压过 #files .tree-row 的 relative） */
+#files .drag-ghost {
+    position: fixed;
+    left: -10000px;
+    top: 0;
+    pointer-events: none;
+    background: var(--folio-panel);
 }
 
 
