@@ -1,31 +1,43 @@
-# 米素（folio）
+# 米素 Folio
 
-米米的**记忆底座**：人看、米米整理的本地 markdown 系统。预览即编辑，落盘仍是 `.md` + 附件。编辑核 [Muya](https://github.com/marktext/marktext)（`@muyajs/core`，MIT）。
+**中文** | [English](README_EN.md)
 
-独立开发，合进米米时只换 `src/host/`。纪律见 `AGENTS.md`，步骤见 `docs/计划.md`。
+这是你的记忆。也是她的记忆。她还在路上。也许某天，你们会不期而遇。
 
-## 跑起来
 
-```bash
-pnpm install
-pnpm dev     # vite + 同端口 /folio/v1/* 小服务，http://localhost:5173
-pnpm build   # tsc --noEmit + vite build → dist/
-pnpm start   # 独立整服：同端口端 dist/ + API（node ≥ 22.18，直跑 TS）
-pnpm test    # node --test，服务端 API / 解析器 / wikilink / 嵌入链接
-```
 
-`@muyajs/core` 用 `link:` 接本地检出 `../Assets/marktext-develop/packages/muya`（计划原定 `file:`，但 muya 的 `files: ["lib"]` 只打包构建产物、开发版 exports 又指向 src，`file:` 打包会丢源码，故改 `link:` 直连，需在 muya 侧 `pnpm install && pnpm build` 一次——本机已做）。它经 `@marktext/file-icons` 声明了一个 git 子依赖，仅构建期使用，已在 `pnpm-workspace.yaml` 用本地 stub 覆写。
+# 这到底是什么？
 
-## 这座 vault 里有什么
+一个基于 Muya（MarkText 同源的所见即所得内核）的md文档管理器。对，又一个md工具。我自己在用它看本地的各类agent生成的文档，所以我会尽量让这个工具趁手。甚至更好看。
 
-- `notes/` 长文、`memos/` 速记（文件名带日期前缀，时间线倒序）、`attachments/` 图/音/视频。
-- **预览即编辑**：Muya 所见即所得，改动防抖自动落盘，权威永远是文件。
-- **斜杠菜单**：`/` 插标题/表格/公式/Mermaid；PlantUML 与开放 HTML 块已从菜单剔除，PlantUML 服务端指向死地址（默认不出网）。
-- **灰阶主题**：组件只吃 `--folio-*`，Muya 的 `--mu-*`/`--editor-*` 全量映射自同一组 token（`src/theme/muya.css`），换主题只改 `src/theme/tokens.css`。
-- **本机多媒体**：粘贴截图走 `saveImage`，音视频文件走 `saveFile`，落盘 `attachments/`，md 里是相对路径，`/attachments/*` 由小服务端给页面播放。
-- **三种组织方式互不冒充**：目录即分组（侧栏）、frontmatter `tags:` 筛选（标签条）、`[[wikilink]]` 连接（点击弹芯片跳转，未命中一键建页；反链面板能看见谁链过来）。
-- **链接播视频**：粘贴 YouTube / B 站链接，页内出播放器；md 只存链接，白名单外不理，iframe 进不了盘。
 
-## 合入米米
 
-契约在 `src/host/types.ts`：`read` / `write` / `list(opts)` / `saveImage` / `saveFile?` / `index?`。独立阶段 `StandaloneHost` 打本仓小服务的 `/folio/v1/*`；合入换 `MimiHost` 打 daemon 的同名端点，编辑器不感知。探测：`?host=mimi` 或 `window.__MIMI_FOLIO__`。
+你可以拿它当另一个md工具。你也可以等到遇见她时，看看她怎么理解这个东西。
+
+
+
+# 能拿来做什么？
+
+这就是一个再普通不过的md工具。我用它来做这些事情。
+
+1. 速记我的想法。自带 memos 速记库——写完落成卡片，按时间线倒着排。你也可以用md文档记录你的想法。
+
+2. 格式化md标记。为了更好看清楚不同的md元素，我对每个md格式做了颜色格式化。标题颜色，编号颜色，行内代码块颜色等，都用不同颜色区分出来。未来我会让这个格式化更加自由化——你自己定。
+
+3. 外链其他文件夹，而不必新建仓库。尽管产品有vault功能，但如果对于一个只有三五个文档，又不会一直长期更新的文件夹，直接外链进来。所有编辑基于原文档进行。用完删除链接。
+
+4. 没了。
+
+
+
+# 怎么安装？
+
+如果你真感兴趣，我们提供了两个版本的安装方式。
+
+1. 本地服务器+浏览器：`pnpm install && pnpm start`，然后开 `http://127.0.0.1:3789`（要 node ≥22.18；编辑核 muya 是 `link:` 本机检出，换机器得先备一份）。
+
+2. 单exe绿色文件：`米素.exe` 双击即用，不用装。数据放在程序旁边的 `folio-data/`，整个文件夹拷走就是迁移。
+
+
+
+对，就这么简单，我也想不出还能写什么介绍文字了。毕竟这个产品，就需要如此简单。
