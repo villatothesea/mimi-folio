@@ -8,6 +8,7 @@ desktop/src-tauri/binaries/*.exe
 desktop/src-tauri/gen/
 .vite/
 *.local
+docs/
 
 # vault 内容不入库，只留目录约定和示例
 vault/**

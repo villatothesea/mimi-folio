@@ -34,9 +34,9 @@ This is an utterly ordinary md tool. These are the things I do with it.
 
 If you're genuinely interested, there are two ways to run it.
 
-1. Local server + browser: `pnpm install && pnpm start`, then open `http://127.0.0.1:3789` (requires node ≥22.18; the muya editor core is a `link:` local checkout, so on another machine you'll need a copy of it first).
+1. Local server + browser: clone the repo and let your agent read the code — it will handle everything. Dependencies, server, browser, done.
 
-2. Single portable exe: `米素.exe` — double-click and go, no install. Data lives in `folio-data/` right next to the exe; copying the whole folder is a complete migration.
+2. Single portable exe: grab `mimi-folio.exe` from Releases — double-click and go, no install. Data lives in `folio-data/` right next to the exe; copying the whole folder is a complete migration.
 
 
 
