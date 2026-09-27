@@ -1,4 +1,5 @@
 import { wordCount } from '@muyajs/core';
+import { installDesktopShellGuards } from './shared/desktopShell.ts';
 import { applyTextScale, readTextScale } from './shared/textScale.ts';
 import { createHost } from './host/index.ts';
 import { startMimiPresence } from './host/presence.ts';
@@ -1395,6 +1396,7 @@ async function copyAbsPath(rel: string): Promise<void> {
 }
 
 // ==== 右键菜单（验收清单 4/14）====
+installDesktopShellGuards();
 blockNativeContextMenu(document.body);
 
 /** 左栏文档右键。 */

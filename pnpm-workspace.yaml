@@ -1,3 +1,5 @@
+allowBuilds:
+  esbuild: true
 # pnpm 11 设置文件（package.json 的 pnpm 字段已废弃）。
 # @marktext/file-icons 对 file-icons 的依赖仅是其构建期声明（rollup 已内联，运行时不用），
 # git 直连不稳，故用本地 stub 覆写；muya 其余依赖照常走 npm registry。

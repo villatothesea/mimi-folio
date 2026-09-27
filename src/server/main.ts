@@ -5,13 +5,15 @@
 import { createServer } from 'node:http';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 import type { ServerResponse } from 'node:http';
 
-import { handleFolioApi, serveAttachment, vaultRoot } from './api.ts';
+import { handleFolioApi, serveAttachment } from './api.ts';
 
-const distDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist');
+const distDir = process.env.FOLIO_DIST
+    ? path.resolve(process.env.FOLIO_DIST)
+    : path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist');
 const MIME: Record<string, string> = {
     '.html': 'text/html; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8',
@@ -46,13 +48,5 @@ export function createAppServer(): import('node:http').Server {
         if (await serveStatic(req.url ?? '/', res)) return;
         res.statusCode = 404;
         res.end('not found');
-    });
-}
-
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-    const port = Number(process.env.PORT ?? 3789);
-    // 只绑回环：本地记忆库不给局域网扫面（米米建议 4）
-    createAppServer().listen(port, '127.0.0.1', () => {
-        console.log(`米素独立服务 http://127.0.0.1:${port}  vault=${vaultRoot()}`);
     });
 }

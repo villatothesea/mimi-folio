@@ -7,14 +7,20 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "start": "node src/server/main.ts",
-    "test": "node --test \"src/**/*.test.ts\""
+    "start": "node src/server/run.ts",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
+    "desktop:build": "tauri build --config desktop/src-tauri/tauri.conf.json",
+    "desktop:portable": "node scripts/desktop-build.mjs && cargo build --release --manifest-path desktop/src-tauri/Cargo.toml && node scripts/desktop-deliver.mjs"
   },
   "engines": {
     "node": ">=22.18.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.10.0",
     "@types/node": "^26.4.0",
+    "@yao-pkg/pkg": "^6.11.0",
+    "esbuild": "^0.25.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
   },

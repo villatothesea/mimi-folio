@@ -1,5 +1,11 @@
 node_modules/
 dist/
+desktop/src-tauri/target/
+desktop/src-tauri/resources/folio-server.cjs
+desktop/src-tauri/resources/folio-server.mjs
+desktop/src-tauri/resources/runtime.pak
+desktop/src-tauri/binaries/*.exe
+desktop/src-tauri/gen/
 .vite/
 *.local
 
