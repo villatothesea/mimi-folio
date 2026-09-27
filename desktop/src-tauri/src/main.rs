@@ -4,8 +4,8 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use flate2::read::GzDecoder;
 use tauri::{Manager, RunEvent};
@@ -33,6 +33,32 @@ const _: () = assert!(
 
 const PORT: u16 = 3790;
 
+/// 启动计时账：T0 = main 进来那刻；每步写一行到 boot-log.txt。
+/// server 侧用 FOLIO_BOOT_T0（epoch ms）对齐同一时间轴。
+static BOOT_T0: OnceLock<Instant> = OnceLock::new();
+static BOOT_EPOCH_MS: OnceLock<u128> = OnceLock::new();
+static BOOT_LOG: OnceLock<PathBuf> = OnceLock::new();
+
+fn boot_log_path() -> PathBuf {
+    if let Some(p) = BOOT_LOG.get() {
+        return p.clone();
+    }
+    exe_dir()
+        .map(|d| d.join("folio-data").join("boot-log.txt"))
+        .unwrap_or_else(|_| std::env::temp_dir().join("mimi-folio-boot-log.txt"))
+}
+
+fn stamp(tag: &str) {
+    let Some(t0) = BOOT_T0.get() else { return };
+    let path = boot_log_path();
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "{:>7}ms [shell] {tag}", t0.elapsed().as_millis());
+    }
+}
+
 struct ServerProc(Mutex<Option<Child>>);
 
 #[derive(serde::Deserialize)]
@@ -49,12 +75,15 @@ struct PakFile {
 }
 
 fn wait_api(port: u16) {
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     let deadline = Instant::now() + Duration::from_secs(45);
     while Instant::now() < deadline {
-        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+        // 必须 connect_timeout：这台机器对关着端口的 SYN 不回 RST（有过滤软件），
+        // 裸 connect 每次干等 ~2s 重传超时才失败，轮询会被拖死。
+        if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok() {
             return;
         }
-        std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(30));
     }
 }
 
@@ -77,6 +106,7 @@ fn data_dir() -> Result<PathBuf, String> {
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     }
     fs::create_dir_all(dir.join("vault")).map_err(|e| e.to_string())?;
+    let _ = BOOT_LOG.set(dir.join("boot-log.txt"));
     Ok(dir)
 }
 
@@ -142,8 +172,10 @@ fn ensure_runtime(data: &Path) -> Result<PathBuf, String> {
     GzDecoder::new(packed)
         .read_to_end(&mut blob)
         .map_err(|e| format!("runtime.pak 解压失败：{e}"))?;
+    stamp(&format!("pak decompressed {}B", blob.len()));
 
     let _ = fs::remove_dir_all(&rt);
+    // 先校验全部路径，再多线程落盘——766 个小文件单线程写要 ~3s。
     for f in &manifest.files {
         let rel = Path::new(&f.path);
         if rel
@@ -152,15 +184,33 @@ fn ensure_runtime(data: &Path) -> Result<PathBuf, String> {
         {
             return Err(format!("runtime.pak 含非法路径 {}", f.path));
         }
-        let dst = rt.join(rel);
-        if let Some(parent) = dst.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        if blob.get(f.offset..f.offset + f.len).is_none() {
+            return Err(format!("runtime.pak 数据越界：{}", f.path));
         }
-        let bytes = blob
-            .get(f.offset..f.offset + f.len)
-            .ok_or_else(|| format!("runtime.pak 数据越界：{}", f.path))?;
-        fs::write(&dst, bytes).map_err(|e| format!("解包 {} 失败：{e}", f.path))?;
     }
+    let blob = &blob;
+    let rt_ref = &rt;
+    std::thread::scope(|s| -> Result<(), String> {
+        let n = manifest.files.len().div_ceil(8).max(1);
+        let mut handles = Vec::new();
+        for chunk in manifest.files.chunks(n) {
+            handles.push(s.spawn(move || -> Result<(), String> {
+                for f in chunk {
+                    let dst = rt_ref.join(&f.path);
+                    if let Some(parent) = dst.parent() {
+                        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                    }
+                    fs::write(&dst, &blob[f.offset..f.offset + f.len])
+                        .map_err(|e| format!("解包 {} 失败：{e}", f.path))?;
+                }
+                Ok(())
+            }));
+        }
+        for h in handles {
+            h.join().map_err(|_| "解包线程 panic".to_string())??;
+        }
+        Ok(())
+    })?;
     fs::write(&ok_mark, &manifest.version).map_err(|e| e.to_string())?;
 
     // 顺手清掉旧版本目录和历史遗留的平铺布局（旧版 runtime/ 直接装文件）
@@ -175,10 +225,27 @@ fn ensure_runtime(data: &Path) -> Result<PathBuf, String> {
     Ok(rt)
 }
 
+/// 3790 谁在监听（返回 PID，None=空闲）。读 netstat 本地表而非 connect 探测——
+/// connect 在 SYN 被过滤的环境会重传 ~2s 才超时，启动链上每探一次白等一次。
+fn listening_pid() -> Result<Option<String>, String> {
+    let out = no_window(Command::new("netstat").args(["-ano", "-p", "tcp"]))
+        .output()
+        .map_err(|e| format!("netstat 失败：{e}"))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    Ok(text
+        .lines()
+        .find(|l| l.contains(&format!(":{PORT} ")) && l.contains("LISTENING"))
+        .and_then(|l| l.split_whitespace().last().map(str::to_string)))
+}
+
 /// 问 3790 上在跑的服务自报版本（响应头 X-Folio-Build）。
-/// None = 没报版本（旧包的服务端或外来服务）。
+/// None = 没报版本（旧包的服务端或外来服务）。只在确认有监听后调用。
 fn running_build() -> Option<String> {
-    let mut s = std::net::TcpStream::connect(("127.0.0.1", PORT)).ok()?;
+    let mut s = std::net::TcpStream::connect_timeout(
+        &std::net::SocketAddr::from(([127, 0, 0, 1], PORT)),
+        Duration::from_secs(3),
+    )
+    .ok()?;
     let _ = s.set_read_timeout(Some(Duration::from_secs(3)));
     let _ = s.set_write_timeout(Some(Duration::from_secs(3)));
     s.write_all(b"GET / HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
@@ -192,27 +259,8 @@ fn running_build() -> Option<String> {
 }
 
 /// 端口上跑的是版本不一致的米素服务（换包后旧 server 残留会喂旧 dist）：
-/// 定位 PID、确认命令行是 folio-server 再杀——外来服务不碰，直接报错。
-fn kill_stale_server() -> Result<(), String> {
-    let out = no_window(Command::new("netstat").args(["-ano", "-p", "tcp"]))
-        .output()
-        .map_err(|e| format!("netstat 失败：{e}"))?;
-    let text = String::from_utf8_lossy(&out.stdout);
-    let pid = text
-        .lines()
-        .find(|l| l.contains(&format!(":{PORT}")) && l.contains("LISTENING"))
-        .and_then(|l| l.split_whitespace().last())
-        .ok_or_else(|| {
-            format!(
-                "{PORT} 在监听但定位不到 PID（netstat 状态 {:?}，stdout {} 字节，stderr {} 字节：{:.200}）",
-                out.status.code(),
-                out.stdout.len(),
-                out.stderr.len(),
-                String::from_utf8_lossy(&out.stderr),
-            )
-        })?
-        .to_string();
-
+/// 确认命令行是 folio-server 再杀——外来服务不碰，直接报错。
+fn kill_stale_server(pid: &str) -> Result<(), String> {
     let cmdline = no_window(Command::new("powershell").args([
         "-NoProfile",
         "-Command",
@@ -234,16 +282,22 @@ fn kill_stale_server() -> Result<(), String> {
 fn start_api(data: &Path, child_state: &ServerProc) -> Result<(), String> {
     let (manifest, _) = parse_pak()?;
     let embedded = manifest.version.clone();
+    stamp("pak parsed");
 
     // 端口活着：版本一致才复用；不一致（或老版本不报头）确认是自家旧 server 后杀掉重启
-    if std::net::TcpStream::connect(("127.0.0.1", PORT)).is_ok() {
+    if let Some(pid) = listening_pid()? {
+        stamp(&format!("port occupied pid={pid}"));
         if running_build().as_deref() == Some(embedded.as_str()) {
+            stamp("reuse running server");
             return Ok(());
         }
-        kill_stale_server()?;
+        stamp("stale server on port, kill");
+        kill_stale_server(&pid)?;
     }
+    stamp("port check done");
 
     let rt = ensure_runtime(data)?;
+    stamp("runtime ready");
     let server_exe = rt.join("folio-server.exe");
     let bundled = server_exe.is_file();
     let mut cmd = if bundled {
@@ -258,11 +312,17 @@ fn start_api(data: &Path, child_state: &ServerProc) -> Result<(), String> {
     let child = silent(&mut cmd)
         .env("PORT", PORT.to_string())
         .env("FOLIO_BUILD", &embedded)
-        .env("FOLIO_DIST", rt.join("dist"))
+        .env("FOLIO_DIST", rt.join("dist.pak"))
         .env("FOLIO_VAULT", data.join("vault"))
         .env("FOLIO_WORKSPACES", data.join("workspaces.json"))
         // 主程序路径给 server：设置 .md 默认打开方式时拿它写注册表 open command
         .env("FOLIO_APP_EXE", std::env::current_exe().unwrap_or_default())
+        // 启动计时账：server 侧时间与壳对齐
+        .env("FOLIO_BOOTLOG", data.join("boot-log.txt"))
+        .env(
+            "FOLIO_BOOT_T0",
+            BOOT_EPOCH_MS.get().copied().unwrap_or_default().to_string(),
+        )
         .spawn()
         .map_err(|e| {
             if bundled {
@@ -273,7 +333,9 @@ fn start_api(data: &Path, child_state: &ServerProc) -> Result<(), String> {
         })?;
 
     *child_state.0.lock().unwrap() = Some(child);
+    stamp("server spawned");
     wait_api(PORT);
+    stamp("api listening");
     Ok(())
 }
 
@@ -322,6 +384,16 @@ fn boot_fail(data: Option<&Path>, msg: String) -> String {
 }
 
 fn main() {
+    let _ = BOOT_T0.set(Instant::now());
+    let _ = BOOT_EPOCH_MS.set(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or_default(),
+    );
+    // epoch 也落账：进程创建时刻（WMI）对得上它时，差值就是 OS/杀软的 pre-main 耗时
+    stamp(&format!("main enter @{}", BOOT_EPOCH_MS.get().copied().unwrap_or_default()));
+
     let prevent = PreventDefaultBuilder::new()
         .with_flags(Flags::CONTEXT_MENU)
         .platform(PlatformOptions::new().default_context_menus(false))
@@ -342,9 +414,12 @@ fn main() {
             // __FOLIO_DESKTOP__ 由 VITE_FOLIO_DESKTOP 构建标记覆盖，这里不再补 eval。
             #[cfg(not(debug_assertions))]
             {
+                stamp("setup enter");
                 let _ = win.navigate(splash_url());
+                stamp("splash nav issued");
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
+                    stamp("boot thread start");
                     let boot = match data_dir() {
                         Ok(data) => {
                             let state = handle.state::<ServerProc>();
@@ -356,9 +431,11 @@ fn main() {
                         Ok(()) => {
                             if let Some(w) = handle.get_webview_window("main") {
                                 let _ = w.navigate(app_url("http://127.0.0.1:3790"));
+                                stamp("app nav issued");
                             }
                         }
                         Err((e, data)) => {
+                            stamp(&format!("boot fail: {e}"));
                             let _ = boot_fail(data.as_deref(), e);
                             handle.exit(1);
                         }

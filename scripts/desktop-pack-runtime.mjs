@@ -50,17 +50,32 @@ if (!indexHtml.includes('name="folio-desktop" content="1"')) {
     process.exit(1);
 }
 
-const inputs = [
-    serverEntry,
-    ...walk(distDir).map((rel) => [`dist/${rel}`, path.join(distDir, rel)]),
-];
+// dist 不逐文件进包：先打成单个 dist.pak（同 [manifest][blob] 格式、内层不压缩，
+// 外层 gzip 会整体压）。运行时只落 server + dist.pak 两个文件，
+// 静态资源由服务端从内存切片直读——Windows 建 766 个小文件要过杀软，实测 ~3s。
+const distFiles = walk(distDir);
+const distEntries = [];
+const distBlobs = [];
+let distOffset = 0;
+for (const rel of distFiles) {
+    const buf = fs.readFileSync(path.join(distDir, rel));
+    distEntries.push({ path: rel, offset: distOffset, len: buf.length });
+    distBlobs.push(buf);
+    distOffset += buf.length;
+}
+const distManifest = Buffer.from(JSON.stringify({ files: distEntries }));
+const distHead = Buffer.alloc(4);
+distHead.writeUInt32LE(distManifest.length, 0);
+const distPak = Buffer.concat([distHead, distManifest, ...distBlobs]);
+
+const inputs = [serverEntry, ['dist.pak', distPak]];
 
 const hash = crypto.createHash('sha256');
 const files = [];
 const blobs = [];
 let offset = 0;
-for (const [name, abs] of inputs) {
-    const buf = fs.readFileSync(abs);
+for (const [name, src] of inputs) {
+    const buf = Buffer.isBuffer(src) ? src : fs.readFileSync(src);
     hash.update(buf);
     files.push({ path: name, offset, len: buf.length });
     blobs.push(buf);
