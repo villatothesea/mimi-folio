@@ -444,6 +444,26 @@ fn app_url(base: &str) -> tauri::Url {
     url
 }
 
+/// 开屏页 HTML，注入 about:blank 自绘。不走 tauri.localhost 自定义协议：
+/// WV2 冷环境/版本迁移时首个协议导航偶发失败→「无法显示此页面」错误页，
+/// about:blank 永不失败，初始化脚本在 DOMContentLoaded 注入开屏 DOM。
+#[cfg(not(debug_assertions))]
+const SPLASH_HTML: &str = include_str!("../../stub-frontend/index.html");
+
+#[cfg(not(debug_assertions))]
+fn splash_init_js() -> String {
+    let esc = SPLASH_HTML
+        .replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace("${", "\\${");
+    format!(
+        "if(location.href==='about:blank'){{\
+           const w=()=>{{document.open();document.write(`{esc}`);document.close()}};\
+           document.readyState==='loading'?addEventListener('DOMContentLoaded',w):w();\
+         }}"
+    )
+}
+
 /// 窗口只亮一次：开屏首帧 / 兜底超时 / 导航后备 谁先谁负责。
 #[cfg(not(debug_assertions))]
 static WINDOW_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -542,12 +562,13 @@ fn main() {
             let win = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
-                tauri::WebviewUrl::App("index.html".into()),
+                tauri::WebviewUrl::External(tauri::Url::parse("about:blank").unwrap()),
             )
             .title("米素")
             .inner_size(1280.0, 840.0)
             .decorations(false)
             .visible(false)
+            .initialization_script(&splash_init_js())
             // 纯本地应用不需要网络栈：本机存在流量过滤时，WV2 建 webview 时的
             // 组件更新/CRL/代理探测都会走重传超时（实测偶发 17-20s），全掐掉。
             .additional_browser_args(
@@ -569,7 +590,13 @@ fn main() {
             #[cfg(not(debug_assertions))]
             {
                 stamp("window built");
-                // 兜底：信标不来也按时亮窗
+                // about:blank 是初始文档、不产 PageLoadEvent——开屏靠注入脚本就位，
+                // 建窗后稍等渲染管线起来即亮窗；on_page_load 与长兜底仍保留。
+                let w2 = win.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(400));
+                    show_window_once(&w2, "post-build");
+                });
                 let w3 = win.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_secs(5));
