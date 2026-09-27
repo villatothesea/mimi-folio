@@ -43,6 +43,8 @@ async function serveStatic(url: string, res: ServerResponse): Promise<boolean> {
 
 export function createAppServer(): import('node:http').Server {
     return createServer(async (req, res) => {
+        // 桌面壳拿这个头核对端口上的服务版本；旧 server 残留时新 exe 据此杀掉重启。
+        if (process.env.FOLIO_BUILD) res.setHeader('X-Folio-Build', process.env.FOLIO_BUILD);
         if (await handleFolioApi(req, res)) return;
         if (await serveAttachment(req, res)) return;
         if (await serveStatic(req.url ?? '/', res)) return;

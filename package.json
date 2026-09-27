@@ -14,7 +14,8 @@
  "check:muya": "node scripts/check-muya-source.mjs",
     "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
     "desktop:build": "tauri build --config desktop/src-tauri/tauri.conf.json",
-    "desktop:portable": "node scripts/desktop-build.mjs && cargo build --release --manifest-path desktop/src-tauri/Cargo.toml && node scripts/desktop-deliver.mjs"
+    "desktop:portable": "node scripts/desktop-build.mjs && cargo build --release --manifest-path desktop/src-tauri/Cargo.toml && node scripts/desktop-deliver.mjs",
+ "desktop:portable:lite": "node scripts/desktop-build.mjs --lite && cargo build --release --manifest-path desktop/src-tauri/Cargo.toml && node scripts/desktop-deliver.mjs --lite"
   },
   "engines": {
     "node": ">=22.18.0"

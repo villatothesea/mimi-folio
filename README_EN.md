@@ -36,7 +36,9 @@ If you're genuinely interested, there are two ways to run it.
 
 1. Local server + browser: clone the repo and let your agent read the code — it will handle everything. Dependencies, server, browser, done.
 
-2. Single portable exe: grab `mimi-folio.exe` from Releases — double-click and go, no install. Data lives in `folio-data/` right next to the exe; copying the whole folder is a complete migration.
+2. Single portable exe: two variants on Releases — data lives in `folio-data/` right next to the exe; copying the whole folder is a complete migration.
+   - `mimi-folio.exe` (~29 MB): bundled Node runtime — double-click and go, nothing to install;
+   - `mimi-folio-lite.exe` (~8 MB): no bundled runtime — **requires Node.js ≥ 20 on the machine** (<https://nodejs.org>), then double-click and go.
 
 
 

@@ -7,9 +7,10 @@ import path from 'node:path';
 
 import { repoRoot } from './desktop-pnpm.mjs';
 
+const lite = process.argv.includes('--lite');
 const targetDir = process.env.FOLIO_PORTABLE_DIR ?? 'D:\\Programs\\MimiFolio';
 const exe = path.join(repoRoot, 'desktop', 'src-tauri', 'target', 'release', 'folio-desktop.exe');
-const out = path.join(targetDir, 'mimi-folio.exe');
+const out = path.join(targetDir, lite ? 'mimi-folio-lite.exe' : 'mimi-folio.exe');
 
 fs.mkdirSync(targetDir, { recursive: true });
 fs.copyFileSync(exe, out);

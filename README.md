@@ -36,7 +36,9 @@
 
 1. 本地服务器+浏览器：把仓库 clone 下来，让你的 agent 读一遍代码，它会搞定一切——装依赖、起服务、开浏览器。
 
-2. 单exe绿色文件：Releases 里的 `mimi-folio.exe`，双击即用，不用装。数据放在程序旁边的 `folio-data/`，整个文件夹拷走就是迁移。
+2. 单exe绿色文件：Releases 里两个变体，数据都放在程序旁边的 `folio-data/`，整个文件夹拷走就是迁移。
+   - `mimi-folio.exe`（~29 MB）：内嵌 Node 运行时，双击即用，什么都不用装；
+   - `mimi-folio-lite.exe`（~8 MB）：不内嵌运行时，**需要本机已装 Node.js ≥ 20**（<https://nodejs.org>），装过就双击即用。
 
 
 
