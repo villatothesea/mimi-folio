@@ -286,6 +286,31 @@ fn app_url(base: &str) -> tauri::Url {
     url
 }
 
+/// 开屏页：内嵌 data: URL，不进 pak 不走网络，webview 一就绪就能画。
+/// 白底 + 转圈 + 字样，盖住服务端拉起（node/pkg exe ~0.1–1.5s）这段真空期。
+#[cfg(not(debug_assertions))]
+fn splash_url() -> tauri::Url {
+    const HTML: &str = concat!(
+        "<!DOCTYPE html><meta charset=utf-8>",
+        "<body style='margin:0;height:100vh;display:flex;flex-direction:column;gap:14px;",
+        "align-items:center;justify-content:center;background:#fff'>",
+        "<div style='width:20px;height:20px;border:2.5px solid #e4e4e4;",
+        "border-top-color:#8a8a8a;border-radius:50%;animation:s .7s linear infinite'></div>",
+        "<div style='font:12px/1 system-ui;color:#9a9a9a;letter-spacing:4px'>米素 folio</div>",
+        "<style>@keyframes s{to{transform:rotate(360deg)}}</style>",
+    );
+    let mut enc = String::with_capacity(HTML.len() * 3);
+    for &b in HTML.as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                enc.push(b as char)
+            }
+            _ => enc.push_str(&format!("%{b:02X}")),
+        }
+    }
+    tauri::Url::parse(&format!("data:text/html;charset=utf-8,{enc}")).unwrap()
+}
+
 /// 启动失败不留黑盒：写 boot-error.txt 并用系统默认程序打开它。
 fn boot_fail(data: Option<&Path>, msg: String) -> String {
     let log = data
@@ -311,19 +336,34 @@ fn main() {
             let Some(win) = app.get_webview_window("main") else {
                 return Ok(());
             };
-            // 窗口先停在 about:blank，服务就绪后统一 navigate——避免抢跑撞上「连接被拒」错误页。
+            // 开屏页先行盖掉白屏；服务端启动挪后台线程，
+            // WebView2 初始化 / 开屏渲染 / node 拉起三线并行，setup 即刻返回。
+            // 服务就绪后统一 navigate 到真页面——避免抢跑撞上「连接被拒」错误页。
             // __FOLIO_DESKTOP__ 由 VITE_FOLIO_DESKTOP 构建标记覆盖，这里不再补 eval。
             #[cfg(not(debug_assertions))]
             {
-                let state = app.state::<ServerProc>();
-                let boot = match data_dir() {
-                    Ok(data) => start_api(&data, state.inner()).map_err(|e| (e, Some(data))),
-                    Err(e) => Err((e, None)),
-                };
-                if let Err((e, data)) = boot {
-                    return Err(boot_fail(data.as_deref(), e).into());
-                }
-                let _ = win.navigate(app_url("http://127.0.0.1:3790"));
+                let _ = win.navigate(splash_url());
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let boot = match data_dir() {
+                        Ok(data) => {
+                            let state = handle.state::<ServerProc>();
+                            start_api(&data, state.inner()).map_err(|e| (e, Some(data)))
+                        }
+                        Err(e) => Err((e, None)),
+                    };
+                    match boot {
+                        Ok(()) => {
+                            if let Some(w) = handle.get_webview_window("main") {
+                                let _ = w.navigate(app_url("http://127.0.0.1:3790"));
+                            }
+                        }
+                        Err((e, data)) => {
+                            let _ = boot_fail(data.as_deref(), e);
+                            handle.exit(1);
+                        }
+                    }
+                });
             }
             #[cfg(debug_assertions)]
             let _ = win.navigate(app_url("http://127.0.0.1:5174"));
