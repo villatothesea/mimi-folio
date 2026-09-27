@@ -1,7 +1,23 @@
 <!doctype html>
-<!-- 桌面壳窗口先停在 about:blank，folio-server 就绪后由 Rust 侧 navigate 到 127.0.0.1:3790。
-     真正的页面由 folio-server 端 folio-data/runtime/dist，不从这里出。 -->
+<!-- 桌面壳开屏页：窗口建了先停在 hidden（tauri.conf.json visible:false），
+     WebView2 初始化期间的空白不上屏；本页第一帧画完 emit 信标，壳据此 show()。
+     真正的页面由 Rust 侧在 folio-server 就绪后 navigate 到 127.0.0.1:3790。 -->
 <html>
 <head><meta charset="utf-8"><title>米素</title></head>
-<body></body>
+<body
+  style="margin:0;height:100vh;display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;background:#fff"
+>
+  <div
+    style="width:20px;height:20px;border:2.5px solid #e4e4e4;border-top-color:#8a8a8a;border-radius:50%;animation:s .7s linear infinite"
+  ></div>
+  <div style="font:12px/1 system-ui;color:#9a9a9a;letter-spacing:4px">米素 folio</div>
+  <style>
+    @keyframes s {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+  <!-- 亮窗信号由壳侧 on_page_load(Finished) 出，页面不用回话。 -->
+</body>
 </html>

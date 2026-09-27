@@ -348,29 +348,16 @@ fn app_url(base: &str) -> tauri::Url {
     url
 }
 
-/// 开屏页：内嵌 data: URL，不进 pak 不走网络，webview 一就绪就能画。
-/// 白底 + 转圈 + 字样，盖住服务端拉起（node/pkg exe ~0.1–1.5s）这段真空期。
+/// 窗口只亮一次：开屏首帧 / 兜底超时 / 导航后备 谁先谁负责。
 #[cfg(not(debug_assertions))]
-fn splash_url() -> tauri::Url {
-    const HTML: &str = concat!(
-        "<!DOCTYPE html><meta charset=utf-8>",
-        "<body style='margin:0;height:100vh;display:flex;flex-direction:column;gap:14px;",
-        "align-items:center;justify-content:center;background:#fff'>",
-        "<div style='width:20px;height:20px;border:2.5px solid #e4e4e4;",
-        "border-top-color:#8a8a8a;border-radius:50%;animation:s .7s linear infinite'></div>",
-        "<div style='font:12px/1 system-ui;color:#9a9a9a;letter-spacing:4px'>米素 folio</div>",
-        "<style>@keyframes s{to{transform:rotate(360deg)}}</style>",
-    );
-    let mut enc = String::with_capacity(HTML.len() * 3);
-    for &b in HTML.as_bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                enc.push(b as char)
-            }
-            _ => enc.push_str(&format!("%{b:02X}")),
-        }
+static WINDOW_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(not(debug_assertions))]
+fn show_window_once(win: &tauri::WebviewWindow, why: &str) {
+    if !WINDOW_SHOWN.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        let _ = win.show();
+        stamp(&format!("window shown ({why})"));
     }
-    tauri::Url::parse(&format!("data:text/html;charset=utf-8,{enc}")).unwrap()
 }
 
 /// 启动失败不留黑盒：写 boot-error.txt 并用系统默认程序打开它。
@@ -399,59 +386,101 @@ fn main() {
         .platform(PlatformOptions::new().default_context_menus(false))
         .build();
 
-    let server = ServerProc(Mutex::new(None));
+    let server = std::sync::Arc::new(ServerProc(Mutex::new(None)));
+
+    // 服务端拉起不依赖窗口，先于 Builder 开跑——与 Tauri/WebView2 初始化并行，
+    // 等 webview 能画开屏页时 server 往往已经在监听了。
+    #[cfg(not(debug_assertions))]
+    let boot = {
+        let server = server.clone();
+        std::thread::spawn(move || {
+            stamp("boot thread start");
+            match data_dir() {
+                Ok(data) => start_api(&data, &server).map_err(|e| (e, Some(data))),
+                Err(e) => Err((e, None)),
+            }
+        })
+    };
 
     tauri::Builder::default()
         .plugin(prevent)
         .manage(server)
-        .setup(|app| {
-            let Some(win) = app.get_webview_window("main") else {
-                return Ok(());
-            };
-            // 开屏页先行盖掉白屏；服务端启动挪后台线程，
-            // WebView2 初始化 / 开屏渲染 / node 拉起三线并行，setup 即刻返回。
-            // 服务就绪后统一 navigate 到真页面——避免抢跑撞上「连接被拒」错误页。
-            // __FOLIO_DESKTOP__ 由 VITE_FOLIO_DESKTOP 构建标记覆盖，这里不再补 eval。
+        .setup(move |app| {
+            // 窗口不进 conf：要挂 on_page_load 钩子（conf 建的窗挂不了）。
+            // release：hidden 起手，初始页 = stub-frontend 开屏页（tauri 协议），
+            //   开屏 load 完成才 show——WebView2 冷初始化的空白全程不上屏。
+            //   服务就绪后统一 navigate 到真页面，避免抢跑「连接被拒」。
+            // dev：直接明窗打 devUrl。
+            #[cfg(debug_assertions)]
+            let win = tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::External(app_url("http://127.0.0.1:5174")),
+            )
+            .title("米素")
+            .inner_size(1280.0, 840.0)
+            .decorations(false)
+            .build()?;
+            #[cfg(not(debug_assertions))]
+            let win = tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App("index.html".into()),
+            )
+            .title("米素")
+            .inner_size(1280.0, 840.0)
+            .decorations(false)
+            .visible(false)
+            .on_page_load(|w, payload| {
+                if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                    // 首个 Finished = 开屏页加载完（DOM 就绪，show 后首帧即开屏）
+                    let w = w.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_millis(80));
+                        show_window_once(&w, "page loaded");
+                    });
+                }
+            })
+            .build()?;
             #[cfg(not(debug_assertions))]
             {
                 stamp("setup enter");
-                let _ = win.navigate(splash_url());
-                stamp("splash nav issued");
-                let handle = app.handle().clone();
+                // 兜底：信标不来也按时亮窗
+                let w3 = win.clone();
                 std::thread::spawn(move || {
-                    stamp("boot thread start");
-                    let boot = match data_dir() {
-                        Ok(data) => {
-                            let state = handle.state::<ServerProc>();
-                            start_api(&data, state.inner()).map_err(|e| (e, Some(data)))
-                        }
-                        Err(e) => Err((e, None)),
-                    };
-                    match boot {
-                        Ok(()) => {
-                            if let Some(w) = handle.get_webview_window("main") {
-                                let _ = w.navigate(app_url("http://127.0.0.1:3790"));
-                                stamp("app nav issued");
-                            }
-                        }
-                        Err((e, data)) => {
-                            stamp(&format!("boot fail: {e}"));
-                            let _ = boot_fail(data.as_deref(), e);
-                            handle.exit(1);
-                        }
+                    std::thread::sleep(Duration::from_secs(5));
+                    show_window_once(&w3, "fallback 5s")
+                });
+
+                let w4 = win.clone();
+                let handle = app.handle().clone();
+                std::thread::spawn(move || match boot.join() {
+                    Ok(Ok(())) => {
+                        let _ = w4.navigate(app_url("http://127.0.0.1:3790"));
+                        stamp("app nav issued");
+                        // 开屏没来得及画就连上服务的情况：导航后兜底亮窗
+                        std::thread::sleep(Duration::from_millis(900));
+                        show_window_once(&w4, "post-nav fallback");
+                    }
+                    Ok(Err((e, data))) => {
+                        stamp(&format!("boot fail: {e}"));
+                        let _ = boot_fail(data.as_deref(), e);
+                        handle.exit(1);
+                    }
+                    Err(_) => {
+                        stamp("boot thread panicked");
+                        handle.exit(1);
                     }
                 });
             }
-            #[cfg(debug_assertions)]
-            let _ = win.navigate(app_url("http://127.0.0.1:5174"));
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("failed to build tauri")
         .run(|app, event| {
             if matches!(event, RunEvent::Exit) {
-                if let Some(state) = app.try_state::<ServerProc>() {
-                    if let Some(mut child) = state.0.lock().unwrap().take() {
+                if let Some(state) = app.try_state::<std::sync::Arc<ServerProc>>() {
+                    if let Some(mut child) = state.inner().0.lock().unwrap().take() {
                         let _ = child.kill();
                     }
                 }
