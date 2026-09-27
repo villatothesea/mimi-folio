@@ -7,9 +7,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/check-muya-source.mjs && tsc --noEmit && vite build",
     "start": "node src/server/run.ts",
     "test": "node --test \"src/**/*.test.ts\"",
+ "lock:muya": "node scripts/check-muya-source.mjs --write",
+ "check:muya": "node scripts/check-muya-source.mjs",
     "desktop:dev": "tauri dev --config desktop/src-tauri/tauri.conf.json",
     "desktop:build": "tauri build --config desktop/src-tauri/tauri.conf.json",
     "desktop:portable": "node scripts/desktop-build.mjs && cargo build --release --manifest-path desktop/src-tauri/Cargo.toml && node scripts/desktop-deliver.mjs"
