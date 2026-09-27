@@ -1,0 +1,121 @@
+--- a/src/clipboard/copyData.ts
++++ b/src/clipboard/copyData.ts
+@@ -1,11 +1,11 @@
+ import type Content from '../block/base/content';
+-import type Parent from '../block/base/parent';
+ import type TreeNode from '../block/base/treeNode';
+ import type { Muya } from '../muya';
+ import type { ISelection } from '../selection/types';
+ import type { TState } from '../state/types';
+ import type { Nullable } from '../types';
+ import type Clipboard from './index';
++import Parent from '../block/base/parent';
+ import StateToMarkdown from '../state/stateToMarkdown';
+ import { getClipBoardHtml, getSanitizeClipboardHtml } from '../utils/marked';
+ import { CopyType } from './types';
+@@ -297,10 +297,35 @@
+     }
+ 
+     // List or block-quote: keep only the selected range, with both boundary
+-    // items/paragraphs truncated to the caret.
++    // items/paragraphs truncated to the caret. Emit from the deepest container
++    // still enclosing both ends — wrapping the ancestor chain would serialize
++    // as empty wrapper items (`1. 1. 1. text`) that re-nest into garbage on
++    // paste.
++    let container = anchorOutMostBlock as Parent;
++    for (;;) {
++        const childBlocks = container.children.map(child => child);
++        const startIdx = childBlocks.findIndex(
++            child => child === startBlock || startBlock.isInBlock(child as Parent),
++        );
++        const endIdx = childBlocks.findIndex(
++            child => child === endBlock || endBlock.isInBlock(child as Parent),
++        );
++        if (startIdx < 0 || endIdx < 0 || startIdx !== endIdx)
++            break;
++        const child = childBlocks[startIdx];
++        if (!(child instanceof Parent))
++            break;
++        container = child;
++    }
++
++    // A bare list item isn't a document-level block — emit its parent list so
++    // the range stays a well-formed list state.
++    if (/list-item/.test(container.blockName) && container.parent instanceof Parent)
++        container = container.parent;
++
+     copyState.push(
+         buildRangeContainerState(
+-            anchorOutMostBlock as Parent,
++            container,
+             startBlock,
+             startOffset,
+             endBlock,
+--- a/src/clipboard/__tests__/copyWithinContainer.spec.ts
++++ b/src/clipboard/__tests__/copyWithinContainer.spec.ts
+@@ -75,6 +75,65 @@
+     });
+ });
+ 
++describe('copy within a nested list level', () => {
++    it('emits only the selected sibling items, not ancestor wrappers', () => {
++        const muya = bootMuya(
++            '1. 容器层\n'
++            + '    1. 左栏\n'
++            + '    2. 主窗\n'
++            + '        1. tab\n'
++            + '        2. 主窗主体和dock\n'
++            + '        3. 轨道面板\n'
++            + '        4. 轨道主体\n'
++            + '        5. 时间轴+走带线\n'
++            + '    3. 右栏\n'
++            + '    4. 底栏\n'
++            + '2. 控件\n',
++        );
++        const scrollPage = muya.editor.scrollPage!;
++
++        const leaves: Content[] = [];
++        let leaf: Content | null = scrollPage.firstContentInDescendant();
++        while (leaf) {
++            leaves.push(leaf);
++            leaf = leaf.nextContentInContext() ?? null;
++        }
++
++        const startLeaf = leaves.find(l => l.text === '轨道面板')!;
++        const endLeaf = leaves.find(l => l.text === '时间轴+走带线')!;
++        stubCrossSelection(muya, startLeaf, 0, endLeaf, endLeaf.text.length);
++
++        // Ancestor items/list wrappers must not ride along: emitting them as
++        // childless items serializes to `1. 1. 1. text`, which pastes back as
++        // spurious nested single-item lists.
++        expect(muya.editor.clipboard.getClipboardData().text)
++            .toBe('1. 轨道面板\n2. 轨道主体\n3. 时间轴+走带线\n');
++    });
++
++    it('keeps ancestors only as far as the range diverges', () => {
++        const muya = bootMuya('- a\n- b\n    - b1\n    - b2\n- c\n');
++        const scrollPage = muya.editor.scrollPage!;
++
++        const leaves: Content[] = [];
++        let leaf: Content | null = scrollPage.firstContentInDescendant();
++        while (leaf) {
++            leaves.push(leaf);
++            leaf = leaf.nextContentInContext() ?? null;
++        }
++
++        const b1 = leaves.find(l => l.text === 'b1')!;
++        const c = leaves.find(l => l.text === 'c')!;
++        stubCrossSelection(muya, b1, 0, c, c.text.length);
++
++        // b1 and c diverge inside the top-level list, so that list is the
++        // emitted container: item b keeps only its selected sub-list side.
++        const { text } = muya.editor.clipboard.getClipboardData();
++        expect(text).toContain('b1');
++        expect(text).toContain('- c');
++        expect(text).not.toContain('- a');
++    });
++});
++
+ describe('copy within a single block-quote', () => {
+     it('truncates both boundary paragraphs, not the whole quote', () => {
+         const muya = bootMuya('> alpha\n>\n> beta\n');
