@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { after, describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 
 import { closeVaultWatcher } from './api.ts';
 import { createAppServer } from './main.ts';
@@ -310,6 +310,144 @@ describe('库外链入（单元 10）', () => {
             false,
             '不得把 .folio-origin 写进新源',
         );
+    });
+});
+
+describe('指针槽（跨卷/无特权兜底；FOLIO_LINK_MODE=pointer 跳过 OS 级链接）', () => {
+    before(() => {
+        process.env.FOLIO_LINK_MODE = 'pointer';
+    });
+    after(() => {
+        delete process.env.FOLIO_LINK_MODE;
+    });
+
+    const exists = (p: string) => fs.lstat(p).then(() => true, () => false);
+    /** 跨用例传递：links/复用.md 当前指到的真源路径 */
+    let reuseTarget = '';
+
+    it('链入不落真文件不落拷贝：vault 里只有 .folio-link 指针，read 直达真源', async () => {
+        const src = path.join(outsideDir, '跨盘文档.md');
+        await fs.writeFile(src, '# 跨盘\n\n指针真源在 vault 外。\n', 'utf8');
+        const res = await fetch(`${base}/folio/v1/link`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: src }),
+        });
+        assert.equal(res.status, 200);
+        assert.deepEqual(await res.json(), { path: 'links/跨盘文档.md' });
+
+        const slot = path.join(vault, 'links', '跨盘文档.md');
+        assert.equal(await exists(slot), false, '槽位不落真文件/链接');
+        const sidecar = `${slot}.folio-link`;
+        assert.ok((await fs.readFile(sidecar, 'utf8')).includes('跨盘文档.md'), '指针只记路径');
+        assert.equal(await fs.readFile(src, 'utf8'), '# 跨盘\n\n指针真源在 vault 外。\n', '真源不动');
+
+        const list = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string; linked?: boolean }[];
+        assert.equal(list.find((f) => f.path === 'links/跨盘文档.md')?.linked, true);
+        const doc = (await (await fetch(`${base}/folio/v1/doc?path=${encodeURIComponent('links/跨盘文档.md')}`)).json()) as { markdown: string };
+        assert.ok(doc.markdown.includes('指针真源在 vault 外'));
+    });
+
+    it('write 穿透真源；.bak 留 vault 侧不弄脏真源目录', async () => {
+        const src = path.join(outsideDir, '跨盘文档.md');
+        const put = await fetch(`${base}/folio/v1/doc`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: 'links/跨盘文档.md', markdown: '# 跨盘\n\n穿透写回。\n' }),
+        });
+        assert.equal(put.status, 204);
+        assert.equal(await fs.readFile(src, 'utf8'), '# 跨盘\n\n穿透写回。\n');
+        assert.ok(await exists(path.join(vault, 'links', '跨盘文档.md.bak')), '快照在 vault 槽位旁');
+        assert.equal(await exists(`${src}.bak`), false, '真源旁不得落 .bak');
+    });
+
+    it('open-external 指针幂等；断指针腾位复用同槽', async () => {
+        const srcA = path.join(outsideDir, '复用.md');
+        await fs.writeFile(srcA, '# 复用A\n', 'utf8');
+        for (let i = 0; i < 2; i++) {
+            const res = await fetch(`${base}/folio/v1/open-external`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ path: srcA }),
+            });
+            assert.deepEqual(await res.json(), { path: 'links/复用.md' });
+        }
+        // 真源被挪走 → 指针断；同名新文件链入复用这个槽
+        await fs.rm(srcA, { force: true });
+        const dirB = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-outside-c-'));
+        const srcB = path.join(dirB, '复用.md');
+        reuseTarget = srcB;
+        await fs.writeFile(srcB, '# 复用B\n', 'utf8');
+        const res = await fetch(`${base}/folio/v1/open-external`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: srcB }),
+        });
+        assert.equal(res.status, 200);
+        assert.deepEqual(await res.json(), { path: 'links/复用.md' });
+        const doc = (await (await fetch(`${base}/folio/v1/doc?path=${encodeURIComponent('links/复用.md')}`)).json()) as { markdown: string };
+        assert.ok(doc.markdown.includes('复用B'));
+    });
+
+    it('move 搬指针槽不碰真源；copy 落正文成 vault 真文件', async () => {
+        const mv = await fetch(`${base}/folio/v1/move`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ from: 'links/复用.md', to: 'links/复用-搬.md' }),
+        });
+        assert.equal(mv.status, 200, await mv.text());
+        const doc = (await (await fetch(`${base}/folio/v1/doc?path=${encodeURIComponent('links/复用-搬.md')}`)).json()) as { markdown: string };
+        assert.ok(doc.markdown.includes('复用B'));
+
+        const cp = await fetch(`${base}/folio/v1/copy`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ from: 'links/复用-搬.md', to: 'notes/复用-副本.md' }),
+        });
+        assert.equal(cp.status, 200, await cp.text());
+        assert.ok(
+            (await fs.readFile(path.join(vault, 'notes', '复用-副本.md'), 'utf8')).includes('复用B'),
+            'copy 按既有语义落成正文',
+        );
+    });
+
+    it('delete 只摘槽，真源不动', async () => {
+        const del = await fetch(`${base}/folio/v1/delete`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ from: 'links/复用-搬.md' }),
+        });
+        assert.equal(del.status, 204);
+        assert.equal(await exists(path.join(vault, 'links', '复用-搬.md.folio-link')), false, '指针槽摘掉');
+        assert.equal(await fs.readFile(reuseTarget, 'utf8'), '# 复用B\n', '真源不许删');
+        const list = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string }[];
+        assert.ok(!list.some((f) => f.path === 'links/复用-搬.md'));
+    });
+
+    it('文件夹逐文件兜底时也走指针槽，新文件补链仍是指针', async () => {
+        const src = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-pdir-'));
+        await fs.writeFile(path.join(src, '甲.md'), '# 指针目录甲\n', 'utf8');
+        const res = await fetch(`${base}/folio/v1/folderlink`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: src }),
+        });
+        assert.equal(res.status, 200, await res.text());
+        const dirName = path.basename(src);
+        const slot = path.join(vault, 'links', dirName, '甲.md');
+        assert.equal(await exists(slot), false);
+        assert.ok(await exists(`${slot}.folio-link`));
+
+        await fs.writeFile(path.join(src, '乙.md'), '# 指针目录乙\n', 'utf8');
+        const list = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string }[];
+        assert.ok(list.some((f) => f.path === `links/${dirName}/乙.md`), '源目录新文件经指针槽补链');
+        const put = await fetch(`${base}/folio/v1/doc`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: `links/${dirName}/乙.md`, markdown: '# 乙\n穿透\n' }),
+        });
+        assert.equal(put.status, 204);
+        assert.equal(await fs.readFile(path.join(src, '乙.md'), 'utf8'), '# 乙\n穿透\n');
     });
 });
 

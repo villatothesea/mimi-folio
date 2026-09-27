@@ -156,33 +156,75 @@ function kindOf(rel: string): 'note' | 'memo' | undefined {
 
 const execFileP = promisify(execFile);
 const ORIGIN_FILE = '.folio-origin';
+/** 指针槽后缀：<槽位路径>.folio-link，纯文本一行 = 真源绝对路径（同 .folio-origin 风格）。 */
+const LINK_SUFFIX = '.folio-link';
 
 function isOutsideVault(root: string, abs: string): boolean {
     const rel = path.relative(root, abs);
     return rel.startsWith('..') || path.isAbsolute(rel);
 }
 
+/** 读一个 .folio-link 指针文件的内容；没有/不是绝对路径回 null。 */
+async function readPointerFile(sidecar: string): Promise<string | null> {
+    const raw = await fs.readFile(sidecar, 'utf8').catch(() => '');
+    const line = raw.split(/\r?\n/).map((s) => s.trim()).find(Boolean);
+    return line && path.isAbsolute(line) ? path.resolve(line) : null;
+}
+
+/** 读槽位旁的指针（槽位路径自动补 .folio-link 后缀）。 */
+async function readPointer(abs: string): Promise<string | null> {
+    return readPointerFile(sidecarOf(abs));
+}
+
+function sidecarOf(abs: string): string {
+    return `${abs}${LINK_SUFFIX}`;
+}
+
+/** 槽位真身：槽上有真文件/链接用它自己；只有指针槽就穿透到真源（读写都走这层）。 */
+async function resolveDocAbs(root: string, rel: string): Promise<string> {
+    const abs = path.join(root, rel);
+    if (await fs.lstat(abs).catch(() => null)) return abs;
+    return (await readPointer(abs)) ?? abs;
+}
+
+/** 槽位被占：真文件/链接在，或指针槽在（死活都算占，复用由调用方判）。 */
+async function slotTaken(abs: string): Promise<boolean> {
+    if (await fs.lstat(abs).catch(() => null)) return true;
+    return fileExists(sidecarOf(abs));
+}
+
+/**
+ * 槽位建链三级：符号链接 → 同卷硬链接 → 指针槽（.folio-link 只记真源路径，读写穿透）。
+ * 哪一级都只记指向，**绝不拷贝正文**；跨卷/无开发者模式/exFAT/UNC 由指针槽兜住。
+ * FOLIO_LINK_MODE=pointer 跳过 OS 级（测试与排障用）。
+ */
 async function linkFileInto(srcFile: string, destFile: string): Promise<void> {
-    if (await fileExists(destFile)) return;
-    try {
-        await fs.symlink(srcFile, destFile, 'file');
-    } catch {
+    if (await slotTaken(destFile)) return;
+    if (process.env.FOLIO_LINK_MODE !== 'pointer') {
+        try {
+            await fs.symlink(srcFile, destFile, 'file');
+            return;
+        } catch {
+            // 无特权/不支持符号链接 → 下一级
+        }
         try {
             await fs.link(srcFile, destFile);
-        } catch (err) {
-            throw new Error(
-                `建不了链接（${(err as NodeJS.ErrnoException).code}）：`
-                + '符号链接需要开发者模式/管理员，硬链接需要与 vault 同一磁盘卷。'
-                + '按规矩不拷贝正文，未做任何写入。',
-            );
+            return;
+        } catch {
+            // 跨卷/非 NTFS → 落指针槽
         }
+    }
+    try {
+        await fs.writeFile(sidecarOf(destFile), `${srcFile}\n`, 'utf8');
+    } catch (err) {
+        throw new Error(`连指针槽都写不了（${(err as NodeJS.ErrnoException).code}）：vault 不可写，未做任何拷贝`);
     }
 }
 
 /**
  * 库外 md 链入 vault/links/（单元 10）。
  * 链接优先级：符号链接 → 同卷硬链接（Windows 无特权时的等价物，同 inode 仍是
- * 同一份正文）。两者都失败就抛错——**绝不拷贝正文当「入库」**。
+ * 同一份正文）→ 指针槽（跨卷兜底）。哪级都不拷正文。
  */
 async function linkOutside(root: string, absSource: string): Promise<string> {
     if (!path.isAbsolute(absSource)) throw new Error('必须是绝对路径');
@@ -198,7 +240,14 @@ async function linkOutside(root: string, absSource: string): Promise<string> {
     await fs.mkdir(linksDir, { recursive: true });
     const name = path.basename(resolved);
     const dest = path.join(linksDir, name);
-    if (await fileExists(dest)) throw new Error(`links/${name} 已存在`);
+    if (await fs.lstat(dest).catch(() => null)) throw new Error(`links/${name} 已存在`);
+    const cur = await readPointer(dest);
+    if (cur) {
+        if (await fs.stat(cur).then((s) => s.isFile()).catch(() => false)) {
+            throw new Error(`links/${name} 已存在`);
+        }
+        await fs.rm(sidecarOf(dest), { force: true }); // 断指针占位，腾出来复用
+    }
 
     await linkFileInto(resolved, dest);
     invalidate(root);
@@ -236,6 +285,14 @@ async function openExternalDoc(root: string, absSource: string): Promise<string>
             if (dst && dst.dev === stat.dev && dst.ino === stat.ino) return `links/${name}`;
             if (dst) continue; // 同名不同文件 → 下一个序号
             await fs.rm(dest, { force: true }); // 断链占位，腾出来复用
+        } else {
+            // 指针槽：同路径幂等回；指向别的活文件就让位序号；断指针腾出来复用
+            const cur = await readPointer(dest);
+            if (cur) {
+                if (samePath(cur, resolved)) return `links/${name}`;
+                if (await fs.stat(cur).catch(() => null)) continue;
+                await fs.rm(sidecarOf(dest), { force: true });
+            }
         }
         await linkFileInto(resolved, dest);
         invalidate(root);
@@ -343,8 +400,14 @@ function samePath(a: string, b: string): boolean {
 
 async function inferSourceDir(destDir: string, root: string): Promise<string | null> {
     for (const name of await fs.readdir(destDir)) {
-        if (name.startsWith('.') || !DOC_RE.test(name)) continue;
+        if (name.startsWith('.')) continue;
         const abs = path.join(destDir, name);
+        if (name.endsWith(LINK_SUFFIX)) {
+            const target = await readPointerFile(abs);
+            if (target) return path.dirname(target);
+            continue;
+        }
+        if (!DOC_RE.test(name)) continue;
         const lst = await fs.lstat(abs).catch(() => null);
         if (!lst) continue;
         if (lst.isSymbolicLink()) {
@@ -369,17 +432,21 @@ async function linkDirAt(srcDir: string, dest: string): Promise<void> {
 
 /** 目录联接优先；失败则逐文件链接并记下源路径。不拷贝正文。 */
 async function attachOutsideDir(srcDir: string, dest: string): Promise<void> {
-    try {
-        await linkDirAt(srcDir, dest);
-    } catch {
-        await fs.mkdir(dest, { recursive: true });
-        await writeOrigin(dest, srcDir);
-        await syncDirFiles(srcDir, dest);
+    if (process.env.FOLIO_LINK_MODE !== 'pointer') {
+        try {
+            await linkDirAt(srcDir, dest);
+            return;
+        } catch {
+            // 联接不成 → 逐文件槽位（里面再各自三级兜底）
+        }
     }
+    await fs.mkdir(dest, { recursive: true });
+    await writeOrigin(dest, srcDir);
+    await syncDirFiles(srcDir, dest);
 }
 
 async function collectDocs(dir: string, prefix: string): Promise<string[]> {
-    const linked: string[] = [];
+    const linked = new Set<string>();
     async function walk(absDir: string, rel: string): Promise<void> {
         for (const name of await fs.readdir(absDir).catch(() => [] as string[])) {
             if (name.startsWith('.')) continue;
@@ -387,11 +454,18 @@ async function collectDocs(dir: string, prefix: string): Promise<string[]> {
             const child = `${rel}/${name}`;
             const st = await fs.stat(abs).catch(() => null);
             if (st?.isDirectory()) await walk(abs, child);
-            else if (st?.isFile() && DOC_RE.test(name)) linked.push(child);
+            else if (st?.isFile() && DOC_RE.test(name)) linked.add(child);
+            else if (st?.isFile() && name.endsWith(LINK_SUFFIX)) {
+                // 指针槽：能指到活真源才算链成的文档（断指针等同断链，不出清单）
+                const docRel = child.slice(0, -LINK_SUFFIX.length);
+                const target = await readPointerFile(abs);
+                const ok = target && await fs.stat(target).then((s) => s.isFile()).catch(() => false);
+                if (ok && DOC_RE.test(docRel)) linked.add(docRel);
+            }
         }
     }
     await walk(dir, prefix);
-    return linked;
+    return [...linked];
 }
 
 function isTopLinkDir(rel: string): boolean {
@@ -533,7 +607,7 @@ async function syncDirFiles(srcDir: string, destDir: string): Promise<boolean> {
             continue;
         }
         if (!st.isFile() || !DOC_RE.test(name)) continue;
-        if (await fileExists(dest)) continue;
+        if (await slotTaken(dest)) continue;
         try {
             await linkFileInto(src, dest);
             added = true;
@@ -610,6 +684,8 @@ type VaultCache = {
     list: FolioListItem[];
     contents: Map<string, string>;
     mtimes: Map<string, number>;
+    /** 指针槽条目（docRel → 真源绝对路径）：外部改动不走 vault watcher，靠它自查新鲜度 */
+    pointers: Map<string, string>;
 };
 const cacheByRoot = new Map<string, VaultCache>();
 let watcher: FSWatcher | null = null;
@@ -662,15 +738,26 @@ function ensureWatcher(root: string): void {
     watcher.on('error', () => invalidate(root));
 }
 
+/** 指针槽真源被外部改过/挪走时不触发 vault watcher：命中缓存前按 mtime 逐个自查。 */
+async function pointersFresh(cache: VaultCache): Promise<boolean> {
+    for (const [rel, target] of cache.pointers) {
+        const st = await fs.stat(target).catch(() => null);
+        if (!st?.isFile() || st.mtimeMs !== cache.mtimes.get(rel)) return false;
+    }
+    return true;
+}
+
 async function loadVault(root: string): Promise<VaultCache> {
     ensureWatcher(root);
     await syncLinkedFolders(root);
     const cached = cacheByRoot.get(root);
-    if (cached) return cached;
+    if (cached && await pointersFresh(cached)) return cached;
+    cacheByRoot.delete(root);
 
     const list: FolioListItem[] = [];
     const contents = new Map<string, string>();
     const mtimes = new Map<string, number>();
+    const pointers = new Map<string, string>();
     const seen = new Set<string>();
     const dirs: string[] = [];
     async function walk(dir: string): Promise<void> {
@@ -693,20 +780,34 @@ async function loadVault(root: string): Promise<VaultCache> {
             }
             const isMdFile = entry.isFile() && DOC_RE.test(entry.name);
             const isMdLink = entry.isSymbolicLink() && DOC_RE.test(entry.name);
-            if (!isMdFile && !isMdLink) continue;
-            const stat = await fs.stat(abs).catch(() => null);
+            const isPointer = entry.isFile() && entry.name.endsWith(LINK_SUFFIX);
+            if (!isMdFile && !isMdLink && !isPointer) continue;
+            let docRel = rel;
+            let targetAbs = abs;
+            if (isPointer) {
+                docRel = rel.slice(0, -LINK_SUFFIX.length);
+                if (!DOC_RE.test(docRel)) continue;
+                // 真文件/真链压同槽指针（resolveDocAbs 也认真身，两边得一致，不赌 readdir 顺序）
+                if (await fs.lstat(abs.slice(0, -LINK_SUFFIX.length)).catch(() => null)) continue;
+                const target = await readPointerFile(abs);
+                if (!target || !isOutsideVault(root, target)) continue;
+                targetAbs = target;
+            }
+            if (contents.has(docRel)) continue; // 真文件优先于同槽指针
+            const stat = await fs.stat(targetAbs).catch(() => null);
             if (!stat?.isFile()) continue;
-            const markdown = (await fs.readFile(abs, 'utf8')).replace(/\r\n?/g, '\n');
-            contents.set(rel, markdown);
-            mtimes.set(rel, stat.mtimeMs);
+            const markdown = (await fs.readFile(targetAbs, 'utf8')).replace(/\r\n?/g, '\n');
+            contents.set(docRel, markdown);
+            mtimes.set(docRel, stat.mtimeMs);
+            if (isPointer) pointers.set(docRel, targetAbs);
             const { frontmatter, tags } = splitFrontmatter(markdown);
-            const kind = kindOf(rel);
+            const kind = kindOf(docRel);
             list.push({
-                path: rel,
-                title: titleOf(rel, markdown),
+                path: docRel,
+                title: titleOf(docRel, markdown),
                 tags,
                 kind,
-                linked: (rel === 'links' || rel.startsWith('links/')) || undefined,
+                linked: (docRel === 'links' || docRel.startsWith('links/')) || undefined,
                 favorite: /^favorite\s*:\s*true/im.test(frontmatter) || undefined,
                 mtimeMs: stat.mtimeMs,
                 ctimeMs: stat.birthtimeMs,
@@ -726,7 +827,7 @@ async function loadVault(root: string): Promise<VaultCache> {
             linked: (d === 'links' || d.startsWith('links/')) || undefined,
         });
     }
-    const cache: VaultCache = { list, contents, mtimes };
+    const cache: VaultCache = { list, contents, mtimes, pointers };
     cacheByRoot.set(root, cache);
     return cache;
 }
@@ -866,7 +967,8 @@ function previewRel(pathname: string): string | null {
     if (!rest) return null;
     try {
         const segs = rest.split('/').map((s) => decodeURIComponent(s));
-        return safeRel(segs.join('/'));
+        const rel = safeRel(segs.join('/'));
+        return rel && !rel.endsWith(LINK_SUFFIX) ? rel : null;
     } catch {
         return null;
     }
@@ -965,10 +1067,10 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
         if (req.method === 'GET' && pathname.startsWith('preview/')) {
             const rel = previewRel(pathname);
             if (!rel) return fail(res, 400, 'path 非法');
-            const abs = path.join(root, rel);
+            const abs = await resolveDocAbs(root, rel);
             const st = await fs.stat(abs).catch(() => null);
             if (!st?.isFile()) return fail(res, 404, '不存在');
-            const ext = path.extname(abs).toLowerCase();
+            const ext = path.extname(rel).toLowerCase();
             res.statusCode = 200;
             res.setHeader('content-type', PREVIEW_MIME[ext] ?? 'application/octet-stream');
             res.setHeader('x-content-type-options', 'nosniff');
@@ -999,7 +1101,7 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             const p = safeRel(query.get('path') ?? '');
             if (!p) return fail(res, 400, 'path 非法');
             if (!DOC_RE.test(p)) return fail(res, 400, '只读 .md/.html');
-            const abs = path.join(root, p);
+            const abs = await resolveDocAbs(root, p);
             const raw = await fs.readFile(abs, 'utf8');
             const stat = await fs.stat(abs);
             // muya 的 lexer 只认 LF；Windows 盘上的 CRLF 在读出层统一掉，写回也是 LF。
@@ -1014,7 +1116,8 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             if (!p || !DOC_RE.test(p) || typeof body.markdown !== 'string') {
                 return fail(res, 400, '需要 {path: *.md, markdown}');
             }
-            const abs = path.join(root, p);
+            const slotAbs = path.join(root, p);
+            const abs = await resolveDocAbs(root, p);
             const currentStat = await fs.stat(abs).catch(() => null);
             const ifMatch = req.headers['if-match'];
             // If-Match 不匹配 → 409，绝不静默盖掉别处的修改（米米建议 2）
@@ -1022,8 +1125,9 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
                 return fail(res, 409, '文件已在别处被修改（conflict）');
             }
             // 落盘前留最近一份快照（米米建议 5）：<名>.md.bak，不带 .md 结尾不进清单
-            if (currentStat) await fs.copyFile(abs, `${abs}.bak`).catch(() => undefined);
-            await fs.mkdir(path.dirname(abs), { recursive: true });
+            // 快照留 vault 侧槽位旁，指针槽的真源目录不塞 .bak
+            if (currentStat) await fs.copyFile(abs, `${slotAbs}.bak`).catch(() => undefined);
+            await fs.mkdir(path.dirname(slotAbs), { recursive: true });
             await fs.writeFile(abs, body.markdown, 'utf8');
             invalidate(root);
             send(res, 204);
@@ -1037,10 +1141,15 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             const from = safeRel(body.from ?? '');
             if (!from) return fail(res, 400, 'from 非法');
             const fromAbs = path.join(root, from);
-            const fromStat = await fs.stat(fromAbs).catch(() => null);
-            if (!fromStat) return fail(res, 400, '源不存在');
+            const fromLst = await fs.lstat(fromAbs).catch(() => null);
+            const pointer = fromLst ? null : await readPointer(fromAbs);
+            const fromReal = pointer ?? fromAbs;
+            const fromStat = await fs.stat(fromReal).catch(() => null);
+            if (!fromLst && !pointer) return fail(res, 400, '源不存在');
             if (pathname === 'delete') {
+                // 摘槽不碰真源：链接/指针槽只删 vault 侧这一格
                 await fs.rm(fromAbs, { recursive: true, force: true });
+                await fs.rm(sidecarOf(fromAbs), { force: true }).catch(() => undefined);
                 await fs.rm(`${fromAbs}.bak`, { force: true }).catch(() => undefined);
                 invalidate(root);
                 send(res, 204);
@@ -1049,20 +1158,31 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             const to = safeRel(body.to ?? '');
             if (!to) return fail(res, 400, 'to 非法');
             const toAbs = path.join(root, to);
-            if (await fileExists(toAbs)) return fail(res, 400, '目标已存在');
+            if (await slotTaken(toAbs)) return fail(res, 400, '目标已存在');
             await fs.mkdir(path.dirname(toAbs), { recursive: true });
-            if (pathname === 'move') await fs.rename(fromAbs, toAbs);
-            else if (fromStat.isDirectory()) {
+            if (pathname === 'move') {
+                if (fromLst) await fs.rename(fromAbs, toAbs);
+                else await fs.rename(sidecarOf(fromAbs), sidecarOf(toAbs));
+            } else if (fromStat?.isDirectory()) {
                 // 目录递归拷贝
                 const copyDir = async (src: string, dest: string): Promise<void> => {
                     await fs.mkdir(dest, { recursive: true });
                     for (const entry of await fs.readdir(src, { withFileTypes: true })) {
                         if (entry.isDirectory()) await copyDir(path.join(src, entry.name), path.join(dest, entry.name));
-                        else if (entry.isFile()) await fs.copyFile(path.join(src, entry.name), path.join(dest, entry.name));
+                        else if (entry.isFile() && entry.name.endsWith(LINK_SUFFIX)) {
+                            // 拷 = 落正文（同拷符号链接的语义）：指针槽解成真源内容
+                            const target = await readPointerFile(path.join(src, entry.name));
+                            if (target) {
+                                const name = entry.name.slice(0, -LINK_SUFFIX.length);
+                                await fs.copyFile(target, path.join(dest, name)).catch(() => undefined);
+                            }
+                        } else if (entry.isFile()) {
+                            await fs.copyFile(path.join(src, entry.name), path.join(dest, entry.name));
+                        }
                     }
                 };
                 await copyDir(fromAbs, toAbs);
-            } else await fs.copyFile(fromAbs, toAbs);
+            } else await fs.copyFile(fromReal, toAbs);
             invalidate(root);
             send(res, 200, { path: to });
             return true;
