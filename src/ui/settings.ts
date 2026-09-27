@@ -406,15 +406,12 @@ export function openSettings(info?: VaultInfo): void {
         content.replaceChildren(box);
     });
 
-    addSection('关于', () => {
+    addSection('库', () => {
         const box = document.createElement('div');
-        box.className = 'about';
-        box.innerHTML = `
-<p class="about-title">米素 <span>folio</span></p>
-<p>米米的记忆底座：人看、米米整理的本地 markdown 系统。预览即编辑，落盘仍是 .md。</p>`;
         const head = document.createElement('p');
         head.className = 'set-group-title';
         head.textContent = info?.vault.name ? `当前工作区：${info.vault.name}` : '当前工作区';
+        box.append(head);
         const table = document.createElement('table');
         table.className = 'set-libs';
         for (const lib of info?.libraries ?? []) {
@@ -428,19 +425,28 @@ export function openSettings(info?: VaultInfo): void {
             tr.append(name, dir, count);
             table.append(tr);
         }
-        const libNote = document.createElement('p');
-        libNote.className = 'set-note';
-        libNote.textContent = '库 = vault 下的固定子目录：长文写进 notes/，速记写进 memos/，库外文件链进 links/，图片附件分别落 pics/ 与 attachments/。';
-        if (info?.vault.dir) libNote.textContent += ` 当前 vault：${info.vault.dir}`;
-        const tail = document.createElement('div');
-        tail.innerHTML = `
+        box.append(table);
+        const note = document.createElement('p');
+        note.className = 'set-note';
+        note.textContent = '库 = vault 下的固定子目录：长文写进 notes/，速记写进 memos/，库外文件链进 links/，图片附件分别落 pics/ 与 attachments/。';
+        if (info?.vault.dir) note.textContent += ` 当前 vault：${info.vault.dir}`;
+        box.append(note);
+        content.replaceChildren(box);
+    });
+
+    addSection('关于', () => {
+        const box = document.createElement('div');
+        box.className = 'about';
+        box.innerHTML = `
+<p class="about-title">米素 <span>folio</span></p>
+<p>米米的记忆底座：人看、米米整理的本地 markdown 系统。预览即编辑，落盘仍是 .md。</p>
 <table>
 <tr><td>编辑核</td><td><a href="https://github.com/marktext/marktext" target="_blank" rel="noopener noreferrer">Muya（@muyajs/core）</a></td><td>MIT</td></tr>
+<tr><td>速记交互</td><td><a href="https://github.com/usememos/memos" target="_blank" rel="noopener noreferrer">Memos</a></td><td>MIT</td></tr>
 <tr><td>图标</td><td><a href="https://tabler.io/icons" target="_blank" rel="noopener noreferrer">Tabler Icons</a></td><td>MIT</td></tr>
 <tr><td>构建</td><td>Vite · TypeScript</td><td>MIT / Apache-2.0</td></tr>
 </table>
-<p class="set-note">感谢以上开源库的贡献者。</p>`;
-        box.append(head, table, libNote, tail);
+<p class="set-note">速记看法参照 Memos 官方交互（左栏日历筛日、中区卡片流），未嵌其代码。感谢以上开源库的贡献者。</p>`;
         content.replaceChildren(box);
     });
 
