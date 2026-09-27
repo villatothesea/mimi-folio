@@ -202,7 +202,15 @@ fn kill_stale_server() -> Result<(), String> {
         .lines()
         .find(|l| l.contains(&format!(":{PORT}")) && l.contains("LISTENING"))
         .and_then(|l| l.split_whitespace().last())
-        .ok_or_else(|| format!("{PORT} 在监听但定位不到 PID"))?
+        .ok_or_else(|| {
+            format!(
+                "{PORT} 在监听但定位不到 PID（netstat 状态 {:?}，stdout {} 字节，stderr {} 字节：{:.200}）",
+                out.status.code(),
+                out.stdout.len(),
+                out.stderr.len(),
+                String::from_utf8_lossy(&out.stderr),
+            )
+        })?
         .to_string();
 
     let cmdline = no_window(Command::new("powershell").args([
