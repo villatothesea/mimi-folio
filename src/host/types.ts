@@ -79,6 +79,13 @@ export type FolioWorkspace = {
     dir: string;
 };
 
+/** 页内目录浏览：dir 为 null 回根（Windows 盘符清单）；entries 是绝对路径、目录在前。 */
+export type FolioBrowse = {
+    dir: string | null;
+    parent: string | null;
+    entries: { name: string; path: string; dir: boolean }[];
+};
+
 export interface FolioHost {
     read(path: FolioPath): Promise<FolioDoc>;
     /** ifMatch 传读时的 mtimeMs：文件已变则 409，不静默覆盖 */
@@ -106,6 +113,12 @@ export interface FolioHost {
     defaultMdStatus?(): Promise<FolioFileAssoc>;
     /** 点「设为默认」：写 HKCU 关联；系统已有别家默认时 needsSettings=true 且已打开设置页。 */
     registerDefaultMd?(): Promise<FolioFileAssoc>;
+    /**
+     * 页内目录浏览数据源（库外文件/文件夹选择的就地浏览器）。
+     * dir=null 回根清单（盘符或 /）；mode=file 时列 md/html 文件，dir 只列目录。
+     * 宿主不提供时页内降级为路径输入。
+     */
+    browseDir?(dir: string | null, mode: 'file' | 'dir'): Promise<FolioBrowse>;
     /** 系统选文件窗；取消回 null。宿主不提供时页内降级为路径输入。 */
     pickFile?(): Promise<string | null>;
     /** 系统选文件夹窗；取消回 null。宿主不提供时页内降级为路径输入。 */

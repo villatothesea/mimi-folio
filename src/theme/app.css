@@ -2113,6 +2113,49 @@ html[data-width='wide'] .mu-editor .mu-container {
     margin-right: auto;
 }
 
+.folio-browse-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-2);
+    margin-bottom: var(--folio-space-2);
+}
+
+.folio-browse-bar button {
+    border: 1px solid var(--folio-border-strong);
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    font: inherit;
+    font-size: var(--folio-font-size-xs);
+    padding: var(--folio-space-1) var(--folio-space-2);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.folio-browse-cur {
+    font-size: var(--folio-font-size-xs);
+    color: var(--folio-fg-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+}
+
+.folio-browse-list {
+    max-height: 40vh;
+    min-width: 420px;
+}
+
+.folio-browse-list button.file {
+    color: var(--folio-fg-muted);
+}
+
+.folio-browse-empty {
+    font-size: var(--folio-font-size-xs);
+    color: var(--folio-fg-muted);
+    padding: var(--folio-space-2);
+}
+
 .folio-modal-actions button {
     border: 1px solid var(--folio-border-strong);
     background: var(--folio-bg);

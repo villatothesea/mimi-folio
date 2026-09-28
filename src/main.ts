@@ -25,7 +25,7 @@ import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
 import { attachWikiAutocomplete, attachWikilinkDecor } from './ui/wikilinkDecor.ts';
 import { blockNativeContextMenu, showContextMenu } from './ui/contextMenu.ts';
-import { folioConfirm, folioPick, folioPickSource } from './ui/dialogs.ts';
+import { folioBrowseFs, folioConfirm, folioPick, folioPickSource } from './ui/dialogs.ts';
 import { attachTips } from './ui/tips.ts';
 import { attachWorkspaceMenu } from './ui/workspaces.ts';
 import { attachScrollFade } from './ui/scrollFade.ts';
@@ -1232,7 +1232,9 @@ async function linkOutside(): Promise<void> {
     const source = await folioPickSource(
         '链入外部 md / html（读写回原文件，不拷贝正文）',
         '粘贴绝对路径，如 D:\\docs\\note.md',
-        host.pickFile?.bind(host),
+        host.browseDir
+            ? () => folioBrowseFs('选择要链入的文档', 'file', (d) => host.browseDir!(d, 'file'))
+            : host.pickFile?.bind(host),
     );
     if (!source) return;
     try {
@@ -1253,7 +1255,9 @@ async function importFolderLink(): Promise<void> {
     const source = await folioPickSource(
         '导入文件夹（链入 links/，不拷贝）',
         '粘贴文件夹绝对路径，如 D:\\docs\\notes',
-        host.pickFolder?.bind(host),
+        host.browseDir
+            ? () => folioBrowseFs('选择要链入的文件夹', 'dir', (d) => host.browseDir!(d, 'dir'))
+            : host.pickFolder?.bind(host),
     );
     if (!source) return;
     try {
@@ -1273,7 +1277,9 @@ async function relinkFolder(dir: string): Promise<void> {
     const source = await folioPickSource(
         '更换文件夹源路径',
         '粘贴新文件夹绝对路径',
-        host.pickFolder?.bind(host),
+        host.browseDir
+            ? () => folioBrowseFs('选择新文件夹', 'dir', (d) => host.browseDir!(d, 'dir'))
+            : host.pickFolder?.bind(host),
     );
     if (!source) return;
     try {

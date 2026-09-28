@@ -1,4 +1,4 @@
-import type { FolioAttachment, FolioDoc, FolioFileAssoc, FolioHost, FolioImage, FolioIndex, FolioListItem, FolioListOpts, FolioPath, FolioSearchItem, FolioWorkspace } from './types.ts';
+import type { FolioAttachment, FolioBrowse, FolioDoc, FolioFileAssoc, FolioHost, FolioImage, FolioIndex, FolioListItem, FolioListOpts, FolioPath, FolioSearchItem, FolioWorkspace } from './types.ts';
 
 /**
  * 独立模式的浏览器侧实现：fetch 本仓小服务（src/server/）的 /folio/v1/*。
@@ -123,6 +123,13 @@ export class StandaloneHost implements FolioHost {
     async registerDefaultMd(): Promise<FolioFileAssoc> {
         const resp = await fetch(this.url('/folio/v1/file-assoc'), { method: 'POST' });
         return this.json<FolioFileAssoc>(resp);
+    }
+
+    async browseDir(dir: string | null, mode: 'file' | 'dir'): Promise<FolioBrowse> {
+        const q = new URLSearchParams({ mode });
+        if (dir) q.set('dir', dir);
+        const resp = await fetch(this.url(`/folio/v1/browse?${q}`));
+        return this.json<FolioBrowse>(resp);
     }
 
     async pickFile(): Promise<string | null> {

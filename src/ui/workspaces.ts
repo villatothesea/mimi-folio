@@ -3,7 +3,7 @@
  * 工作区 = 一座 vault 目录，只改人看哪一堆文件，不写进 md。
  */
 import type { FolioHost, FolioWorkspace } from '../host/types.ts';
-import { folioConfirm, folioPrompt } from './dialogs.ts';
+import { folioBrowseFs, folioConfirm, folioPrompt } from './dialogs.ts';
 import { icon } from './icons';
 import { lockAppOverlay } from './overlayLock.ts';
 import { shortWorkspaceDir } from '../shared/workspaces.ts';
@@ -156,7 +156,9 @@ async function openWorkspaceDialog(btn: HTMLButtonElement, opts: WorkspaceUiOpti
         pick.addEventListener('click', (event) => {
             event.stopPropagation();
             void (async () => {
-                if (!opts.host.pickFolder) {
+                const browseDir = opts.host.browseDir;
+                const pickFolder = opts.host.pickFolder;
+                if (!browseDir && !pickFolder) {
                     opts.say('当前环境不支持选文件夹，请直接粘贴路径');
                     dirInput.focus();
                     return;
@@ -165,9 +167,11 @@ async function openWorkspaceDialog(btn: HTMLButtonElement, opts: WorkspaceUiOpti
                 const prev = pick.textContent;
                 pick.disabled = true;
                 pick.textContent = '正在打开…';
-                opts.say('正在打开系统选文件夹窗…');
+                opts.say('正在打开选文件夹窗…');
                 try {
-                    const dir = await opts.host.pickFolder();
+                    const dir = browseDir
+                        ? await folioBrowseFs('选择工作区目录', 'dir', (d) => browseDir(d, 'dir'))
+                        : await pickFolder!();
                     if (!dir) {
                         opts.say('未选择文件夹，可手动粘贴路径');
                         dirInput.focus();

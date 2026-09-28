@@ -116,6 +116,118 @@ export function folioPickSource(
     });
 }
 
+/**
+ * 页内目录浏览器：点文件夹进入、点文件（file 模式）选中；
+ * dir 模式用「选此文件夹」定当前目录。取消回 null。
+ */
+export function folioBrowseFs(
+    title: string,
+    mode: 'file' | 'dir',
+    list: (dir: string | null) => Promise<{ dir: string | null; parent: string | null; entries: { name: string; path: string; dir: boolean }[] }>,
+): Promise<string | null> {
+    return new Promise((resolve) => {
+        const ui = shell(title);
+        let settled = false;
+        const done = (v: string | null) => {
+            if (settled) return;
+            settled = true;
+            unbindScrollFade(listEl);
+            window.removeEventListener('keydown', onKey);
+            ui.close();
+            resolve(v);
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                done(null);
+            }
+        };
+        const bar = document.createElement('div');
+        bar.className = 'folio-browse-bar';
+        const up = document.createElement('button');
+        up.type = 'button';
+        up.textContent = '↑ 上一级';
+        const cur = document.createElement('span');
+        cur.className = 'folio-browse-cur';
+        bar.append(up, cur);
+        ui.box.append(bar);
+        const listEl = document.createElement('div');
+        listEl.className = 'folio-modal-list folio-browse-list';
+        ui.box.append(listEl);
+        const hint = document.createElement('div');
+        hint.className = 'folio-modal-hint';
+        hint.hidden = true;
+        ui.box.append(hint);
+        const row = document.createElement('div');
+        row.className = 'folio-modal-actions';
+        const ok = document.createElement('button');
+        const cancel = document.createElement('button');
+        cancel.textContent = '取消';
+        row.append(ok, cancel);
+        ui.box.append(row);
+        if (mode === 'dir') {
+            ok.textContent = '选此文件夹';
+        } else {
+            ok.textContent = '确定';
+            ok.disabled = true;
+        }
+
+        let curDir: string | null = null;
+        let curParent: string | null = null;
+        let gen = 0;
+        async function load(dir: string | null): Promise<void> {
+            const g = ++gen;
+            hint.hidden = true;
+            listEl.textContent = '';
+            cur.textContent = '…';
+            try {
+                const out = await list(dir);
+                if (g !== gen || settled) return;
+                curDir = out.dir;
+                curParent = out.parent;
+                cur.textContent = out.dir ?? '';
+                cur.title = out.dir ?? '';
+                up.disabled = dir === null;
+                if (mode === 'dir') ok.disabled = !out.dir;
+                if (!out.entries.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'folio-browse-empty';
+                    empty.textContent = '（空目录）';
+                    listEl.append(empty);
+                }
+                for (const e of out.entries) {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.textContent = e.dir ? `${e.name}/` : e.name;
+                    b.title = e.path;
+                    if (!e.dir) b.className = 'file';
+                    b.addEventListener('click', () => {
+                        if (e.dir) void load(e.path);
+                        else done(e.path);
+                    });
+                    listEl.append(b);
+                }
+            } catch (err) {
+                if (g !== gen || settled) return;
+                cur.textContent = dir ?? '';
+                hint.textContent = err instanceof Error ? err.message : String(err);
+                hint.hidden = false;
+            }
+        }
+        up.addEventListener('click', () => {
+            if (curDir === null) return;
+            void load(curParent);
+        });
+        ok.addEventListener('click', () => {
+            if (mode === 'dir' && curDir) done(curDir);
+        });
+        cancel.addEventListener('click', () => done(null));
+        window.addEventListener('keydown', onKey);
+        requestAnimationFrame(() => bindScrollFade(listEl));
+        void load(null);
+    });
+}
+
 export function folioConfirm(title: string, okText = '删除'): Promise<boolean> {
     return new Promise((resolve) => {
         const ui = shell(title, true);

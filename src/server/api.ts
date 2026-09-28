@@ -595,6 +595,38 @@ async function pickFileNative(): Promise<string | null> {
     }
 }
 
+/** 页内目录浏览的数据源：dir 为空回盘符/根目录清单；entries 带绝对路径，目录在前。 */
+async function browseDir(dirParam: string | null, mode: 'file' | 'dir'): Promise<{ dir: string | null; parent: string | null; entries: { name: string; path: string; dir: boolean }[] }> {
+    if (!dirParam) {
+        const entries: { name: string; path: string; dir: boolean }[] = [];
+        if (process.platform === 'win32') {
+            for (let c = 67; c <= 90; c++) {
+                const rootPath = `${String.fromCharCode(c)}:\\`;
+                if (await fs.stat(rootPath).then(() => true).catch(() => false)) {
+                    entries.push({ name: rootPath.slice(0, 2), path: rootPath, dir: true });
+                }
+            }
+        } else {
+            return browseDir('/', mode);
+        }
+        return { dir: null, parent: null, entries };
+    }
+    const abs = path.resolve(dirParam);
+    const dirents = await fs.readdir(abs, { withFileTypes: true });
+    const entries: { name: string; path: string; dir: boolean }[] = [];
+    for (const e of dirents) {
+        if (e.name.startsWith('.')) continue;
+        if (e.isDirectory()) {
+            entries.push({ name: e.name, path: path.join(abs, e.name), dir: true });
+        } else if (mode === 'file' && DOC_RE.test(e.name)) {
+            entries.push({ name: e.name, path: path.join(abs, e.name), dir: false });
+        }
+    }
+    entries.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
+    const parent = path.dirname(abs);
+    return { dir: abs, parent: parent === abs ? null : parent, entries };
+}
+
 /** 系统选文件夹窗（独立模式）。取消回 null。 */
 async function pickFolderNative(): Promise<string | null> {
     if (process.platform === 'win32') {
@@ -1287,6 +1319,18 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
         if (req.method === 'POST' && (pathname === 'presence' || pathname === 'bye')) {
             send(res, 204);
             return true;
+        }
+
+        // 页内目录浏览（系统选框之外的不依赖 shell 对话框的选择路径）
+        if (req.method === 'GET' && pathname === 'browse') {
+            const dir = query.get('dir');
+            const mode = query.get('mode') === 'file' ? 'file' : 'dir';
+            try {
+                send(res, 200, await browseDir(dir, mode));
+                return true;
+            } catch (err) {
+                return fail(res, 400, err instanceof Error ? err.message : String(err));
+            }
         }
 
         // 系统选文件窗（独立模式；合入后由宿主原生对话框提供）
