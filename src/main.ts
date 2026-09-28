@@ -1871,9 +1871,9 @@ docScroll.addEventListener('scroll', () => {
 function restoreScroll(path: string): void {
     try {
         const map = JSON.parse(localStorage.getItem(posKey) ?? '{}') as Record<string, number>;
-        if (typeof map[path] === 'number') docScroll.scrollTop = map[path];
+        docScroll.scrollTop = map[path] ?? 0;
     } catch {
-        // 忽略
+        docScroll.scrollTop = 0;
     }
 }
 
