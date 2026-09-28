@@ -447,14 +447,27 @@ async function attachOutsideDir(srcDir: string, dest: string): Promise<void> {
 
 async function collectDocs(dir: string, prefix: string): Promise<string[]> {
     const linked = new Set<string>();
+    /** realpath 去重防环：junction/绑定挂载等非 symlink 环也能兜住 */
+    const seen = new Set<string>();
     async function walk(absDir: string, rel: string): Promise<void> {
+        const real = await fs.realpath(absDir).catch(() => absDir);
+        const key = process.platform === 'win32' ? real.toLowerCase() : real;
+        if (seen.has(key)) return;
+        seen.add(key);
         for (const name of await fs.readdir(absDir).catch(() => [] as string[])) {
             if (name.startsWith('.')) continue;
             const abs = path.join(absDir, name);
             const child = `${rel}/${name}`;
-            const st = await fs.stat(abs).catch(() => null);
-            if (st?.isDirectory()) await walk(abs, child);
-            else if (st?.isFile() && DOC_RE.test(name)) linked.add(child);
+            const lst = await fs.lstat(abs).catch(() => null);
+            if (!lst) continue;
+            if (lst.isDirectory()) {
+                await walk(abs, child);
+                continue;
+            }
+            // 符号链接目录到此为止（lstat 的 isDirectory 对它为 false，不会走进来）；
+            // 符号链接文件跟到目标，目标是文档才算（vault 侧 .md 软链就是这么计的）
+            const st = lst.isSymbolicLink() ? await fs.stat(abs).catch(() => null) : lst;
+            if (st?.isFile() && DOC_RE.test(name)) linked.add(child);
             else if (st?.isFile() && name.endsWith(LINK_SUFFIX)) {
                 // 指针槽：能指到活真源才算链成的文档（断指针等同断链，不出清单）
                 const docRel = child.slice(0, -LINK_SUFFIX.length);
@@ -669,21 +682,27 @@ async function pickFolderNative(): Promise<string | null> {
 }
 
 /** 逐文件补链（目录联接失败时）：源里新 md 在 dest 建链接，不拷贝。 */
-async function syncDirFiles(srcDir: string, destDir: string): Promise<boolean> {
+async function syncDirFiles(srcDir: string, destDir: string, seen = new Set<string>()): Promise<boolean> {
     let added = false;
+    const real = await fs.realpath(srcDir).catch(() => srcDir);
+    const realKey = process.platform === 'win32' ? real.toLowerCase() : real;
+    if (seen.has(realKey)) return false;
+    seen.add(realKey);
     const names = await fs.readdir(srcDir).catch(() => [] as string[]);
     for (const name of names) {
         if (name.startsWith('.')) continue;
         const src = path.join(srcDir, name);
         const dest = path.join(destDir, name);
-        const st = await fs.stat(src).catch(() => null);
-        if (!st) continue;
-        if (st.isDirectory()) {
+        const lst = await fs.lstat(src).catch(() => null);
+        if (!lst) continue;
+        if (lst.isDirectory()) {
+            // lstat：符号链接目录 isDirectory=false，天然不递归（源里的外链不重复链）
             if (!await fileExists(dest)) await fs.mkdir(dest, { recursive: true });
-            if (await syncDirFiles(src, dest)) added = true;
+            if (await syncDirFiles(src, dest, seen)) added = true;
             continue;
         }
-        if (!st.isFile() || !DOC_RE.test(name)) continue;
+        const st = lst.isSymbolicLink() ? await fs.stat(src).catch(() => null) : lst;
+        if (!st?.isFile() || !DOC_RE.test(name)) continue;
         if (await slotTaken(dest)) continue;
         try {
             await linkFileInto(src, dest);
@@ -697,15 +716,22 @@ async function syncDirFiles(srcDir: string, destDir: string): Promise<boolean> {
 
 async function fingerprintDocs(dir: string): Promise<string> {
     const rows: string[] = [];
+    const seen = new Set<string>();
     async function walk(d: string, prefix: string): Promise<void> {
+        const real = await fs.realpath(d).catch(() => d);
+        const key = process.platform === 'win32' ? real.toLowerCase() : real;
+        if (seen.has(key)) return;
+        seen.add(key);
         for (const name of await fs.readdir(d).catch(() => [] as string[])) {
             if (name.startsWith('.')) continue;
             const abs = path.join(d, name);
-            const st = await fs.stat(abs).catch(() => null);
-            if (st?.isDirectory()) {
+            const lst = await fs.lstat(abs).catch(() => null);
+            if (!lst) continue;
+            if (lst.isDirectory()) {
                 await walk(abs, `${prefix}${name}/`);
-            } else if (st?.isFile() && DOC_RE.test(name)) {
-                rows.push(`${prefix}${name}:${st.mtimeMs}`);
+            } else {
+                const st = lst.isSymbolicLink() ? await fs.stat(abs).catch(() => null) : lst;
+                if (st?.isFile() && DOC_RE.test(name)) rows.push(`${prefix}${name}:${st.mtimeMs}`);
             }
         }
     }

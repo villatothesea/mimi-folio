@@ -276,6 +276,27 @@ describe('库外链入（单元 10）', () => {
         );
     });
 
+    it('源目录里的目录符号链接不递归（防环防挂死）', async () => {
+        const src = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-cycsrc-'));
+        await fs.writeFile(path.join(src, '真.md'), '# 真\n', 'utf8');
+        // junction 免特权；指回自己造环，旧实现用 stat 跟随会无限递归挂死整个服务
+        await fs.symlink(src, path.join(src, '回环'), 'junction');
+        const res = await fetch(`${base}/folio/v1/folderlink`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ source: src }),
+        });
+        assert.equal(res.status, 200, await res.text());
+        const dirName = path.basename(src);
+        const list = (await (await fetch(`${base}/folio/v1/list`)).json()) as { path: string }[];
+        const under = list.filter((f) => f.path.startsWith(`links/${dirName}/`));
+        assert.ok(under.some((f) => f.path === `links/${dirName}/真.md`), '真文档应链入');
+        assert.ok(
+            !under.some((f) => f.path.startsWith(`links/${dirName}/回环/`)),
+            '环链目录下的文档不应被重复链入',
+        );
+    });
+
     it('更换外链文件夹路径后 list 换成新源，写回新真源、不拷贝', async () => {
         const srcA = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-relink-a-'));
         const srcB = await fs.mkdtemp(path.join(os.tmpdir(), 'folio-relink-b-'));
