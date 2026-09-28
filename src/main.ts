@@ -30,7 +30,8 @@ import { attachTips } from './ui/tips.ts';
 import { attachWorkspaceMenu } from './ui/workspaces.ts';
 import { attachScrollFade } from './ui/scrollFade.ts';
 import { buildToolbar } from './ui/toolbar.ts';
-import { initSettings, openSettings } from './ui/settings.ts';
+import { initSettings, OPEN_POS_KEY, openSettings } from './ui/settings.ts';
+import { closeFsPanel, fsPanelOpen, toggleFsPanel } from './ui/fsPanel.ts';
 import { icon } from './ui/icons.ts';
 import type { FolioListItem } from './host/types.ts';
 
@@ -1223,22 +1224,10 @@ async function newFolder(dir = ''): Promise<void> {
     }
 }
 
-/** 链入外部 md/html：粘贴绝对路径或系统选文件窗；经 links/ 链接，读写回原文件不拷贝。 */
-async function linkOutside(): Promise<void> {
-    if (!host.linkOutside) {
-        saySave('当前宿主不支持外链');
-        return;
-    }
-    const source = await folioPickSource(
-        '链入外部 md / html（读写回原文件，不拷贝正文）',
-        '粘贴绝对路径，如 D:\\docs\\note.md',
-        host.browseDir
-            ? () => folioBrowseFs('选择要链入的文档', 'file', (d) => host.browseDir!(d, 'file'))
-            : host.pickFile?.bind(host),
-    );
-    if (!source) return;
+/** 库外文件链入 links/（外链树右键文件走这里），读写回原文件不拷贝。 */
+async function linkOutsideAbs(abs: string): Promise<void> {
     try {
-        const path = await host.linkOutside(source.replace(/^["']|["']$/g, ''));
+        const path = await host.linkOutside!(abs.replace(/^["']|["']$/g, ''));
         await open(path);
         void refreshList();
     } catch (err) {
@@ -1246,27 +1235,39 @@ async function linkOutside(): Promise<void> {
     }
 }
 
-/** 导入文件夹：粘贴绝对路径或系统选文件夹窗 → links/<原名>/ 链入，不拷贝。 */
-async function importFolderLink(): Promise<void> {
-    if (!host.linkFolder) {
-        saySave('当前宿主不支持文件夹链接');
-        return;
-    }
-    const source = await folioPickSource(
-        '导入文件夹（链入 links/，不拷贝）',
-        '粘贴文件夹绝对路径，如 D:\\docs\\notes',
-        host.browseDir
-            ? () => folioBrowseFs('选择要链入的文件夹', 'dir', (d) => host.browseDir!(d, 'dir'))
-            : host.pickFolder?.bind(host),
-    );
-    if (!source) return;
+/** 库外文件夹链入 links/<原名>/（外链树右键）。 */
+async function linkFolderAbs(abs: string): Promise<void> {
     try {
-        const out = await host.linkFolder(source.replace(/^["']|["']$/g, ''));
+        const out = await host.linkFolder!(abs.replace(/^["']|["']$/g, ''));
         saySave(`已链接 ${out.count} 篇 → ${out.dir}`);
         void refreshList();
     } catch (err) {
         saySave(`导入文件夹失败：${(err as Error).message}`);
     }
+}
+
+/** vault 本体及其子孙不可链（外链树右键的准入闸）；分隔符与大小写先归一。 */
+function isInsideVault(abs: string): boolean {
+    const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    const v = norm(vaultAbsDir);
+    if (!v) return false;
+    const a = norm(abs);
+    return a === v || a.startsWith(`${v}/`);
+}
+
+/** 外链导入树面板：左栏右侧伸出同宽文件树，右键文件/夹即链入。 */
+function toggleExtPanel(): void {
+    if (!host.browseDir || !host.linkOutside || !host.linkFolder) {
+        saySave('当前宿主不支持外链导入');
+        return;
+    }
+    toggleFsPanel({
+        browse: (d) => host.browseDir!(d, 'file'),
+        isInsideVault,
+        onLinkFile: (abs) => void linkOutsideAbs(abs),
+        onLinkDir: (abs) => void linkFolderAbs(abs),
+        say: saySave,
+    });
 }
 
 async function relinkFolder(dir: string): Promise<void> {
@@ -1308,8 +1309,7 @@ function openPlusMenu(anchor: HTMLElement): void {
         ['file-plus', '新建笔记', () => void newNote()],
         ['bolt', '新建速记', () => void newMemo()],
         ['folder-plus', '新建文件夹', () => void newFolder()],
-        ['external-link', '链入外部 md / html', () => void linkOutside()],
-        ['folders', '导入文件夹（链接）', () => void importFolderLink()],
+        ['external-link', fsPanelOpen() ? '收起外链树' : '导入外部（文件树）', () => toggleExtPanel()],
     ];
     for (const [ic, label, run] of items) {
         const item = document.createElement('button');
@@ -1869,6 +1869,11 @@ docScroll.addEventListener('scroll', () => {
 });
 
 function restoreScroll(path: string): void {
+    // 设置「阅读」：top = 打开总是回开头；resume（默认）= 回到上次阅读位置
+    if (localStorage.getItem(OPEN_POS_KEY) === 'top') {
+        docScroll.scrollTop = 0;
+        return;
+    }
     try {
         const map = JSON.parse(localStorage.getItem(posKey) ?? '{}') as Record<string, number>;
         docScroll.scrollTop = map[path] ?? 0;
@@ -2131,6 +2136,7 @@ async function leaveOpenDoc(): Promise<void> {
 
 async function switchToWorkspace(id: string): Promise<void> {
     if (!host.setWorkspace) return;
+    closeFsPanel();
     if (activeWorkspaceId && id !== activeWorkspaceId) {
         writeLastViewFor(activeWorkspaceId, readLastView());
     }

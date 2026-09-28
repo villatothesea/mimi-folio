@@ -60,7 +60,8 @@ body {
     min-width: 0;
 }
 
-#sidebar {
+#sidebar,
+#fs-panel {
     width: 240px;
     flex: none;
     display: flex;
@@ -71,6 +72,39 @@ body {
     position: relative;
     /* 拖宽把手压过预览 iframe，否则开 html 时点边线点不到、松开粘鼠标 */
     z-index: 2;
+}
+
+/* 外链导入树：左栏右侧的同宽面板，行结构复用左栏树（#fs-tree 见下） */
+.fs-head {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-2);
+    min-height: calc(var(--folio-control-h) + 2 * var(--folio-space-2) + 1px);
+    padding: 0 var(--folio-space-3);
+    border-bottom: 1px solid var(--folio-border);
+    font-weight: 600;
+}
+
+.fs-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.fs-hint {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+    font-weight: 400;
+    white-space: nowrap;
+}
+
+/* 占位/错误行不可点，也不吃树行 hover */
+.fs-note-row .row-main {
+    cursor: default;
+    color: var(--folio-fg-muted);
+}
+
+.fs-note-row:hover {
+    background: none;
 }
 
 #page {
@@ -648,7 +682,8 @@ body.is-col-resizing iframe {
 }
 
 /* ===== 文件清单 ===== */
-#files {
+#files,
+#fs-tree {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
@@ -664,7 +699,9 @@ body.is-col-resizing iframe {
 }
 
 #files .file-icon .folio-icon,
-#files .folder-toggle .folio-icon {
+#files .folder-toggle .folio-icon,
+#fs-tree .file-icon .folio-icon,
+#fs-tree .folder-toggle .folio-icon {
     width: var(--folio-tree-icon-size);
     height: var(--folio-tree-icon-size);
 }
@@ -2657,19 +2694,22 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
 
 
 /* ===== bug4 2.1/2.3/2.5：清单行视觉 ===== */
-#files {
+#files,
+#fs-tree {
     overflow-x: hidden;
     padding: var(--folio-space-1) 0;
     user-select: none;
 }
 
-#files .tree-row {
+#files .tree-row,
+#fs-tree .tree-row {
     display: flex;
     align-items: stretch;
     position: relative;
 }
 
-#files .row-main {
+#files .row-main,
+#fs-tree .row-main {
     flex: 1;
     min-width: 0;
     display: flex;
@@ -2688,7 +2728,8 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
 
 
 
-#files .row-main .file-name {
+#files .row-main .file-name,
+#fs-tree .row-main .file-name {
     flex: 1;
     min-width: 0;
     overflow: hidden;

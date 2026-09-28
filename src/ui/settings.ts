@@ -43,6 +43,7 @@ const FMT_KEY = 'folio-fmt';
 const TYPE_KEY = 'folio-type';
 const ACCENT_KEY = 'folio-accent';
 const SPECIAL_KEY = 'folio-special';
+export const OPEN_POS_KEY = 'folio-open-pos';
 
 const DEFAULT_FMT: FmtSettings = { numHead: 'none', numBody: 'none', ul: ['disc', 'circle', 'square'] };
 
@@ -409,6 +410,18 @@ export function openSettings(info?: VaultInfo): void {
         note.className = 'set-note';
         note.textContent = '默认开启，接近用浏览器打开这份 html。脚本跑在沙箱里，摸不到米素界面和笔记库；仍可能访问外网、弹窗、占资源。不信任的页面请关掉。';
         box.append(row, note);
+        content.replaceChildren(box);
+    });
+
+    addSection('阅读', () => {
+        const box = document.createElement('div');
+        box.append(select('打开文档时', [['resume', '回到上次阅读位置'], ['top', '回到文档开头']], localStorage.getItem(OPEN_POS_KEY) ?? 'resume', (v) => {
+            localStorage.setItem(OPEN_POS_KEY, v);
+        }));
+        const note = document.createElement('p');
+        note.className = 'set-note';
+        note.textContent = '上次阅读位置按文档路径记忆；选「回到文档开头」后仍继续记录，切回即恢复。';
+        box.append(note);
         content.replaceChildren(box);
     });
 
