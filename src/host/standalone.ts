@@ -125,6 +125,13 @@ export class StandaloneHost implements FolioHost {
         return this.json<FolioFileAssoc>(resp);
     }
 
+    async pickFile(): Promise<string | null> {
+        const resp = await fetch(this.url('/folio/v1/pick-file'), { method: 'POST' });
+        if (resp.status === 204) return null;
+        const out = await this.json<{ path: string }>(resp);
+        return out.path;
+    }
+
     async pickFolder(): Promise<string | null> {
         const resp = await fetch(this.url('/folio/v1/pick-folder'), { method: 'POST' });
         if (resp.status === 204) return null;

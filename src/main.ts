@@ -25,7 +25,7 @@ import { applyTagColor, tagColorIndex } from './ui/tagColors.ts';
 import { attachSearchPalette } from './ui/searchPalette.ts';
 import { attachWikiAutocomplete, attachWikilinkDecor } from './ui/wikilinkDecor.ts';
 import { blockNativeContextMenu, showContextMenu } from './ui/contextMenu.ts';
-import { folioConfirm, folioPick, folioPrompt } from './ui/dialogs.ts';
+import { folioConfirm, folioPick, folioPickSource } from './ui/dialogs.ts';
 import { attachTips } from './ui/tips.ts';
 import { attachWorkspaceMenu } from './ui/workspaces.ts';
 import { attachScrollFade } from './ui/scrollFade.ts';
@@ -1223,12 +1223,20 @@ async function newFolder(dir = ''): Promise<void> {
     }
 }
 
+/** 链入外部 md/html：粘贴绝对路径或系统选文件窗；经 links/ 链接，读写回原文件不拷贝。 */
 async function linkOutside(): Promise<void> {
-    if (!host.linkOutside) return;
-    const source = await folioPrompt('库外 md 的绝对路径（读写都会回这个文件，不拷贝）');
+    if (!host.linkOutside) {
+        saySave('当前宿主不支持外链');
+        return;
+    }
+    const source = await folioPickSource(
+        '链入外部 md / html（读写回原文件，不拷贝正文）',
+        '粘贴绝对路径，如 D:\\docs\\note.md',
+        host.pickFile?.bind(host),
+    );
     if (!source) return;
     try {
-        const path = await host.linkOutside(source.trim().replace(/^["']|["']$/g, ''));
+        const path = await host.linkOutside(source.replace(/^["']|["']$/g, ''));
         await open(path);
         void refreshList();
     } catch (err) {
@@ -1236,38 +1244,20 @@ async function linkOutside(): Promise<void> {
     }
 }
 
-/** 导入 md（bug4 2.8）：文件窗选择 → 拷贝入 vault（浏览器拿不到盘路径，只能拷贝）。 */
-async function importMdByPicker(): Promise<void> {
-    return new Promise((resolve) => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.md,.markdown,.html';
-        input.addEventListener('cancel', () => resolve());
-        input.addEventListener('change', async () => {
-            const file = input.files?.[0];
-            if (file) {
-                try {
-                    const bytes = new Uint8Array(await file.arrayBuffer());
-                    await host.write(`notes/${file.name}`, new TextDecoder().decode(bytes));
-                    await open(`notes/${file.name}`);
-                    void refreshList();
-                } catch (err) {
-                    saySave(`导入失败：${(err as Error).message}`);
-                }
-            }
-            resolve();
-        });
-        input.click();
-    });
-}
-
-/** 导入文件夹：系统选文件夹窗 → links/<原名>/ 链入，不拷贝。 */
+/** 导入文件夹：粘贴绝对路径或系统选文件夹窗 → links/<原名>/ 链入，不拷贝。 */
 async function importFolderLink(): Promise<void> {
-    if (!host.pickFolder || !host.linkFolder) return;
-    const source = await host.pickFolder();
+    if (!host.linkFolder) {
+        saySave('当前宿主不支持文件夹链接');
+        return;
+    }
+    const source = await folioPickSource(
+        '导入文件夹（链入 links/，不拷贝）',
+        '粘贴文件夹绝对路径，如 D:\\docs\\notes',
+        host.pickFolder?.bind(host),
+    );
     if (!source) return;
     try {
-        const out = await host.linkFolder(source);
+        const out = await host.linkFolder(source.replace(/^["']|["']$/g, ''));
         saySave(`已链接 ${out.count} 篇 → ${out.dir}`);
         void refreshList();
     } catch (err) {
@@ -1276,8 +1266,15 @@ async function importFolderLink(): Promise<void> {
 }
 
 async function relinkFolder(dir: string): Promise<void> {
-    if (!host.pickFolder || !host.relinkFolder) return;
-    const source = await host.pickFolder();
+    if (!host.relinkFolder) {
+        saySave('当前宿主不支持更换路径');
+        return;
+    }
+    const source = await folioPickSource(
+        '更换文件夹源路径',
+        '粘贴新文件夹绝对路径',
+        host.pickFolder?.bind(host),
+    );
     if (!source) return;
     try {
         const out = await host.relinkFolder(dir, source);
@@ -1305,8 +1302,7 @@ function openPlusMenu(anchor: HTMLElement): void {
         ['file-plus', '新建笔记', () => void newNote()],
         ['bolt', '新建速记', () => void newMemo()],
         ['folder-plus', '新建文件夹', () => void newFolder()],
-        ['external-link', '链入外部 md（路径）', () => void linkOutside()],
-        ['file-export', '导入 md（文件窗）', () => void importMdByPicker()],
+        ['external-link', '链入外部 md / html', () => void linkOutside()],
         ['folders', '导入文件夹（链接）', () => void importFolderLink()],
     ];
     for (const [ic, label, run] of items) {

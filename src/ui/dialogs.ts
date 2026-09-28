@@ -55,6 +55,67 @@ export function folioPrompt(title: string, defaultValue = ''): Promise<string | 
     });
 }
 
+/**
+ * 路径来源弹窗：输入框可直接粘贴绝对路径；宿主给了系统选框时多一个「浏览…」。
+ * 确定回非空串，取消/关闭回 null。
+ */
+export function folioPickSource(
+    title: string,
+    placeholder: string,
+    browse?: () => Promise<string | null>,
+): Promise<string | null> {
+    return new Promise((resolve) => {
+        const ui = shell(title);
+        const done = (v: string | null) => {
+            ui.close();
+            resolve(v);
+        };
+        const input = document.createElement('input');
+        input.className = 'folio-modal-input';
+        input.placeholder = placeholder;
+        ui.box.append(input);
+        const hint = document.createElement('div');
+        hint.className = 'folio-modal-hint';
+        hint.hidden = true;
+        ui.box.append(hint);
+        const row = document.createElement('div');
+        row.className = 'folio-modal-actions';
+        const ok = document.createElement('button');
+        ok.textContent = '确定';
+        const cancel = document.createElement('button');
+        cancel.textContent = '取消';
+        if (browse) {
+            const pick = document.createElement('button');
+            pick.textContent = '浏览…';
+            pick.className = 'browse';
+            pick.addEventListener('click', () => {
+                pick.disabled = true;
+                void browse()
+                    .then((v) => {
+                        if (v) done(v);
+                    })
+                    .catch((err: unknown) => {
+                        hint.textContent = err instanceof Error ? err.message : String(err);
+                        hint.hidden = false;
+                    })
+                    .finally(() => {
+                        pick.disabled = false;
+                    });
+            });
+            row.append(pick);
+        }
+        row.append(ok, cancel);
+        ui.box.append(row);
+        input.focus();
+        ok.addEventListener('click', () => done(input.value.trim() || null));
+        cancel.addEventListener('click', () => done(null));
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') done(input.value.trim() || null);
+            if (e.key === 'Escape') done(null);
+        });
+    });
+}
+
 export function folioConfirm(title: string, okText = '删除'): Promise<boolean> {
     return new Promise((resolve) => {
         const ui = shell(title, true);

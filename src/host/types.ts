@@ -106,7 +106,9 @@ export interface FolioHost {
     defaultMdStatus?(): Promise<FolioFileAssoc>;
     /** 点「设为默认」：写 HKCU 关联；系统已有别家默认时 needsSettings=true 且已打开设置页。 */
     registerDefaultMd?(): Promise<FolioFileAssoc>;
-    /** 系统选文件夹窗；取消回 null。合入后由宿主原生对话框提供。 */
+    /** 系统选文件窗；取消回 null。宿主不提供时页内降级为路径输入。 */
+    pickFile?(): Promise<string | null>;
+    /** 系统选文件夹窗；取消回 null。宿主不提供时页内降级为路径输入。 */
     pickFolder?(): Promise<string | null>;
     /** 文件夹整体链入 vault/links/<原名>/，不拷贝。 */
     linkFolder?(absSource: string): Promise<{ dir: FolioPath; count: number }>;

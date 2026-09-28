@@ -525,44 +525,89 @@ async function relinkFolderDir(root: string, vaultRel: string, srcDir: string): 
     return collectDocs(dest, vaultRel);
 }
 
+/** 跑一段 powershell 选框脚本：EncodedCommand 不落盘、不受脚本执行策略管；宿主窗 TopMost 防弹到后台。取消回 null，失败抛错。 */
+async function runWinPickScript(body: string): Promise<string | null> {
+    const script = [
+        '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+        'Add-Type -AssemblyName System.Windows.Forms',
+        '[System.Windows.Forms.Application]::EnableVisualStyles()',
+        '$hostForm = New-Object System.Windows.Forms.Form',
+        '$hostForm.TopMost = $true',
+        '$hostForm.ShowInTaskbar = $false',
+        '$hostForm.StartPosition = "CenterScreen"',
+        '$hostForm.Width = 1',
+        '$hostForm.Height = 1',
+        '$hostForm.Show()',
+        body,
+        '$hostForm.Close()',
+    ].join('\n');
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    try {
+        const { stdout } = await execFileP(
+            'powershell.exe',
+            ['-STA', '-NoProfile', '-EncodedCommand', encoded],
+            { timeout: 10 * 60 * 1000, windowsHide: true },
+        );
+        const line = String(stdout).split(/\r?\n/).map((s) => s.trim()).filter(Boolean).pop() ?? '';
+        return line || null;
+    } catch (err) {
+        const stderr = String((err as { stderr?: unknown }).stderr ?? '').trim().split(/\r?\n/).pop() ?? '';
+        throw new Error(`打不开系统选框${stderr ? `：${stderr}` : ''}`);
+    }
+}
+
+/** 系统选文件窗（独立模式）。取消回 null。 */
+async function pickFileNative(): Promise<string | null> {
+    if (process.platform === 'win32') {
+        return runWinPickScript([
+            '$dialog = New-Object System.Windows.Forms.OpenFileDialog',
+            '$dialog.Title = "选择要链入的文档"',
+            '$dialog.Filter = "Markdown / HTML|*.md;*.markdown;*.html;*.htm|所有文件|*.*"',
+            '$dialog.CheckFileExists = $true',
+            '$dialog.Multiselect = $false',
+            'if ($dialog.ShowDialog($hostForm) -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.FileName }',
+        ].join('\n'));
+    }
+    if (process.platform === 'darwin') {
+        try {
+            const { stdout } = await execFileP('osascript', ['-e', 'POSIX path of (choose file)'], {
+                timeout: 10 * 60 * 1000,
+            });
+            return String(stdout).trim() || null;
+        } catch {
+            return null;
+        }
+    }
+    try {
+        const { stdout } = await execFileP('zenity', ['--file-selection', '--title=选择文件'], {
+            timeout: 10 * 60 * 1000,
+        });
+        return String(stdout).trim() || null;
+    } catch {
+        try {
+            const { stdout } = await execFileP('kdialog', ['--getopenfilename', '.'], {
+                timeout: 10 * 60 * 1000,
+            });
+            return String(stdout).trim() || null;
+        } catch {
+            throw new Error('打不开系统选文件窗');
+        }
+    }
+}
+
 /** 系统选文件夹窗（独立模式）。取消回 null。 */
 async function pickFolderNative(): Promise<string | null> {
     if (process.platform === 'win32') {
-        const scriptPath = path.join(os.tmpdir(), `folio-pick-${process.pid}-${Date.now()}.ps1`);
-        const script = [
-            '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
-            'function Get-FolioFolder {',
-            '  try {',
-            '    $shell = New-Object -ComObject Shell.Application',
-            '    $folder = $shell.BrowseForFolder(0, "选择工作区目录", 0x0041, 0)',
-            '    if ($null -ne $folder) { return [string]$folder.Self.Path }',
-            '  } catch { }',
-            '  Add-Type -AssemblyName System.Windows.Forms',
-            '  [System.Windows.Forms.Application]::EnableVisualStyles()',
-            '  $hostForm = New-Object System.Windows.Forms.Form',
-            '  $hostForm.TopMost = $true',
-            '  $hostForm.ShowInTaskbar = $false',
-            '  $dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
-            '  $dialog.Description = "选择工作区目录"',
-            '  $dialog.ShowNewFolderButton = $true',
-            '  if ($dialog.ShowDialog($hostForm) -eq [System.Windows.Forms.DialogResult]::OK) { return $dialog.SelectedPath }',
-            '  return ""',
-            '}',
-            '$path = Get-FolioFolder',
-            'if ($path) { Write-Output $path }',
-        ].join('\n');
-        await fs.writeFile(scriptPath, `\uFEFF${script}`, 'utf8');
-        try {
-            const { stdout } = await execFileP(
-                'powershell.exe',
-                ['-STA', '-NoProfile', '-File', scriptPath],
-                { timeout: 10 * 60 * 1000, windowsHide: false },
-            );
-            const line = String(stdout).split(/\r?\n/).map((s) => s.trim()).filter(Boolean).pop() ?? '';
-            return line || null;
-        } finally {
-            await fs.unlink(scriptPath).catch(() => undefined);
-        }
+        // OpenFileDialog 文件夹 hack：Vista 风格对话框，文件名框可直接粘贴路径
+        return runWinPickScript([
+            '$dialog = New-Object System.Windows.Forms.OpenFileDialog',
+            '$dialog.Title = "选择要链入的文件夹"',
+            '$dialog.ValidateNames = $false',
+            '$dialog.CheckFileExists = $false',
+            '$dialog.CheckPathExists = $true',
+            '$dialog.FileName = "选中此文件夹"',
+            'if ($dialog.ShowDialog($hostForm) -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output ([System.IO.Path]::GetDirectoryName($dialog.FileName)) }',
+        ].join('\n'));
     }
     if (process.platform === 'darwin') {
         try {
@@ -1242,6 +1287,22 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
         if (req.method === 'POST' && (pathname === 'presence' || pathname === 'bye')) {
             send(res, 204);
             return true;
+        }
+
+        // 系统选文件窗（独立模式；合入后由宿主原生对话框提供）
+        if (req.method === 'POST' && pathname === 'pick-file') {
+            try {
+                const picked = await pickFileNative();
+                if (!picked) {
+                    res.statusCode = 204;
+                    res.end();
+                    return true;
+                }
+                send(res, 200, { path: picked });
+                return true;
+            } catch (err) {
+                return fail(res, 400, err instanceof Error ? err.message : String(err));
+            }
         }
 
         // 系统选文件夹窗（独立模式；合入后由宿主原生对话框提供）

@@ -2096,10 +2096,21 @@ html[data-width='wide'] .mu-editor .mu-container {
     outline: none;
 }
 
+.folio-modal-hint {
+    font-size: var(--folio-font-size-xs);
+    color: var(--folio-danger);
+    margin-top: calc(var(--folio-space-2) * -1);
+    margin-bottom: var(--folio-space-3);
+}
+
 .folio-modal-actions {
     display: flex;
     justify-content: flex-end;
     gap: var(--folio-space-2);
+}
+
+.folio-modal-actions button.browse {
+    margin-right: auto;
 }
 
 .folio-modal-actions button {

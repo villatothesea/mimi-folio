@@ -5,8 +5,9 @@ import type { FolioAttachment, FolioDoc, FolioFileAssoc, FolioHost, FolioImage, 
  * 页面由 daemon HTTP 自己端（入口 URL 带 token 首访种 Cookie，之后
  * Cookie 自动跟），所以这里与 StandaloneHost 一样不感知 token。
  * 端点/方法/体形状与 StandaloneHost 逐方法对齐；409 冲突照 types
- * 注释往外抛（带 status）。pickFolder 不实现——页内已有降级
- * （workspaces.ts：没有该方法就提示粘贴路径），实现成 501 反而更差。
+ * 注释往外抛（带 status）。pickFile / pickFolder 不实现——daemon 无对应
+ * 路由，页内已降级为路径输入（folioPickSource 不给「浏览」钮），实现成
+ * 501 反而更差。
  */
 export class MimiHost implements FolioHost {
     private async json<T>(resp: Response): Promise<T> {
