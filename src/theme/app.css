@@ -3020,13 +3020,13 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     background: transparent;
 }
 
-/* 拖拽投放：文件夹行连同其展开的管辖子区整块高亮（区域 = folder-row + tree-children） */
-.folder-row.drop-target,
+/* 拖拽投放：行（文件行=投进其文件夹）/文件夹行连同管辖子区整块高亮；#files 空场 = 库根 */
+.tree-row.drop-target,
 .tree-children.drop-target {
     background: color-mix(in srgb, var(--folio-fg) 9%, transparent);
 }
 
-.folder-row.drop-target::after {
+.tree-row.drop-target::after {
     content: '';
     position: absolute;
     top: 0;
@@ -3036,6 +3036,10 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     width: var(--folio-sel-bar);
     background: var(--folio-fg);
     pointer-events: none;
+}
+
+#files.drop-target {
+    box-shadow: inset 0 0 0 2px var(--folio-fg);
 }
 
 /* 拖拽影：整行克隆体，fixed 抬出屏外让浏览器截图跟鼠标（#files 前缀压过 #files .tree-row 的 relative） */

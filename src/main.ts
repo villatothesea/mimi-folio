@@ -995,8 +995,14 @@ function pruneNestedSel(): { files: string[]; dirs: string[] } {
 function allDirs(): string[] {
     const dirs = new Set<string>(['notes', 'memos']);
     for (const f of allFiles) {
-        const dir = f.path.split('/').slice(0, -1).join('/');
-        if (dir) dirs.add(dir);
+        // folder 占位项 = 空文件夹；文档项取父目录。父链逐段补齐，层级才完整
+        const dir = f.folder ? f.path : f.path.split('/').slice(0, -1).join('/');
+        let d = dir;
+        while (d) {
+            dirs.add(d);
+            const i = d.lastIndexOf('/');
+            d = i < 0 ? '' : d.slice(0, i);
+        }
     }
     return [...dirs].sort((a, b) => a.localeCompare(b, 'zh'));
 }

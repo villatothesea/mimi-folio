@@ -115,8 +115,9 @@ function attachDragGhost(e: DragEvent, row: HTMLElement, anchor: HTMLElement): v
     anchor.addEventListener('dragend', () => ghost.remove(), { once: true });
 }
 
-/** 文件夹行 + 它展开的子区（tree-children）是同一投放区。 */
+/** 投放区：文件行=自身（投进它的文件夹）；文件夹行+展开的子区是一整块。 */
 function dropZoneRegion(el: HTMLElement): HTMLElement[] {
+    if (el.classList.contains('tree-row') && !el.classList.contains('folder-row')) return [el];
     const row = el.classList.contains('folder-row') ? el : el.previousElementSibling;
     const children = el.classList.contains('tree-children') ? el : el.nextElementSibling;
     const region: HTMLElement[] = [];
@@ -203,7 +204,36 @@ export function siblingFolderFoldState(files: FolioListItem[], dir: string): { a
  * 清单 = 文件夹树（bug4 2.1-2.6）：箭头/文件夹图标折叠，点名称只选中；
  * 子级有 1px 层级引导线；计数右对齐；星标行内显示，不设星标组；无横向滚动。
  */
+/** nav 空白区（最后一行之下的空场）= 库根投放面。opts 每次渲染刷新，监听只绑一次。 */
+const rootDropOpts = new WeakMap<HTMLElement, SidebarOptions>();
+
+function bindRootDrop(nav: HTMLElement, opts: SidebarOptions): void {
+    rootDropOpts.set(nav, opts);
+    if (nav.dataset.rootDrop === '1') return;
+    nav.dataset.rootDrop = '1';
+    const ours = (e: DragEvent) => [...(e.dataTransfer?.types ?? [])].some((t) => t.startsWith('text/folio-'));
+    nav.addEventListener('dragover', (e) => {
+        if (e.target !== nav || !ours(e)) return; // 行/文件夹自有区域，只有空地算库根
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        nav.classList.add('drop-target');
+    });
+    nav.addEventListener('dragleave', () => nav.classList.remove('drop-target'));
+    nav.addEventListener('drop', (e) => {
+        nav.classList.remove('drop-target');
+        if (e.target !== nav || !ours(e)) return;
+        e.preventDefault();
+        const o = rootDropOpts.get(nav);
+        // 空串 = 库根；已在根的文件/夹是空移动
+        const files = readTransfer(e, 'text/folio-paths', 'text/folio-path').filter((p) => parentDir(p) !== '');
+        const dirs = readTransfer(e, 'text/folio-dirs', 'text/folio-dir').filter((d) => parentDir(d) !== '');
+        if (files.length) o?.onMove?.(files, '');
+        if (dirs.length) o?.onMoveDirs?.(dirs, '');
+    });
+}
+
 export function renderSidebar(nav: HTMLElement, files: FolioListItem[], opts: SidebarOptions): void {
+    bindRootDrop(nav, opts);
     nav.replaceChildren();
     renderTree(nav, buildTree(files), 0, opts);
     alignGuideLines(nav);
@@ -380,6 +410,8 @@ function renderGroup(files: FolioListItem[], opts: SidebarOptions, _depth: numbe
             e.dataTransfer!.effectAllowed = 'move';
             attachDragGhost(e, row, button);
         });
+        // 文件行也是投放面：拖到行上 = 投进它所在文件夹（根级行 = 投进库根）
+        bindDropZone(row, parentDir(file.path), opts);
         row.append(button);
         frag.append(row);
     }
