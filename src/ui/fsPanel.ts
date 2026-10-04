@@ -1,11 +1,13 @@
 /**
- * 外链导入面板：从左栏右侧伸出的同宽文件树（替代弹窗选框）。
- * 从盘符根起懒加载展开，右键文件/文件夹即链入 vault——读写回原路径、不拷贝正文；
+ * 外链导入面板：从左栏右侧伸出的文件树（替代弹窗选框），右缘可拖宽。
+ * 从盘符根起懒加载展开，右键文件/文件夹出菜单选「加入外链」——读写回原路径、不拷贝正文；
  * vault 本体及其内部路径右键只提示不链。DOM/类名复用左栏树（.tree-row/.folder-row/…），
  * 视觉差异只在 #fs-panel 容器层。
  */
 import type { FolioBrowse } from '../host/types.ts';
+import { showContextMenu } from './contextMenu';
 import { icon } from './icons';
+import { attachResizer } from './panelResize';
 
 export type FsPanelOpts = {
     /** 目录数据源：host.browseDir 薄包装，mode 固定 'file'（目录 + md/html） */
@@ -46,7 +48,7 @@ export function toggleFsPanel(opts: FsPanelOpts): void {
     title.textContent = '外链导入';
     const hint = document.createElement('span');
     hint.className = 'fs-hint';
-    hint.textContent = '右键链入';
+    hint.textContent = '右键菜单';
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'icon-btn';
@@ -70,6 +72,7 @@ export function toggleFsPanel(opts: FsPanelOpts): void {
         e.preventDefault();
     }, { passive: false });
     document.getElementById('sidebar')?.after(panel);
+    attachResizer(panel, 'right', 'folio-w-fspanel', 180, 520);
     void fillChildren(tree, null, 0, opts);
 }
 
@@ -135,7 +138,7 @@ function dirRow(ent: FsEntry, depth: number, opts: FsPanelOpts): HTMLElement {
     name.className = 'file-name';
     name.textContent = ent.name;
     button.append(ic, name);
-    button.title = `${ent.path}（右键链入 vault）`;
+    button.title = `${ent.path}（右键出菜单）`;
 
     let loading = false;
     const flip = (expanded: boolean) => {
@@ -174,7 +177,9 @@ function dirRow(ent: FsEntry, depth: number, opts: FsPanelOpts): HTMLElement {
             opts.say('vault 内的目录已在库里');
             return;
         }
-        opts.onLinkDir(ent.path);
+        showContextMenu(e.clientX, e.clientY, [
+            { ic: 'link', label: '加入外链（整个文件夹）', run: () => opts.onLinkDir(ent.path) },
+        ]);
     });
     row.append(toggle, button);
     return row;
@@ -194,7 +199,7 @@ function fileRow(ent: FsEntry, depth: number, opts: FsPanelOpts): HTMLElement {
     name.className = 'file-name';
     name.textContent = ent.name;
     button.append(ic, name);
-    button.title = `${ent.path}（右键链入 vault）`;
+    button.title = `${ent.path}（右键出菜单）`;
     row.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -202,7 +207,9 @@ function fileRow(ent: FsEntry, depth: number, opts: FsPanelOpts): HTMLElement {
             opts.say('vault 内的文件已在库里');
             return;
         }
-        opts.onLinkFile(ent.path);
+        showContextMenu(e.clientX, e.clientY, [
+            { ic: 'link', label: '加入外链', run: () => opts.onLinkFile(ent.path) },
+        ]);
     });
     row.append(button);
     return row;
