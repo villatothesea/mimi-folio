@@ -1581,6 +1581,15 @@ installDesktopShellGuards();
 installTitlebar();
 blockNativeContextMenu(document.body);
 
+// 壳关了 wry 拖入 handler 后，OS 文件拖入以原生 HTML5 drop 进来（编辑区承接）。
+// 落到不接的区域（侧栏/页头等）WV2 会导航走，窗口级兜底拦掉。
+window.addEventListener('dragover', (e) => {
+    if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+});
+window.addEventListener('drop', (e) => {
+    if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+});
+
 /** 左栏文档右键。 */
 nav.addEventListener('contextmenu', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-path]');
