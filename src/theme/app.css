@@ -898,6 +898,31 @@ body.is-col-resizing iframe {
     background: var(--folio-hover);
 }
 
+/* 表格列宽拖柄：边界热区，悬浮/拖拽时显一条中线 */
+.col-resize-hit {
+    position: fixed;
+    width: calc(var(--folio-space-1) + var(--folio-space-2));
+    z-index: 30;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.col-resize-hit::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: var(--folio-border-strong);
+    opacity: 0;
+}
+
+.col-resize-hit:hover::after,
+.col-resize-hit.dragging::after {
+    opacity: 1;
+}
+
 /* ===== 面包屑 ===== */
 #breadcrumb {
     display: inline-flex;

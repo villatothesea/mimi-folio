@@ -32,6 +32,7 @@ import { attachScrollFade } from './ui/scrollFade.ts';
 import { buildToolbar } from './ui/toolbar.ts';
 import { initSettings, OPEN_POS_KEY, openSettings } from './ui/settings.ts';
 import { closeFsPanel, fsPanelOpen, toggleFsPanel } from './ui/fsPanel.ts';
+import { attachTableColResize } from './ui/tableColResize.ts';
 import { icon } from './ui/icons.ts';
 import type { FolioListItem } from './host/types.ts';
 
@@ -1448,6 +1449,9 @@ attachImageFallback(wrap);
 
 // 白名单视频链接内嵌正文流（单元 9，按验收反馈从底部面板改入正文）
 attachInlineEmbeds(wrap);
+
+// 表格列宽拖拽（验收批）：列边界拖柄，宽度按文档存 localStorage 视图偏好
+attachTableColResize(wrap, () => openFile);
 
 /** 右键「复制路径」：库内相对路径拼成 OS 绝对路径（带盘符）。 */
 async function copyAbsPath(rel: string): Promise<void> {
