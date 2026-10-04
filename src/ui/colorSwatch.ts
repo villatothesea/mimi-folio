@@ -1,8 +1,8 @@
 /**
  * 色卡块（验收批）：```color / ```palette / ```色卡 代码块渲染成色卡网格。
  * 每行 = 色码 + 可选名字（`#0F4921 Emerald`）；空行 = 网格另起一行。卡面：有名两行（名字 / 色码），无名单行色码（统一显示 hex）。
- * 默认只显示色卡——源码与代码块底衬都隐掉；点色卡出弹出式色码输入（# 自带、
- * 六位跳格、空格断行、Backspace 删格），提交经 muya input 管道写回源码；
+ * 默认只显示色卡——源码与代码块底衬都隐掉；点色卡复制色码，点每行数横排
+ * 出弹出式色码输入（# 自带、六位跳格、空格断行、Backspace 删格），提交写回源码；
  * 键盘摸进代码块仍自动露源码。展示层：不改 muya、不进 md 正文格式。
  * 每行格数：板左上角 −/＋，按块记忆（键 = 文档路径#色卡块序号，同表格列宽的存法）；
  * 没有记忆按页面宽度档给默认（标准 4 / 加宽 8）。旧版的全局档数迁移成默认值。
@@ -100,9 +100,10 @@ function renderBoard(swatches: SwatchItem[], cols: number): HTMLElement {
     board.className = 'swatch-board';
     board.contentEditable = 'false';
 
-    // 块左上：每行格数。−/＋ 之间是当前档（存数或按宽度档的默认）。
+    // 块左上：每行格数 + 色码编辑入口。−/＋ 之间是当前档（存数或按宽度档的默认）。
     const bar = document.createElement('div');
     bar.className = 'swatch-bar';
+    bar.title = '点这里弹出色码编辑';
     const label = document.createElement('span');
     label.className = 'swatch-cols-label';
     label.textContent = '每行';
@@ -308,7 +309,7 @@ function openSwatchEditor(pre: HTMLElement, x: number, y: number): void {
     inputs[0]?.focus();
 }
 
-export function attachColorSwatches(wrap: HTMLElement, docKey: () => string): void {
+export function attachColorSwatches(wrap: HTMLElement, docKey: () => string, onSay?: (msg: string) => void): void {
     const editing = new WeakSet<HTMLElement>();
     const store = readColsStore();
 
@@ -362,10 +363,22 @@ export function attachColorSwatches(wrap: HTMLElement, docKey: () => string): vo
             setCols(boardKey, colsFor(store, boardKey) + Number(stepper.dataset.dir));
             return;
         }
-        // 点色卡板 → 弹出式色码输入（不碰源码；键盘摸进代码块仍自动露源码）
-        const board = target.closest('.swatch-board');
-        const pre = board?.closest<HTMLElement>('pre.mu-code-block');
-        if (!board || !pre) return;
+        // 点色卡 → 一键复制色码
+        const card = target.closest<HTMLElement>('.swatch-card');
+        if (card) {
+            e.preventDefault();
+            const code = card.querySelector('.swatch-code')?.textContent;
+            if (code) {
+                void navigator.clipboard.writeText(code)
+                    .then(() => onSay?.(`已复制 ${code}`))
+                    .catch(() => onSay?.('复制失败'));
+            }
+            return;
+        }
+        // 点横排控件区（每行数那条）→ 弹出式色码输入；键盘摸进代码块仍自动露源码
+        const bar = target.closest('.swatch-bar');
+        const pre = bar?.closest<HTMLElement>('pre.mu-code-block');
+        if (!bar || !pre) return;
         e.preventDefault();
         openSwatchEditor(pre, e.clientX, e.clientY);
     }, true);
