@@ -1,6 +1,6 @@
 /**
  * 色卡块（验收批）：```color / ```palette / ```色卡 代码块渲染成色卡网格。
- * 每行 = 色码 + 可选名字（`#0F4921 Emerald`）；格子两行：名字 / 色码（统一显示 hex）。
+ * 每行 = 色码 + 可选名字（`#0F4921 Emerald`）；空行 = 网格另起一行。格子两行：名字 / 色码（统一显示 hex）。
  * 默认只显示色卡——源码与代码块底衬都隐掉；点色卡进源码编辑态（色卡仍在下方实时预览），
  * 光标离开代码块回色卡。纯展示层：不改 muya、不进 md 正文格式。
  * 每行格数：板左上角 −/＋，按块记忆（键 = 文档路径#色卡块序号，同表格列宽的存法）；
@@ -14,15 +14,25 @@ const COLS_MIN = 2;
 const COLS_MAX = 24;
 
 type Swatch = { color: string; name: string };
+/** 'br' = 源码里的空行 → 色块在网格里另起一行 */
+type SwatchItem = Swatch | 'br';
 
-function parseSwatches(text: string): Swatch[] {
-    const out: Swatch[] = [];
-    for (const line of text.split('\n')) {
-        const m = COLOR_RE.exec(line.trim());
-        if (!m) continue;
-        const color = m[1];
-        if (!CSS.supports('color', color)) continue; // 任意 CSS 色码都行，不合法的词自然出局
-        out.push({ color, name: line.trim().slice(color.length).trim() });
+function parseSwatches(text: string): SwatchItem[] {
+    const out: SwatchItem[] = [];
+    let pendingBreak = false;
+    for (const raw of text.split('\n')) {
+        const line = raw.trim();
+        if (!line) {
+            if (out.length && out[out.length - 1] !== 'br') pendingBreak = true;
+            continue;
+        }
+        const m = COLOR_RE.exec(line);
+        if (!m || !CSS.supports('color', m[1])) continue; // 非色码行忽略，也不断行
+        if (pendingBreak) {
+            out.push('br');
+            pendingBreak = false;
+        }
+        out.push({ color: m[1], name: line.slice(m[1].length).trim() });
     }
     return out;
 }
@@ -84,7 +94,7 @@ function colsFor(store: ColsStore, key: string): number {
     return document.documentElement.dataset.width === 'wide' ? 8 : 4;
 }
 
-function renderBoard(swatches: Swatch[], cols: number): HTMLElement {
+function renderBoard(swatches: SwatchItem[], cols: number): HTMLElement {
     const board = document.createElement('div');
     board.className = 'swatch-board';
     board.contentEditable = 'false';
@@ -123,6 +133,12 @@ function renderBoard(swatches: Swatch[], cols: number): HTMLElement {
         grid.append(hint);
     }
     for (const s of swatches) {
+        if (s === 'br') {
+            const br = document.createElement('div');
+            br.className = 'swatch-break';
+            grid.append(br);
+            continue;
+        }
         const card = document.createElement('div');
         card.className = 'swatch-card';
         card.style.setProperty('--sw', s.color);
