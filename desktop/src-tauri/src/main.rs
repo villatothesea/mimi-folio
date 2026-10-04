@@ -38,6 +38,8 @@ const PORT: u16 = 3790;
 static BOOT_T0: OnceLock<Instant> = OnceLock::new();
 static BOOT_EPOCH_MS: OnceLock<u128> = OnceLock::new();
 static BOOT_LOG: OnceLock<PathBuf> = OnceLock::new();
+/// 数据目录（exe 旁 folio-data），boot 线程解析后存这里给看门狗用。
+static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 fn boot_log_path() -> PathBuf {
     if let Some(p) = BOOT_LOG.get() {
@@ -233,6 +235,134 @@ foreach ($p in {pids}) {{
         }
         Err(e) => stamp(&format!("wv2 orphan sweep failed: {e}")),
     }
+}
+
+/// 同目录多实例共用 3790 上一个 server：后开实例只「reuse」不持有子进程，
+/// 先开的退出时 child.kill() 会带走 server，留下的窗口所有 API 全挂
+/// （"列目录失败：Failed to fetch" / 搜索假「没有命中」的根因）。
+/// 同一数据目录只许一个实例；second launch 聚焦已有窗口后退。
+/// mutex 按数据目录 hash 命名：不同安装目录（多份便携包）互不影响。
+#[cfg(windows)]
+fn data_dir_tag() -> String {
+    let dir = exe_dir()
+        .map(|d| d.join("folio-data").to_string_lossy().to_lowercase().replace('/', "\\"))
+        .unwrap_or_default();
+    // FNV-1a 64：不需要密码学强度，只要稳定。
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in dir.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!("{h:016x}")
+}
+
+#[cfg(windows)]
+fn claim_single_instance() -> bool {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS};
+    use windows::Win32::System::Threading::CreateMutexW;
+    let name: Vec<u16> = format!("Local\\mimi-folio-{}", data_dir_tag())
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    unsafe {
+        match CreateMutexW(None, true, PCWSTR(name.as_ptr())) {
+            Ok(h) if GetLastError() != ERROR_ALREADY_EXISTS => {
+                let _ = h; // HANDLE 无 Drop：不关句柄 = mutex 持有到进程退出，OS 自动释放
+                true
+            }
+            Ok(h) => {
+                let _ = CloseHandle(h);
+                false
+            }
+            Err(_) => true, // mutex 不可用不挡启动
+        }
+    }
+}
+
+/// 把已在跑的实例窗口拉到前台：只认「标题 米素* + 进程 exe 在我们目录下」的顶层窗口。
+#[cfg(windows)]
+fn focus_running_instance() {
+    use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM};
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+        SetForegroundWindow, ShowWindow, SW_RESTORE,
+    };
+
+    struct Ctx {
+        our_dir: String,
+        hit: Option<HWND>,
+    }
+    unsafe extern "system" fn cb(hwnd: HWND, lp: LPARAM) -> windows::core::BOOL {
+        let ctx = &mut *(lp.0 as *mut Ctx);
+        let mut buf = [0u16; 64];
+        let n = GetWindowTextW(hwnd, &mut buf);
+        let title = String::from_utf16_lossy(&buf[..n.max(0) as usize]);
+        if !title.starts_with("米素") || !IsWindowVisible(hwnd).as_bool() {
+            return true.into();
+        }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid == std::process::id() {
+            return true.into();
+        }
+        let ours = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+            .map(|h| {
+                let mut name = [0u16; 512];
+                let mut len = name.len() as u32;
+                let img = QueryFullProcessImageNameW(
+                    h,
+                    PROCESS_NAME_WIN32,
+                    windows::core::PWSTR(name.as_mut_ptr()),
+                    &mut len,
+                )
+                .map(|()| String::from_utf16_lossy(&name[..len as usize]).to_lowercase())
+                .unwrap_or_default();
+                let _ = CloseHandle(h);
+                img.starts_with(&ctx.our_dir)
+            })
+            .unwrap_or(false);
+        if ours {
+            ctx.hit = Some(hwnd);
+            return false.into();
+        }
+        true.into()
+    }
+
+    let our_dir = exe_dir()
+        .map(|d| d.to_string_lossy().to_lowercase().replace('/', "\\"))
+        .unwrap_or_default();
+    let mut ctx = Ctx { our_dir: format!("{}\\", our_dir.trim_end_matches('\\')), hit: None };
+    unsafe {
+        let _ = EnumWindows(Some(cb), LPARAM(&mut ctx as *mut Ctx as isize));
+        if let Some(hwnd) = ctx.hit {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+            let _ = SetForegroundWindow(hwnd);
+        }
+    }
+}
+
+/// 看门狗：server 被杀/崩而窗口还活着时 2s 内重拉。start_api 内部先
+/// netstat 复查再决定 spawn/reuse，两个实例竞速也只会赢一个。
+#[cfg(not(debug_assertions))]
+fn spawn_api_watchdog(data: PathBuf, server: std::sync::Arc<ServerProc>) {
+    std::thread::spawn(move || {
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], PORT));
+        loop {
+            std::thread::sleep(Duration::from_secs(2));
+            if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok() {
+                continue;
+            }
+            stamp("api watchdog: port dead, respawn");
+            if let Err(e) = start_api(&data, &server) {
+                stamp(&format!("api watchdog respawn failed: {e}"));
+            }
+        }
+    });
 }
 
 fn parse_pak() -> Result<(PakManifest, usize), String> {
@@ -507,6 +637,15 @@ fn main() {
     // epoch 也落账：进程创建时刻（WMI）对得上它时，差值就是 OS/杀软的 pre-main 耗时
     stamp(&format!("main enter @{}", BOOT_EPOCH_MS.get().copied().unwrap_or_default()));
 
+    // 同一数据目录只开一个实例（原因见 claim_single_instance 注释）。
+    // 局限：双击关联文件二次启动只聚焦已有窗，不再走 ?open= 新开。
+    #[cfg(all(windows, not(debug_assertions)))]
+    if !claim_single_instance() {
+        stamp("second instance, focus existing");
+        focus_running_instance();
+        return;
+    }
+
     // 孤儿 webview 清扫必须在 webview 创建前完成（否则 WV2 清场白等 17-50s），
     // 但 WMI 查询本身要 ~1.5s——后台跑，setup 建窗前 join，常态零成本。
     #[cfg(all(windows, not(debug_assertions)))]
@@ -532,7 +671,10 @@ fn main() {
         std::thread::spawn(move || {
             stamp("boot thread start");
             match data_dir() {
-                Ok(data) => start_api(&data, &server).map_err(|e| (e, Some(data))),
+                Ok(data) => {
+                    let _ = DATA_DIR.set(data.clone());
+                    start_api(&data, &server).map_err(|e| (e, Some(data)))
+                }
                 Err(e) => Err((e, None)),
             }
         })
@@ -619,6 +761,12 @@ fn main() {
                     Ok(Ok(())) => {
                         let _ = w4.navigate(app_url("http://127.0.0.1:3790"));
                         stamp("app nav issued");
+                        // server 被杀/崩后看门狗重拉——别实例复用的 server 属于别人，
+                        // 人家一退这边不陪葬（"Failed to fetch" 窗口的根因修复）。
+                        if let Some(data) = DATA_DIR.get() {
+                            let srv = handle.state::<std::sync::Arc<ServerProc>>().inner().clone();
+                            spawn_api_watchdog(data.clone(), srv);
+                        }
                         // 开屏没来得及画就连上服务的情况：导航后兜底亮窗
                         std::thread::sleep(Duration::from_millis(900));
                         show_window_once(&w4, "post-nav fallback");
