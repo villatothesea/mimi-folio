@@ -1,8 +1,9 @@
 /**
  * 色卡块（验收批）：```color / ```palette / ```色卡 代码块渲染成色卡网格。
  * 每行 = 色码 + 可选名字（`#0F4921 Emerald`）；空行 = 网格另起一行。卡面：有名两行（名字 / 色码），无名单行色码（统一显示 hex）。
- * 默认只显示色卡——源码与代码块底衬都隐掉；点色卡进源码编辑态（色卡仍在下方实时预览），
- * 光标离开代码块回色卡。纯展示层：不改 muya、不进 md 正文格式。
+ * 默认只显示色卡——源码与代码块底衬都隐掉；点色卡出弹出式色码输入（# 自带、
+ * 六位跳格、空格断行、Backspace 删格），提交经 muya input 管道写回源码；
+ * 键盘摸进代码块仍自动露源码。展示层：不改 muya、不进 md 正文格式。
  * 每行格数：板左上角 −/＋，按块记忆（键 = 文档路径#色卡块序号，同表格列宽的存法）；
  * 没有记忆按页面宽度档给默认（标准 4 / 加宽 8）。旧版的全局档数迁移成默认值。
  * 编辑态存 WeakSet：muya 重渲后 scan 会把 folio-editing 补回同一个 pre。
@@ -161,18 +162,150 @@ function renderBoard(swatches: SwatchItem[], cols: number): HTMLElement {
     return board;
 }
 
-/** 真选区落进代码尾部——合成鼠标事件搬不动原生光标（isTrusted=false），Selection API 可以。 */
-function placeCaretInCode(pre: HTMLElement): void {
-    requestAnimationFrame(() => {
-        const code = pre.querySelector<HTMLElement>('.mu-code');
-        const sel = document.getSelection();
-        if (!code || !sel) return;
-        const r = document.createRange();
-        r.selectNodeContents(code);
-        r.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(r);
+/**
+ * 把代码块源码整段换掉。Не через DOM/execCommand: у stamped-листа
+ * `codeblock.content` сеттер .text сам диспатчит jsonState.editOperation
+ * (ot-text diff) → модель → json-change → автосохранение. DOM сеттер не
+ * трогает — leaf.update() перерендеривает лист. Проверено в живой странице:
+ * getMarkdown обновляется синхронно, файл сохраняется.
+ */
+type MuyaContentLeaf = {
+    blockName?: string;
+    text?: string;
+    outContainer?: unknown;
+    update?: () => void;
+    firstContentInDescendant?: () => MuyaContentLeaf | null;
+    nextContentInContext?: () => MuyaContentLeaf | null;
+};
+
+function codeContentLeaf(pre: HTMLElement): MuyaContentLeaf | null {
+    const container = (pre as unknown as { __MUYA_BLOCK__?: MuyaContentLeaf }).__MUYA_BLOCK__;
+    let leaf = container?.firstContentInDescendant?.() ?? null;
+    for (let i = 0; leaf && i < 12; i += 1) {
+        if (leaf.blockName === 'codeblock.content' && leaf.outContainer === container) return leaf;
+        leaf = leaf.nextContentInContext?.() ?? null;
+    }
+    return null;
+}
+
+function writeCodeText(pre: HTMLElement, text: string): boolean {
+    const leaf = codeContentLeaf(pre);
+    if (!leaf || typeof leaf.text !== 'string') return false;
+    leaf.text = text;
+    // сеттер пишет в jsonState, но не рендерит DOM — руками перерендерить лист,
+    // иначе scan прочитает старый .mu-code и доска не обновится до перезагрузки
+    leaf.update?.();
+    return true;
+}
+
+const HEX_RE = /[^0-9a-fA-F]/g;
+
+/**
+ * 色卡弹出式编辑：点色卡板浮出一层横排输入格——# 自带不用打，
+ * 六位码自动跳下一格，空格 = 源码里的空行（断行符），Backspace 删格，
+ * Enter/点外提交，Esc 放弃。格子带原名，提交时色码后补回名字。
+ */
+function openSwatchEditor(pre: HTMLElement, x: number, y: number): void {
+    const codeEl = pre.querySelector<HTMLElement>('.mu-code');
+    if (!codeEl) return;
+    const items = parseSwatches(codeEl.textContent ?? '');
+
+    const pop = document.createElement('div');
+    pop.className = 'swatch-editor';
+    pop.title = '每格一个色码（# 不用打），六位自动跳下一格；留空 = 断行，Backspace 删格；Enter 提交，Esc 取消';
+
+    const inputs: HTMLInputElement[] = [];
+    const addCell = (hex: string, name: string): HTMLInputElement => {
+        const cell = document.createElement('label');
+        cell.className = 'swatch-edit-cell';
+        const hash = document.createElement('span');
+        hash.className = 'swatch-edit-hash';
+        hash.textContent = '#';
+        const inp = document.createElement('input');
+        inp.value = hex;
+        inp.dataset.name = name;
+        inp.maxLength = 8;
+        inp.spellcheck = false;
+        inp.autocomplete = 'off';
+        cell.append(hash, inp);
+        pop.append(cell);
+        inputs.push(inp);
+        return inp;
+    };
+    for (const it of items) {
+        if (it === 'br') addCell('', '');
+        else addCell(hexText(it.color).replace(/^#/, ''), it.name);
+    }
+    addCell('', ''); // 末尾留一格空白续写
+
+    const ensureTail = () => {
+        if (inputs.length === 0 || inputs[inputs.length - 1].value.trim()) addCell('', '');
+    };
+    const focusAt = (i: number) => inputs[Math.max(0, Math.min(inputs.length - 1, i))]?.focus();
+
+    pop.addEventListener('input', (e) => {
+        const inp = e.target as HTMLInputElement;
+        const cleaned = inp.value.replace(HEX_RE, '');
+        if (inp.value !== cleaned) inp.value = cleaned;
+        ensureTail();
+        if (inp.value.length >= 6) focusAt(inputs.indexOf(inp) + 1);
     });
+    pop.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            close();
+        } else if (e.key === 'Backspace') {
+            const inp = e.target as HTMLInputElement;
+            if (inp.tagName !== 'INPUT' || inp.value !== '') return;
+            const i = inputs.indexOf(inp);
+            if (i < 0) return;
+            e.preventDefault();
+            inputs.splice(i, 1);
+            inp.parentElement?.remove();
+            ensureTail();
+            focusAt(i - 1);
+        }
+    });
+
+    let done = false;
+    const close = () => {
+        if (done) return;
+        done = true;
+        document.removeEventListener('pointerdown', onOutside, true);
+        pop.remove();
+    };
+    const commit = () => {
+        // 空输入 = 断行；连续/收尾空行合并裁掉；格子原名补回色码后
+        const lines: string[] = [];
+        for (const inp of inputs) {
+            const v = inp.value.trim();
+            if (!v) {
+                if (lines.length && lines[lines.length - 1] !== '') lines.push('');
+                continue;
+            }
+            const nm = inp.dataset.name;
+            lines.push(`#${v}${nm ? ` ${nm}` : ''}`);
+        }
+        while (lines.length && lines[lines.length - 1] === '') lines.pop();
+        const text = lines.join('\n');
+        if (text !== (codeEl.textContent ?? '')) writeCodeText(pre, text);
+        close();
+    };
+    const onOutside = (e: Event) => {
+        if (e.target instanceof Node && pop.contains(e.target)) return;
+        commit();
+    };
+    document.addEventListener('pointerdown', onOutside, true);
+
+    document.body.append(pop);
+    // 贴在点击处，出界回夹（与 ctx-menu 同款定位）
+    const rect = pop.getBoundingClientRect();
+    pop.style.left = `${Math.min(x, innerWidth - rect.width - 8)}px`;
+    pop.style.top = `${Math.min(y, innerHeight - rect.height - 8)}px`;
+    inputs[0]?.focus();
 }
 
 export function attachColorSwatches(wrap: HTMLElement, docKey: () => string): void {
@@ -229,14 +362,12 @@ export function attachColorSwatches(wrap: HTMLElement, docKey: () => string): vo
             setCols(boardKey, colsFor(store, boardKey) + Number(stepper.dataset.dir));
             return;
         }
-        // 点色卡板 → 露出源码并把真光标放进代码末尾
+        // 点色卡板 → 弹出式色码输入（不碰源码；键盘摸进代码块仍自动露源码）
         const board = target.closest('.swatch-board');
         const pre = board?.closest<HTMLElement>('pre.mu-code-block');
         if (!board || !pre) return;
         e.preventDefault();
-        editing.add(pre);
-        pre.classList.add('folio-editing');
-        placeCaretInCode(pre);
+        openSwatchEditor(pre, e.clientX, e.clientY);
     }, true);
 
     wrap.addEventListener('focusout', (e) => {

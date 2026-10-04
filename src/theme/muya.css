@@ -218,6 +218,60 @@
     border-color: transparent;
 }
 
+/* 弹窗提交整段重写源码时：源码抬到屏外可编辑（display:none 里选区/insertText 不生效） */
+.mu-editor pre.folio-swatched.swatch-writing:not(.folio-editing) > .mu-code {
+    display: block;
+    position: absolute;
+    left: -10000px;
+    top: 0;
+}
+
+/* 色卡弹出式编辑：横排输入格，# 前缀自带，输入只收 hex */
+.swatch-editor {
+    position: fixed;
+    z-index: 80;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: var(--folio-space-1);
+    max-width: min(520px, 80vw);
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: var(--folio-space-2);
+    border: 1px solid var(--folio-border-strong);
+    border-radius: var(--folio-radius);
+    background: var(--folio-bg);
+    box-shadow: var(--folio-shadow);
+}
+
+.swatch-edit-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--folio-space-1);
+    padding: 0 var(--folio-space-1);
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: var(--folio-panel);
+    color: var(--folio-fg-muted);
+    font-family: var(--folio-font-mono);
+    font-size: var(--folio-font-size-sm);
+}
+
+.swatch-edit-cell:focus-within {
+    border-color: var(--folio-fg-muted);
+    color: var(--folio-fg);
+}
+
+.swatch-edit-cell input {
+    width: 7ch;
+    border: 0;
+    padding: var(--folio-space-1) 0;
+    background: none;
+    color: var(--folio-fg);
+    font: inherit;
+    outline: none;
+}
+
 .mu-editor .swatch-board {
     display: flex;
     flex-direction: column;
