@@ -15,6 +15,9 @@
     --folio-hover: #ececec;
     --folio-hover-active: #e2e2e2;
     --folio-selection: #d8d8d8;
+    /* 当前页签高亮：浅色用深灰底浅字；暗色保持页底色「切口」观感 */
+    --folio-tab-active-bg: #5c5c5c;
+    --folio-tab-active-fg: var(--folio-paper);
     /* 表格框选：透明浅灰，不盖网格、不改字色 */
     --folio-table-sel: rgb(0 0 0 / 6%);
     --folio-table-header-bg: var(--folio-bg-alt);

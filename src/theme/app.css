@@ -122,7 +122,8 @@ body {
     position: absolute;
     top: calc(var(--folio-control-h) + 2 * var(--folio-space-2) + 1px + var(--folio-page-inset));
     right: calc(var(--folio-toc-fab-end) + var(--folio-toc-scrollbar, 0px));
-    z-index: 15;
+    /* 高于淡出带(18)，与浮条(19)同级且 DOM 靠后，重叠时自然压上 */
+    z-index: 19;
     display: flex;
     justify-content: flex-end;
     align-items: flex-start;
@@ -760,17 +761,10 @@ body.is-col-resizing iframe {
     line-height: 1;
 }
 
-/* bug3.9：星星无边框、字号大一号；!important 压过 #page-head>button 的 font 简写 */
+/* 收藏挪进工具栏第一位（B 左侧）：吃 icon-btn/tool-btn 基样式，只留星号字号 */
 #favorite-toggle {
-    border: 0 !important;
-    background: none !important;
-    font-size: var(--folio-font-size) !important;
+    font-size: var(--folio-font-size);
     line-height: 1;
-    width: var(--folio-control-h);
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
 }
 
 #save-state {
@@ -786,6 +780,8 @@ body.is-col-resizing iframe {
     display: flex;
     align-self: stretch;
     min-width: 0;
+    /* 首个页签贴住栏左缘，吃掉 page-head 的左内边距 */
+    margin-left: calc(-1 * var(--folio-space-3));
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
@@ -824,10 +820,10 @@ body.is-col-resizing iframe {
 }
 
 .doc-tab[aria-current] {
-    background: var(--folio-bg);
-    color: var(--folio-fg);
-    /* 往下盖 1px 页底色「切断」顶栏下边框，签就是从栏里切出的口 */
-    box-shadow: 0 1px 0 var(--folio-bg);
+    background: var(--folio-tab-active-bg);
+    color: var(--folio-tab-active-fg);
+    /* 往下盖 1px 签底色「切断」顶栏下边框 */
+    box-shadow: 0 1px 0 var(--folio-tab-active-bg);
 }
 
 .doc-tab-x {
@@ -886,6 +882,22 @@ body.is-col-resizing iframe {
 
 #toolbar > * {
     pointer-events: auto;
+}
+
+/* 浮条下的淡出带：实底盖住按钮区防正文穿透，尾段渐隐让滚入的文字淡出 */
+#doc-fade {
+    position: absolute;
+    top: calc(var(--folio-control-h) + 2 * var(--folio-space-2) + 1px);
+    left: 0;
+    right: 0;
+    height: calc(var(--folio-control-h) + var(--folio-space-4));
+    background: linear-gradient(
+        to bottom,
+        var(--folio-bg) calc(var(--folio-control-h) + 6px),
+        transparent
+    );
+    pointer-events: none;
+    z-index: 18;
 }
 
 .tool-btn {
@@ -1108,7 +1120,8 @@ body.is-col-resizing iframe {
     box-sizing: border-box;
     max-width: var(--folio-measure);
     margin: 0 auto;
-    padding: var(--folio-space-4) var(--folio-doc-pad) var(--folio-space-2);
+    /* 顶距多留一档：首屏标题落在浮条淡出带之下 */
+    padding: calc(var(--folio-space-4) + var(--folio-space-3)) var(--folio-doc-pad) var(--folio-space-2);
     background: var(--folio-bg);
 }
 
@@ -3216,7 +3229,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
 
 #app.memo-mode #doc-scroll,
 #app.memo-mode #toolbar,
-#app.memo-mode #favorite-toggle,
+#app.memo-mode #doc-fade,
 #app.memo-mode #toc-host,
 #app.memo-mode #findbar-wrap {
     display: none;
@@ -3265,7 +3278,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
 
 #app.html-mode #doc-scroll,
 #app.html-mode #toolbar,
-#app.html-mode #favorite-toggle,
+#app.html-mode #doc-fade,
 #app.html-mode #toc-host,
 #app.html-mode #findbar-wrap,
 #app.html-mode #memo-view {

@@ -15,6 +15,9 @@
     --folio-hover: #2c2c2c;
     --folio-hover-active: #353535;
     --folio-selection: #484848;
+    /* 暗色当前签维持「页底色切口」，与亮色版式同结构不同值 */
+    --folio-tab-active-bg: var(--folio-bg);
+    --folio-tab-active-fg: var(--folio-fg);
     --folio-table-sel: rgb(255 255 255 / 8%);
     --folio-table-header-bg: var(--folio-bg-alt);
     --folio-highlight: #5a4a2e;
