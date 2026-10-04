@@ -34,6 +34,7 @@ import { initSettings, OPEN_POS_KEY, openSettings } from './ui/settings.ts';
 import { closeFsPanel, fsPanelOpen, toggleFsPanel } from './ui/fsPanel.ts';
 import { attachTableColResize } from './ui/tableColResize.ts';
 import { attachColorSwatches } from './ui/colorSwatch.ts';
+import { attachImageZoom } from './ui/imageZoom.ts';
 import { icon } from './ui/icons.ts';
 import type { FolioListItem } from './host/types.ts';
 
@@ -1462,6 +1463,9 @@ attachTableColResize(wrap, () => openFile);
 
 // 色卡块（验收批）：```color 代码块渲染成色卡，点色卡露源码编辑
 attachColorSwatches(wrap);
+
+// 图片灯箱（验收批）：点图放大预览，滚轮缩放，再点关闭
+attachImageZoom(wrap);
 
 // 悬停区滚轮（验收批）：原生只滚「光标下的可滚祖先」——滚在面板头/底栏/空隙等
 // 不可滚子区时整区无响应。这里把未命中滚动体的滚轮转发给本区滚动体；命中滚动体

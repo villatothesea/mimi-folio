@@ -2266,6 +2266,33 @@ html[data-width='wide'] .mu-editor .mu-container {
     opacity: 0.5;
 }
 
+/* ===== 图片灯箱：点图放大，滚轮光标锚缩放，再点关闭 ===== */
+.folio-zoom {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--folio-modal-z) + 1);
+    background: var(--folio-veil);
+    overflow: hidden;
+    cursor: zoom-out;
+    animation: folio-fade-in 0.15s ease-out;
+}
+
+.folio-zoom img {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    transform-origin: center;
+    max-width: none;
+    max-height: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.mu-editor .mu-inline-image img {
+    cursor: zoom-in;
+}
+
 /* 输入框选中反色：暗色下原生高亮字色太深看不清，与搜索命中同一反色规则 */
 input::selection,
 textarea::selection {

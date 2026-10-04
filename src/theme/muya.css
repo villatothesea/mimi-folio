@@ -272,13 +272,13 @@
     padding: var(--folio-space-2) var(--folio-space-3);
     border-radius: var(--folio-radius-card);
     background: var(--sw);
-    color: var(--folio-bg);
+    color: var(--folio-paper);
     cursor: text;
     overflow: hidden;
 }
 
 .mu-editor .swatch-card.swatch-light {
-    color: var(--folio-fg);
+    color: var(--folio-ink);
 }
 
 .mu-editor .swatch-name {

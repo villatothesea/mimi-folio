@@ -10,7 +10,7 @@ const LANGS = new Set(['color', 'colors', 'palette', 'swatch', '色卡', '色块
 const COLOR_RE = /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|[a-zA-Z]+)\s*/;
 const COLS_KEY = 'folio-swatch-cols';
 const COLS_MIN = 2;
-const COLS_MAX = 12;
+const COLS_MAX = 24;
 
 type Swatch = { color: string; name: string };
 
@@ -26,19 +26,27 @@ function parseSwatches(text: string): Swatch[] {
     return out;
 }
 
-/** 感知亮度（WCAG 相对亮度简化版），决定卡上用深字还是浅字。 */
+/** WCAG 相对亮度（线性化后 0~1），决定卡上用深字还是浅字。 */
 function luminance(color: string): number {
     const probe = document.createElement('canvas').getContext('2d');
     if (!probe) return 0;
     probe.fillStyle = color;
-    const computed = probe.fillStyle; // 归一化出 #rrggbb 或 #rgb
+    const computed = probe.fillStyle; // 归一化出 #rrggbb 或 rgb()/rgba()
     const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(computed);
-    const f = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(computed);
-    const ch = m
+    const f = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?/i.exec(computed);
+    let ch = m
         ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)]
         : f ? [+f[1], +f[2], +f[3]] : null;
     if (!ch) return 0;
-    return (0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]) / 255;
+    if (f?.[4]) {
+        const a = Number(f[4]); // 带透明度的先按白底合成再判断
+        ch = ch.map((c) => Math.round(c * a + 255 * (1 - a)));
+    }
+    const lin = ch.map((c) => {
+        const s = c / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
 }
 
 function rgbText(color: string): string {
@@ -97,7 +105,8 @@ function renderBoard(swatches: Swatch[], cols: number): HTMLElement {
         const card = document.createElement('div');
         card.className = 'swatch-card';
         card.style.setProperty('--sw', s.color);
-        if (luminance(s.color) > 0.45) card.classList.add('swatch-light');
+        // 卡上深字/浅字按卡色 WCAG 亮度选：L>0.18 时深字比浅字对比度高
+        if (luminance(s.color) > 0.18) card.classList.add('swatch-light');
         const name = document.createElement('span');
         name.className = 'swatch-name';
         name.textContent = s.name || s.color;

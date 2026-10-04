@@ -83,6 +83,11 @@
     --folio-doc-pad: 50px;
     --folio-font-size-code: var(--folio-fs-code);
     --folio-shadow: rgb(0 0 0 / 5%) 0 0 0 1px, rgb(0 0 0 / 6%) 0 3px 6px;
+    /* 图片灯箱遮罩 */
+    --folio-veil: rgb(0 0 0 / 55%);
+    /* 色卡卡上字：随卡色深浅固定选，不跟主题明暗反转 */
+    --folio-ink: #1a1a1a;
+    --folio-paper: #f2f2f2;
     /* 须高于 Muya 段落钮/浮动层（~10000），否则弹窗会被穿透 */
     --folio-overlay-z: 10001;
     --folio-modal-z: 10002;
