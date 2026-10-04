@@ -698,6 +698,9 @@ fn main() {
             .title("米素")
             .inner_size(1280.0, 840.0)
             .decorations(false)
+            // 默认的 OS 文件拖入让 wry 注册自己的 IDropTarget，页内 HTML5 拖拽
+            // （侧栏拖文件换夹）的 drop 被它吞掉——关掉 handler 才能用 HTML5 DnD。
+            .disable_drag_drop_handler()
             .build()?;
             #[cfg(all(windows, not(debug_assertions)))]
             {
@@ -720,6 +723,7 @@ fn main() {
             .inner_size(1280.0, 840.0)
             .decorations(false)
             .visible(false)
+            .disable_drag_drop_handler() // 同上：OS 文件拖入没人接，页内拖拽却会被吞
             .initialization_script(&splash_init_js())
             // 纯本地应用不需要网络栈：本机存在流量过滤时，WV2 建 webview 时的
             // 组件更新/CRL/代理探测都会走重传超时（实测偶发 17-20s），全掐掉。
