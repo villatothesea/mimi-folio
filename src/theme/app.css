@@ -1384,12 +1384,16 @@ span.mu-inline-image.folio-img-fixed {
     overflow: hidden;
 }
 
+/* 分隔线挂在「可见的下段」顶边：无标签无结果时只剩输入框，不留横线空区 */
+.search-panel > :not(.search-input-wrap):not([hidden]) {
+    border-top: 1px solid var(--folio-border);
+}
+
 .search-input {
     display: block;
     width: 100%;
     box-sizing: border-box;
     border: 0;
-    border-bottom: 1px solid var(--folio-border);
     background: none;
     color: var(--folio-fg);
     font: inherit;
@@ -1452,9 +1456,10 @@ span.mu-inline-image.folio-img-fixed {
     white-space: nowrap;
 }
 
+/* 搜索命中反色（验收批）：底色吃前景色，字吃底色 */
 .search-snippet mark {
-    background: var(--folio-selection);
-    color: inherit;
+    background: var(--folio-fg);
+    color: var(--folio-bg);
     border-radius: 2px;
     padding: 0 1px;
 }
@@ -2937,7 +2942,6 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     flex-wrap: wrap;
     gap: var(--folio-space-1);
     padding: var(--folio-space-2) var(--folio-space-4);
-    border-bottom: 1px solid var(--folio-border);
 }
 
 .search-tags .tag-chip {

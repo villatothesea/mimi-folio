@@ -49,6 +49,7 @@ export function attachSearchPalette(opts: SearchPaletteOptions): { show: () => v
     function renderTags(): void {
         const tags = new Set<string>();
         for (const file of opts.getFiles()) for (const tag of file.tags ?? []) tags.add(tag);
+        tagsRow.hidden = tags.size === 0;
         tagsRow.replaceChildren(
             ...[...tags].sort((a, b) => a.localeCompare(b, 'en'))
                 .map((tag) => {
@@ -69,6 +70,7 @@ export function attachSearchPalette(opts: SearchPaletteOptions): { show: () => v
 
     const list = document.createElement('div');
     list.className = 'search-list';
+    list.hidden = true;
     panel.append(list);
 
     overlay.append(panel);
@@ -80,6 +82,7 @@ export function attachSearchPalette(opts: SearchPaletteOptions): { show: () => v
 
     function renderList(query: string): void {
         list.replaceChildren();
+        list.hidden = results.length === 0 && !query;
         active = Math.min(active, Math.max(results.length - 1, 0));
         results.forEach((item, i) => {
             const row = document.createElement('button');

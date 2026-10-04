@@ -89,10 +89,18 @@
 
 
 /* ==mark== 高亮：吃 --folio-highlight（bug4 4.4） */
-.mu-editor .mu-highlight,
 .mu-editor mark {
     background: var(--folio-highlight);
     color: inherit;
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+/* 文内搜索命中（.mu-highlight 当前处 / .mu-selection 其余处）：反色，同搜索面板 mark */
+.mu-editor .mu-highlight,
+.mu-editor .mu-selection {
+    background: var(--folio-fg);
+    color: var(--folio-bg);
     border-radius: 2px;
     padding: 0 2px;
 }
