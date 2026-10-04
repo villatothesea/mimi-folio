@@ -1,0 +1,62 @@
+--- a/src/inlineRenderer/utils.ts
++++ b/src/inlineRenderer/utils.ts
+@@ -156,8 +156,16 @@
+         const text = src.substring(i);
+ 
+         for (const [name, regexp] of Object.entries(rules)) {
+             const to = regexp.exec(text);
++            // link/image destinations are a greedy `(.*)` — a later ')' on the
++            // line over-extends the raw match past the candidate range even
++            // though the real link fits inside it. Apply the same paren-
++            // balancing the lexer does (correctUrl) before deciding whether
++            // the match truly reaches beyond offset; otherwise e.g.
++            // `**t [a](b)** (c)` loses its strong.
++            if (to && (name === 'link' || name === 'image'))
++                correctUrl(to);
++
+             if (to && to[0].length <= offset - i)
+                 ignoreIndex.push(i + to[0].length - 1);
+ 
+             if (to && to[0].length > offset - i)
+--- /dev/null
++++ b/src/inlineRenderer/__tests__/strongContainingLink.spec.ts
+@@ -0,0 +1,36 @@
++// @vitest-environment happy-dom
++
++import { describe, expect, it } from 'vitest';
++import { tokenizer } from '../lexer';
++
++// `**text [a](b)** (c)` lost its strong: the link rule's greedy `(.*)`
++// destination over-reached into a later `)` on the line, so the link "match"
++// extended past the strong's range and `validateEmphasize → lowerPriority`
++// vetoed the emphasis. The lexer corrects link extent with correctUrl's paren
++// balancing — the veto path must apply the same correction.
++
++function strong(src: string) {
++    return tokenizer(src).find(t => t.type === 'strong');
++}
++
++describe('emphasis containing a link — greedy destination correction', () => {
++    it('keeps strong when a parenthesized clause follows the span', () => {
++        const token = strong('**The diagrams are in [x](../pith-flows.html)** (self-contained; open in any browser).');
++        expect(token).toBeDefined();
++        expect(token!.children?.some(t => t.type === 'link')).toBe(true);
++    });
++
++    it('keeps em under the same trailing-paren shape', () => {
++        const token = tokenizer('*t [a](b)* (c)').find(t => t.type === 'em');
++        expect(token).toBeDefined();
++        expect(token!.children?.some(t => t.type === 'link')).toBe(true);
++    });
++
++    it('keeps strong around an image with a following paren clause', () => {
++        const token = strong('**see ![pic](a.png)** (full size)');
++        expect(token).toBeDefined();
++        expect(token!.children?.some(t => t.type === 'image')).toBe(true);
++    });
++
++    it('still rejects a strong span truly cut by a link', () => {
++        // *[foo*](bar): the link binds tighter — no strong/em may span it.
++        expect(strong('**t [a**](b)**')).toBeUndefined();
++    });
++});

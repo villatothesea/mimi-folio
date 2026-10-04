@@ -1,7 +1,7 @@
 {
   "name": "@muyajs/core",
   "version": "0.2.0",
-  "digest": "63106a7fbe72757a4365566e0b09b09897379422d9f4e09048aea56c783d5d13",
+  "digest": "3a415d4fffa6b4941e53e5da65c131a9cb53bcf5bd84cb0031600c5ad6fcd687",
   "files": {
     "src/__tests__/arrowHtmlBlockCrash.spec.ts": "0a87df50d88ebf324ec85be9740b2148d95e02af39bb7273253c26ed99cee116",
     "src/__tests__/blockEditing.spec.ts": "bfb92bde54b0110ba4ffafe80ce2d62c99f5e8bd9bd72eb3c860a1c62f67e83b",
@@ -382,6 +382,7 @@
     "src/inlineRenderer/__tests__/inlineMathEscape.spec.ts": "e8fa976cbd2dc7409947104bb2002dc3aff912fab30cc060d265e3d86378c43e",
     "src/inlineRenderer/__tests__/linkFollowedByAutolink.spec.ts": "6e85c398aa525e5f24f976267af05b3891c2d79445a58879d53306eccf126f34",
     "src/inlineRenderer/__tests__/referenceLinkImageAnchor.spec.ts": "722120dbab7bddaad9abfcd241ea07c6cc059c8567b9e425588e92e1295846a4",
+    "src/inlineRenderer/__tests__/strongContainingLink.spec.ts": "dba288573ad803b05b1c74c3fe1cfad37085774fce982bac049e3be5de30b522",
     "src/inlineRenderer/index.ts": "9520f96681215d131b061b3e586162a56e936bad9f74069904e7741773782ee9",
     "src/inlineRenderer/lexer.ts": "5eefd0d72129e454a69ee8bfd5d32bd88da1a0ba717a8a7d17594693b681a47a",
     "src/inlineRenderer/renderer/__tests__/image.spec.ts": "77b62e01d1cb1f44e023aaf347d65c5491aeabb511fbbc3a92fc15f2706ffd51",
@@ -420,7 +421,7 @@
     "src/inlineRenderer/renderer/text.ts": "a4548ba62245d9d7d04da9a70240d5b567d2990984e845e8d565ac372f27a27f",
     "src/inlineRenderer/rules.ts": "9190621952c40a8c58d505008738ae5532cdf87f0ff0d6853c6cf39a6d26dffb",
     "src/inlineRenderer/types.ts": "2346acaf583dd6ae520bd9053b657cc38f8d7ae3b0dee427f36385a5de90a34e",
-    "src/inlineRenderer/utils.ts": "72b9f86d12eac1ccff7ddc3e07a9313b2953560c069405feea0fb50a6508b480",
+    "src/inlineRenderer/utils.ts": "0f653def1edd44f7325015b2a259a631382d4d9ca369ef38700c4fdfb2235412",
     "src/locales/de.ts": "b508160e6c35c3d72996c6fd9d2d2870a2a0794d3bd57459652a9262c8bf503b",
     "src/locales/en.ts": "4f929062a23bfa24e420d33b6551d425e5f6323d626f129871e0bc4d43ac03c6",
     "src/locales/es.ts": "a616c719783fefa668c39181ff21a5eee868d0447a46bead79edefb6179d97d3",
