@@ -1,9 +1,10 @@
 /**
  * 色卡块（验收批）：```color / ```palette / ```色卡 代码块渲染成色卡网格。
- * 每行 = 色码 + 可选名字（`#0F4921 Emerald`）；格子两行：名字 / 色码（无名时第二行给 rgb）。
+ * 每行 = 色码 + 可选名字（`#0F4921 Emerald`）；格子两行：名字 / 色码（统一显示 hex）。
  * 默认只显示色卡——源码与代码块底衬都隐掉；点色卡进源码编辑态（色卡仍在下方实时预览），
  * 光标离开代码块回色卡。纯展示层：不改 muya、不进 md 正文格式。
- * 每行格数：板左上角 −/＋，存 localStorage；默认按页面宽度档（标准 4 / 加宽 8）。
+ * 每行格数：板左上角 −/＋，按块记忆（键 = 文档路径#色卡块序号，同表格列宽的存法）；
+ * 没有记忆按页面宽度档给默认（标准 4 / 加宽 8）。旧版的全局档数迁移成默认值。
  * 编辑态存 WeakSet：muya 重渲后 scan 会把 folio-editing 补回同一个 pre。
  */
 const LANGS = new Set(['color', 'colors', 'palette', 'swatch', '色卡', '色块']);
@@ -49,17 +50,37 @@ function luminance(color: string): number {
     return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
 }
 
-function rgbText(color: string): string {
+/** 归一成 hex 显示（#rrggbb / 带透明度 #rrggbbaa）；认不出的原样返回。 */
+function hexText(color: string): string {
     const probe = document.createElement('canvas').getContext('2d');
     if (!probe) return color;
     probe.fillStyle = color;
-    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(probe.fillStyle);
-    return m ? `rgb(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)})` : color;
+    const computed = probe.fillStyle;
+    const m = /^#([0-9a-f]{6})/i.exec(computed);
+    if (m) return `#${m[1]}`;
+    const f = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s]+([\d.]+))?/i.exec(computed);
+    if (!f) return color;
+    const hex = [+f[1], +f[2], +f[3]].map((c) => c.toString(16).padStart(2, '0')).join('');
+    const a = f[4] !== undefined ? Math.round(Number(f[4]) * 255) : 255;
+    return a >= 255 ? `#${hex}` : `#${hex}${a.toString(16).padStart(2, '0')}`;
 }
 
-function effCols(): number {
-    const saved = Number(localStorage.getItem(COLS_KEY));
-    if (Number.isInteger(saved) && saved >= COLS_MIN && saved <= COLS_MAX) return saved;
+/** 每块一格数：{"文档#块序号": n}；旧版存的是裸数字全局档，读出来当默认值。 */
+type ColsStore = { map: Record<string, number>; legacy: number };
+
+function readColsStore(): ColsStore {
+    try {
+        const v: unknown = JSON.parse(localStorage.getItem(COLS_KEY) ?? 'null');
+        if (v && typeof v === 'object') return { map: v as Record<string, number>, legacy: 0 };
+        if (typeof v === 'number' && Number.isInteger(v)) return { map: {}, legacy: v };
+    } catch { /* 无记录/坏数据 */ }
+    return { map: {}, legacy: 0 };
+}
+
+function colsFor(store: ColsStore, key: string): number {
+    const v = store.map[key];
+    if (Number.isInteger(v) && v >= COLS_MIN && v <= COLS_MAX) return v;
+    if (store.legacy >= COLS_MIN && store.legacy <= COLS_MAX) return store.legacy;
     return document.documentElement.dataset.width === 'wide' ? 8 : 4;
 }
 
@@ -112,7 +133,7 @@ function renderBoard(swatches: Swatch[], cols: number): HTMLElement {
         name.textContent = s.name || s.color;
         const code = document.createElement('span');
         code.className = 'swatch-code';
-        code.textContent = s.name ? s.color : rgbText(s.color);
+        code.textContent = hexText(s.color);
         card.append(name, code);
         grid.append(card);
     }
@@ -134,11 +155,12 @@ function placeCaretInCode(pre: HTMLElement): void {
     });
 }
 
-export function attachColorSwatches(wrap: HTMLElement): void {
+export function attachColorSwatches(wrap: HTMLElement, docKey: () => string): void {
     const editing = new WeakSet<HTMLElement>();
-    let cols = effCols();
+    const store = readColsStore();
 
     const scan = () => {
+        let idx = 0; // 只数色卡块：普通代码块不占序号
         for (const pre of wrap.querySelectorAll<HTMLElement>('pre.mu-code-block')) {
             const lang = pre.querySelector('.mu-language-input')?.textContent?.trim().toLowerCase() ?? '';
             const codeEl = pre.querySelector<HTMLElement>('.mu-code');
@@ -147,14 +169,17 @@ export function attachColorSwatches(wrap: HTMLElement): void {
                 pre.querySelector(':scope > .swatch-board')?.remove();
                 continue;
             }
+            const key = `${docKey()}#${idx++}`;
+            const cols = colsFor(store, key);
             const text = codeEl?.textContent ?? '';
             const swatches = parseSwatches(text);
             const sig = `${cols}|${JSON.stringify(swatches)}`;
             let board = pre.querySelector<HTMLElement>(':scope > .swatch-board');
-            if (!board || board.dataset.sig !== sig) {
+            if (!board || board.dataset.sig !== sig || board.dataset.colsKey !== key) {
                 board?.remove();
                 board = renderBoard(swatches, cols);
                 board.dataset.sig = sig;
+                board.dataset.colsKey = key;
                 pre.append(board);
             }
             pre.classList.add('folio-swatched');
@@ -162,9 +187,9 @@ export function attachColorSwatches(wrap: HTMLElement): void {
         }
     };
 
-    const setCols = (n: number) => {
-        cols = Math.min(COLS_MAX, Math.max(COLS_MIN, n));
-        localStorage.setItem(COLS_KEY, String(cols));
+    const setCols = (key: string, n: number) => {
+        store.map[key] = Math.min(COLS_MAX, Math.max(COLS_MIN, n));
+        localStorage.setItem(COLS_KEY, JSON.stringify(store.map));
         scan();
     };
 
@@ -178,9 +203,10 @@ export function attachColorSwatches(wrap: HTMLElement): void {
     wrap.addEventListener('mousedown', (e) => {
         const target = e.target as HTMLElement;
         const stepper = target.closest<HTMLElement>('.swatch-cols-btn');
-        if (stepper?.closest('.swatch-board')) {
+        const boardKey = stepper?.closest<HTMLElement>('.swatch-board')?.dataset.colsKey;
+        if (stepper && boardKey) {
             e.preventDefault();
-            setCols(cols + Number(stepper.dataset.dir));
+            setCols(boardKey, colsFor(store, boardKey) + Number(stepper.dataset.dir));
             return;
         }
         // 点色卡板 → 露出源码并把真光标放进代码末尾

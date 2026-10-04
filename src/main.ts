@@ -1532,8 +1532,8 @@ attachInlineEmbeds(wrap);
 // 表格列宽拖拽（验收批）：列边界拖柄，宽度按文档存 localStorage 视图偏好
 attachTableColResize(wrap, () => openFile);
 
-// 色卡块（验收批）：```color 代码块渲染成色卡，点色卡露源码编辑
-attachColorSwatches(wrap);
+// 色卡块（验收批）：```color 代码块渲染成色卡，点色卡露源码编辑；每行格数按块记
+attachColorSwatches(wrap, () => openFile ?? '');
 
 // 图片灯箱（验收批）：点图放大预览，滚轮缩放，再点关闭
 attachImageZoom(wrap);
