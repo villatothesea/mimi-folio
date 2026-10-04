@@ -78,6 +78,7 @@ export function attachSearchPalette(opts: SearchPaletteOptions): { show: () => v
 
     let results: FolioSearchItem[] = [];
     let active = 0;
+    let lastError: string | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     function renderList(query: string): void {
@@ -117,7 +118,8 @@ export function attachSearchPalette(opts: SearchPaletteOptions): { show: () => v
         if (results.length === 0 && query) {
             const empty = document.createElement('div');
             empty.className = 'search-empty';
-            empty.textContent = '没有命中';
+            // 请求失败要说出失败——吞掉装「没有命中」会把服务端死了藏成正常空态
+            empty.textContent = lastError ? `搜索失败：${lastError}` : '没有命中';
             list.append(empty);
         }
     }
@@ -144,8 +146,10 @@ export function attachSearchPalette(opts: SearchPaletteOptions): { show: () => v
             }
             try {
                 results = await opts.search(q);
-            } catch {
+                lastError = null;
+            } catch (err) {
                 results = [];
+                lastError = err instanceof Error ? err.message : String(err);
             }
             active = 0;
             renderList(q);
