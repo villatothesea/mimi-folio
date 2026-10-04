@@ -274,13 +274,18 @@
     flex-direction: column;
     justify-content: center;
     min-width: 0;
-    min-height: calc(var(--folio-font-size) * 2.8); /* 两行高 */
+    min-height: calc(var(--folio-font-size) * 1.9); /* 单行色号高 */
     padding: var(--folio-space-2) var(--folio-space-3);
     border-radius: var(--folio-radius-card);
     background: var(--sw);
     color: var(--folio-paper);
     cursor: text;
     overflow: hidden;
+}
+
+/* 带名字的才两行高：名字 + 色号 */
+.mu-editor .swatch-card.swatch-named {
+    min-height: calc(var(--folio-font-size) * 2.8);
 }
 
 .mu-editor .swatch-card.swatch-light {

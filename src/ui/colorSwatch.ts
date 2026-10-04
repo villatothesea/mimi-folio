@@ -1,6 +1,6 @@
 /**
  * 色卡块（验收批）：```color / ```palette / ```色卡 代码块渲染成色卡网格。
- * 每行 = 色码 + 可选名字（`#0F4921 Emerald`）；空行 = 网格另起一行。格子两行：名字 / 色码（统一显示 hex）。
+ * 每行 = 色码 + 可选名字（`#0F4921 Emerald`）；空行 = 网格另起一行。卡面：有名两行（名字 / 色码），无名单行色码（统一显示 hex）。
  * 默认只显示色卡——源码与代码块底衬都隐掉；点色卡进源码编辑态（色卡仍在下方实时预览），
  * 光标离开代码块回色卡。纯展示层：不改 muya、不进 md 正文格式。
  * 每行格数：板左上角 −/＋，按块记忆（键 = 文档路径#色卡块序号，同表格列宽的存法）；
@@ -144,13 +144,17 @@ function renderBoard(swatches: SwatchItem[], cols: number): HTMLElement {
         card.style.setProperty('--sw', s.color);
         // 卡上深字/浅字按卡色 WCAG 亮度选：L>0.18 时深字比浅字对比度高
         if (luminance(s.color) > 0.18) card.classList.add('swatch-light');
-        const name = document.createElement('span');
-        name.className = 'swatch-name';
-        name.textContent = s.name || s.color;
+        if (s.name) {
+            card.classList.add('swatch-named');
+            const name = document.createElement('span');
+            name.className = 'swatch-name';
+            name.textContent = s.name;
+            card.append(name);
+        }
         const code = document.createElement('span');
         code.className = 'swatch-code';
         code.textContent = hexText(s.color);
-        card.append(name, code);
+        card.append(code);
         grid.append(card);
     }
     board.append(grid);
