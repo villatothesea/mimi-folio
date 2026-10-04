@@ -839,9 +839,13 @@ body.is-col-resizing iframe {
     opacity: 0;
 }
 
-.doc-tab:hover .doc-tab-x,
-.doc-tab[aria-current] .doc-tab-x {
+.doc-tab:hover .doc-tab-x {
     opacity: 0.7;
+}
+
+/* 当前签的 × 与名同色（不透明度打满），非当前签仍悬停才现 */
+.doc-tab[aria-current] .doc-tab-x {
+    opacity: 1;
 }
 
 .doc-tab-x:hover {

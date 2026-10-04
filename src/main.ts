@@ -708,6 +708,13 @@ function renderTabs(): void {
         });
         tabsEl.append(tab);
     }
+    // 签条横滚时保持当前签可见——新签/切签落出视口等于「没开成」
+    const cur = tabsEl.querySelector<HTMLElement>('.doc-tab[aria-current]');
+    if (cur) {
+        if (cur.offsetLeft < tabsEl.scrollLeft) tabsEl.scrollLeft = cur.offsetLeft;
+        else if (cur.offsetLeft + cur.offsetWidth > tabsEl.scrollLeft + tabsEl.clientWidth)
+            tabsEl.scrollLeft = cur.offsetLeft + cur.offsetWidth - tabsEl.clientWidth;
+    }
 }
 
 function pushTab(path: string): void {
