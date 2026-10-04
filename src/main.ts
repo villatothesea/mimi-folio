@@ -33,6 +33,7 @@ import { buildToolbar } from './ui/toolbar.ts';
 import { initSettings, OPEN_POS_KEY, openSettings } from './ui/settings.ts';
 import { closeFsPanel, fsPanelOpen, toggleFsPanel } from './ui/fsPanel.ts';
 import { attachTableColResize } from './ui/tableColResize.ts';
+import { attachColorSwatches } from './ui/colorSwatch.ts';
 import { icon } from './ui/icons.ts';
 import type { FolioListItem } from './host/types.ts';
 
@@ -1458,6 +1459,9 @@ attachInlineEmbeds(wrap);
 
 // 表格列宽拖拽（验收批）：列边界拖柄，宽度按文档存 localStorage 视图偏好
 attachTableColResize(wrap, () => openFile);
+
+// 色卡块（验收批）：```color 代码块渲染成色卡，点色卡露源码编辑
+attachColorSwatches(wrap);
 
 /** 右键「复制路径」：库内相对路径拼成 OS 绝对路径（带盘符）。 */
 async function copyAbsPath(rel: string): Promise<void> {

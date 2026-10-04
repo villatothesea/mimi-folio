@@ -205,3 +205,53 @@
     color: var(--folio-fg-inline-code, var(--editor-color));
     background-color: var(--folio-inline-code-bg, var(--code-block-bg-color));
 }
+
+/* 色卡块（验收批）：```color 代码块默认只显示色卡，点色卡进入源码编辑态 */
+.mu-editor pre.folio-swatched:not(.folio-editing) > .mu-language-input,
+.mu-editor pre.folio-swatched:not(.folio-editing) > .mu-code {
+    display: none;
+}
+
+.mu-editor .swatch-board {
+    display: flex;
+    flex-direction: column;
+    gap: var(--folio-space-2);
+    padding: var(--folio-space-1) 0;
+    user-select: none;
+}
+
+.mu-editor .swatch-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: calc(var(--folio-font-size) * 2.8); /* 两行高 */
+    padding: var(--folio-space-2) var(--folio-space-4);
+    border-radius: var(--folio-radius-card);
+    background: var(--sw);
+    color: var(--folio-bg);
+    cursor: text;
+}
+
+.mu-editor .swatch-card.swatch-light {
+    color: var(--folio-fg);
+}
+
+.mu-editor .swatch-name {
+    font-size: var(--folio-font-size);
+    line-height: 1.4;
+}
+
+.mu-editor .swatch-code {
+    font-family: var(--folio-font-mono);
+    font-size: var(--folio-font-size-sm);
+    line-height: 1.4;
+    opacity: 0.85;
+}
+
+.mu-editor .swatch-empty {
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-sm);
+    padding: var(--folio-space-2);
+    border: 1px dashed var(--folio-border);
+    border-radius: var(--folio-radius-card);
+}
