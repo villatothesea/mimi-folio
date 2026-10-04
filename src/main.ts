@@ -34,7 +34,7 @@ import { initSettings, OPEN_POS_KEY, openSettings } from './ui/settings.ts';
 import { closeFsPanel, fsPanelOpen, toggleFsPanel } from './ui/fsPanel.ts';
 import { attachTableColResize } from './ui/tableColResize.ts';
 import { attachColorSwatches } from './ui/colorSwatch.ts';
-import { attachImageZoom } from './ui/imageZoom.ts';
+import { attachImageZoom, copyImageToClipboard, openImageZoom } from './ui/imageZoom.ts';
 import { icon } from './ui/icons.ts';
 import type { FolioListItem } from './host/types.ts';
 
@@ -1938,6 +1938,19 @@ const BLOCK_MENU: Array<[string, string]> = [
 
 wrap.addEventListener('contextmenu', (event) => {
     event.preventDefault();
+    // 图片有自己的右键菜：复制（PNG 写剪贴板，别篇粘贴落 attachments/）与放大预览
+    const pic = (event.target as HTMLElement).closest?.('img');
+    if (pic?.closest('.mu-inline-image')) {
+        showContextMenu(event.clientX, event.clientY, [
+            { ic: 'copy', label: '复制图片', run: () => {
+                void copyImageToClipboard(pic as HTMLImageElement)
+                    .then(() => saySave('图片已复制'))
+                    .catch((err: Error) => saySave(`复制图片失败：${err.message}`));
+            } },
+            { ic: 'photo', label: '放大预览', run: () => openImageZoom(pic as HTMLImageElement) },
+        ]);
+        return;
+    }
     showContextMenu(event.clientX, event.clientY, [
         { ic: 'arrow-big-up', label: '在本段落上方添加', children: BLOCK_MENU.map(([label, para]) => ({ label, run: () => currentEditor()?.insertParagraph('before', '', true) ?? undefined })) },
         { ic: 'arrow-big-down', label: '在本段落下方添加', children: BLOCK_MENU.map(([label, para]) => ({ label, run: () => currentEditor()?.insertParagraph('after', '', true) ?? undefined })) },
