@@ -206,10 +206,16 @@
     background-color: var(--folio-inline-code-bg, var(--code-block-bg-color));
 }
 
-/* 色卡块（验收批）：```color 代码块默认只显示色卡，点色卡进入源码编辑态 */
+/* 色卡块（验收批）：```color 代码块默认只显示色卡网格，点色卡进入源码编辑态 */
 .mu-editor pre.folio-swatched:not(.folio-editing) > .mu-language-input,
 .mu-editor pre.folio-swatched:not(.folio-editing) > .mu-code {
     display: none;
+}
+
+/* 色卡态隐掉代码块底衬：格子自己就是色块，灰底只属源码态 */
+.mu-editor pre.folio-swatched:not(.folio-editing) {
+    background: transparent;
+    border-color: transparent;
 }
 
 .mu-editor .swatch-board {
@@ -220,16 +226,55 @@
     user-select: none;
 }
 
+/* 块左上：每行格数控件 */
+.mu-editor .swatch-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-1);
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+    line-height: 1;
+}
+
+.mu-editor .swatch-cols-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--folio-font-size) * 1.15);
+    height: calc(var(--folio-font-size) * 1.15);
+    padding: 0;
+    border: 1px solid var(--folio-border);
+    border-radius: var(--folio-radius);
+    background: var(--folio-bg);
+    color: var(--folio-fg-muted);
+    font-size: var(--folio-font-size-xs);
+    line-height: 1;
+    cursor: pointer;
+}
+
+.mu-editor .swatch-cols-btn:hover {
+    background: var(--folio-hover);
+    color: var(--folio-fg);
+}
+
+.mu-editor .swatch-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--sw-cols, 4), 1fr);
+    gap: var(--folio-space-2);
+}
+
 .mu-editor .swatch-card {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    min-width: 0;
     min-height: calc(var(--folio-font-size) * 2.8); /* 两行高 */
-    padding: var(--folio-space-2) var(--folio-space-4);
+    padding: var(--folio-space-2) var(--folio-space-3);
     border-radius: var(--folio-radius-card);
     background: var(--sw);
     color: var(--folio-bg);
     cursor: text;
+    overflow: hidden;
 }
 
 .mu-editor .swatch-card.swatch-light {
@@ -237,18 +282,25 @@
 }
 
 .mu-editor .swatch-name {
-    font-size: var(--folio-font-size);
+    font-size: var(--folio-font-size-sm);
     line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .mu-editor .swatch-code {
     font-family: var(--folio-font-mono);
-    font-size: var(--folio-font-size-sm);
+    font-size: var(--folio-font-size-xs);
     line-height: 1.4;
     opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .mu-editor .swatch-empty {
+    grid-column: 1 / -1;
     color: var(--folio-fg-muted);
     font-size: var(--folio-font-size-sm);
     padding: var(--folio-space-2);

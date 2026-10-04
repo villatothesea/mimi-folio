@@ -1,11 +1,16 @@
 /**
- * 色卡块（验收批）：```color / ```palette / ```色卡 代码块渲染成色卡。
- * 每行 = 色码 + 可选名字（`#0F4921 Emerald`）；卡片两行：名字 / 色码（无名时第二行给 rgb）。
- * 纯展示层：不改 muya、不进 md 正文格式——源码还在代码块里，点色卡板露出源码编辑，
- * 焦点离开代码块即回到色卡。所有模块挂 #editor-wrap 常驻容器上，编辑器重建不受影响。
+ * 色卡块（验收批）：```color / ```palette / ```色卡 代码块渲染成色卡网格。
+ * 每行 = 色码 + 可选名字（`#0F4921 Emerald`）；格子两行：名字 / 色码（无名时第二行给 rgb）。
+ * 默认只显示色卡——源码与代码块底衬都隐掉；点色卡进源码编辑态（色卡仍在下方实时预览），
+ * 光标离开代码块回色卡。纯展示层：不改 muya、不进 md 正文格式。
+ * 每行格数：板左上角 −/＋，存 localStorage；默认按页面宽度档（标准 4 / 加宽 8）。
+ * 编辑态存 WeakSet：muya 重渲后 scan 会把 folio-editing 补回同一个 pre。
  */
 const LANGS = new Set(['color', 'colors', 'palette', 'swatch', '色卡', '色块']);
 const COLOR_RE = /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|[a-zA-Z]+)\s*/;
+const COLS_KEY = 'folio-swatch-cols';
+const COLS_MIN = 2;
+const COLS_MAX = 12;
 
 type Swatch = { color: string; name: string };
 
@@ -44,16 +49,49 @@ function rgbText(color: string): string {
     return m ? `rgb(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)})` : color;
 }
 
-function renderBoard(swatches: Swatch[]): HTMLElement {
+function effCols(): number {
+    const saved = Number(localStorage.getItem(COLS_KEY));
+    if (Number.isInteger(saved) && saved >= COLS_MIN && saved <= COLS_MAX) return saved;
+    return document.documentElement.dataset.width === 'wide' ? 8 : 4;
+}
+
+function renderBoard(swatches: Swatch[], cols: number): HTMLElement {
     const board = document.createElement('div');
     board.className = 'swatch-board';
     board.contentEditable = 'false';
+
+    // 块左上：每行格数。−/＋ 之间是当前档（存数或按宽度档的默认）。
+    const bar = document.createElement('div');
+    bar.className = 'swatch-bar';
+    const label = document.createElement('span');
+    label.className = 'swatch-cols-label';
+    label.textContent = '每行';
+    const dec = document.createElement('button');
+    dec.type = 'button';
+    dec.className = 'swatch-cols-btn';
+    dec.dataset.dir = '-1';
+    dec.textContent = '−';
+    dec.title = '每行少一格';
+    const num = document.createElement('span');
+    num.className = 'swatch-cols-num';
+    num.textContent = String(cols);
+    const inc = document.createElement('button');
+    inc.type = 'button';
+    inc.className = 'swatch-cols-btn';
+    inc.dataset.dir = '1';
+    inc.textContent = '＋';
+    inc.title = '每行多一格';
+    bar.append(label, dec, num, inc);
+    board.append(bar);
+
+    const grid = document.createElement('div');
+    grid.className = 'swatch-grid';
+    grid.style.setProperty('--sw-cols', String(cols));
     if (!swatches.length) {
         const hint = document.createElement('div');
         hint.className = 'swatch-empty';
         hint.textContent = '每行一个色码，可跟名字，如 #0F4921 Emerald';
-        board.append(hint);
-        return board;
+        grid.append(hint);
     }
     for (const s of swatches) {
         const card = document.createElement('div');
@@ -67,32 +105,58 @@ function renderBoard(swatches: Swatch[]): HTMLElement {
         code.className = 'swatch-code';
         code.textContent = s.name ? s.color : rgbText(s.color);
         card.append(name, code);
-        board.append(card);
+        grid.append(card);
     }
+    board.append(grid);
     return board;
 }
 
+/** 真选区落进代码尾部——合成鼠标事件搬不动原生光标（isTrusted=false），Selection API 可以。 */
+function placeCaretInCode(pre: HTMLElement): void {
+    requestAnimationFrame(() => {
+        const code = pre.querySelector<HTMLElement>('.mu-code');
+        const sel = document.getSelection();
+        if (!code || !sel) return;
+        const r = document.createRange();
+        r.selectNodeContents(code);
+        r.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(r);
+    });
+}
+
 export function attachColorSwatches(wrap: HTMLElement): void {
+    const editing = new WeakSet<HTMLElement>();
+    let cols = effCols();
+
     const scan = () => {
         for (const pre of wrap.querySelectorAll<HTMLElement>('pre.mu-code-block')) {
             const lang = pre.querySelector('.mu-language-input')?.textContent?.trim().toLowerCase() ?? '';
             const codeEl = pre.querySelector<HTMLElement>('.mu-code');
             if (!LANGS.has(lang)) {
-                pre.classList.remove('folio-swatched');
+                pre.classList.remove('folio-swatched', 'folio-editing');
                 pre.querySelector(':scope > .swatch-board')?.remove();
                 continue;
             }
             const text = codeEl?.textContent ?? '';
-            const sig = JSON.stringify(parseSwatches(text));
+            const swatches = parseSwatches(text);
+            const sig = `${cols}|${JSON.stringify(swatches)}`;
             let board = pre.querySelector<HTMLElement>(':scope > .swatch-board');
             if (!board || board.dataset.sig !== sig) {
                 board?.remove();
-                board = renderBoard(parseSwatches(text));
+                board = renderBoard(swatches, cols);
                 board.dataset.sig = sig;
                 pre.append(board);
             }
             pre.classList.add('folio-swatched');
+            if (editing.has(pre)) pre.classList.add('folio-editing');
         }
+    };
+
+    const setCols = (n: number) => {
+        cols = Math.min(COLS_MAX, Math.max(COLS_MIN, n));
+        localStorage.setItem(COLS_KEY, String(cols));
+        scan();
     };
 
     let raf = 0;
@@ -102,38 +166,41 @@ export function attachColorSwatches(wrap: HTMLElement): void {
     }).observe(wrap, { childList: true, subtree: true, characterData: true });
     scan();
 
-    // 点色卡板 → 露出源码并把光标放进代码里；焦点离开整块 → 回到色卡
     wrap.addEventListener('mousedown', (e) => {
-        const board = (e.target as HTMLElement).closest?.('.swatch-board');
-        const pre = board?.closest('pre.mu-code-block');
+        const target = e.target as HTMLElement;
+        const stepper = target.closest<HTMLElement>('.swatch-cols-btn');
+        if (stepper?.closest('.swatch-board')) {
+            e.preventDefault();
+            setCols(cols + Number(stepper.dataset.dir));
+            return;
+        }
+        // 点色卡板 → 露出源码并把真光标放进代码末尾
+        const board = target.closest('.swatch-board');
+        const pre = board?.closest<HTMLElement>('pre.mu-code-block');
         if (!board || !pre) return;
         e.preventDefault();
+        editing.add(pre);
         pre.classList.add('folio-editing');
-        const content = pre.querySelector<HTMLElement>('.mu-codeblock-content') ?? pre.querySelector<HTMLElement>('.mu-code');
-        if (!content) return;
-        requestAnimationFrame(() => {
-            const r = content.getBoundingClientRect();
-            const opts = { bubbles: true, cancelable: true, clientX: r.left + 8, clientY: r.top + 8 };
-            content.dispatchEvent(new MouseEvent('mousedown', opts));
-            content.dispatchEvent(new MouseEvent('mouseup', opts));
-            content.dispatchEvent(new MouseEvent('click', opts));
-        });
+        placeCaretInCode(pre);
     }, true);
+
     wrap.addEventListener('focusout', (e) => {
-        const pre = (e.target as HTMLElement).closest?.('pre.mu-code-block.folio-editing');
+        const pre = (e.target as HTMLElement).closest?.<HTMLElement>('pre.mu-code-block.folio-editing');
         if (pre && !(e.relatedTarget instanceof Node && pre.contains(e.relatedTarget))) {
             pre.classList.remove('folio-editing');
+            editing.delete(pre);
         }
     });
 
     // 光标进出都要跟：键盘摸进代码块露出源码（不然在隐藏区盲打），
-    // 选择移到别块延迟回色卡（防抖，点色卡的合成点击落地前别急着收）
+    // 选择移到别块延迟回色卡（防抖，点色卡放选区落地前别急着收）
     let hideTimer: ReturnType<typeof setTimeout> | undefined;
     document.addEventListener('selectionchange', () => {
         const node = document.getSelection()?.anchorNode;
         const el = node?.nodeType === 1 ? node as Element : node?.parentElement ?? null;
-        const pre = el?.closest?.('pre.mu-code-block.folio-swatched') ?? null;
+        const pre = el?.closest?.<HTMLElement>('pre.mu-code-block.folio-swatched') ?? null;
         if (pre) {
+            editing.add(pre);
             pre.classList.add('folio-editing');
             clearTimeout(hideTimer);
             return;
@@ -142,7 +209,10 @@ export function attachColorSwatches(wrap: HTMLElement): void {
         hideTimer = setTimeout(() => {
             const anchor = document.getSelection()?.anchorNode ?? null;
             for (const p of wrap.querySelectorAll('pre.folio-editing')) {
-                if (!anchor || !p.contains(anchor)) p.classList.remove('folio-editing');
+                if (!anchor || !p.contains(anchor)) {
+                    p.classList.remove('folio-editing');
+                    editing.delete(p as HTMLElement);
+                }
             }
         }, 150);
     });
