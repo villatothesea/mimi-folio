@@ -78,8 +78,11 @@ const wrap = document.querySelector<HTMLElement>('#editor-wrap')!;
 const docScroll = document.querySelector<HTMLElement>('#doc-scroll')!;
 const htmlFrame = document.querySelector<HTMLIFrameElement>('#html-frame')!;
 const saveStateEl = document.querySelector<HTMLElement>('#save-state')!;
+const tabsEl = document.querySelector<HTMLElement>('#doc-tabs')!;
 
 let openFile: string | null = null;
+/** 顶栏页签（验收批）：本会话开过的文档一排无边界矩形签，点切换，中键/× 关。 */
+let openTabs: string[] = [];
 let lastSaved = '';
 /** 读到的文件 mtime：写回带 If-Match，别人改过就 409 而不是静默覆盖（米米建议 2） */
 let docMtime: number | undefined;
@@ -675,6 +678,63 @@ function openHtmlInBrowserTab(path: string): void {
     window.open(previewFrameHref(rel, location.origin, { token: folioEntryToken() }), '_blank', 'noopener,noreferrer');
 }
 
+function renderTabs(): void {
+    tabsEl.replaceChildren();
+    for (const p of openTabs) {
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = 'doc-tab';
+        if (p === openFile) tab.setAttribute('aria-current', 'true');
+        const name = document.createElement('span');
+        name.className = 'doc-tab-name';
+        name.textContent = p.split('/').pop() ?? p;
+        const x = document.createElement('span');
+        x.className = 'doc-tab-x';
+        x.textContent = '×';
+        x.title = '关闭页签';
+        x.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeTab(p);
+        });
+        tab.append(name, x);
+        tab.title = p;
+        tab.addEventListener('click', () => {
+            if (p !== openFile) void open(p);
+        });
+        tab.addEventListener('auxclick', (e) => {
+            if (e.button !== 1) return;
+            e.preventDefault();
+            closeTab(p);
+        });
+        tabsEl.append(tab);
+    }
+}
+
+function pushTab(path: string): void {
+    if (!openTabs.includes(path)) openTabs.push(path);
+    renderTabs();
+}
+
+/** 页签路径统一改/删：fn 返新路径或 null（丢签）。 */
+function tabMap(fn: (p: string) => string | null): void {
+    const next: string[] = [];
+    for (const p of openTabs) {
+        const r = fn(p);
+        if (r !== null && !next.includes(r)) next.push(r);
+    }
+    openTabs = next;
+    renderTabs();
+}
+
+function closeTab(path: string): void {
+    const idx = openTabs.indexOf(path);
+    if (idx < 0) return;
+    openTabs.splice(idx, 1);
+    // 关的是当前签：开相邻一篇；签空了编辑器原样留着
+    if (path === openFile && openTabs.length) void open(openTabs[Math.min(idx, openTabs.length - 1)]);
+    renderTabs();
+}
+
 async function open(path: string, anchor?: string): Promise<void> {
     try {
         if (openFile && currentEditor()) await saveNow(currentEditor()!.getMarkdown());
@@ -689,6 +749,7 @@ async function open(path: string, anchor?: string): Promise<void> {
             root.classList.add('html-mode');
             const doc = await host.read(path);
             openFile = doc.path;
+            pushTab(doc.path);
             lastSaved = '';
             docMtime = doc.mtimeMs;
             docCtime = doc.ctimeMs;
@@ -707,6 +768,7 @@ async function open(path: string, anchor?: string): Promise<void> {
         clearHtmlPreview();
         const doc = await host.read(path);
         openFile = doc.path;
+        pushTab(doc.path);
         lastSaved = doc.markdown;
         docMtime = doc.mtimeMs;
         docCtime = doc.ctimeMs;
@@ -725,6 +787,7 @@ async function open(path: string, anchor?: string): Promise<void> {
         showFileCurrent(openFile);
         void refreshBacklinks();
     } catch (err) {
+        tabMap((p) => (p === path ? null : p)); // 读不到的签不留
         saySave(`读失败：${(err as Error).message}`);
     }
 }
@@ -874,6 +937,7 @@ async function syncMemoMode(): Promise<void> {
         if (!root.classList.contains('memo-mode')) {
             if (openFile && currentEditor()) await saveNow(currentEditor()!.getMarkdown());
             openFile = null;
+            renderTabs(); // 签留着（点回即退速记），只撤当前态
             destroyEditor();
             hideDocHead();
             setTocOpen(false);
@@ -1473,6 +1537,7 @@ attachImageZoom(wrap);
 const bindRegionWheel = (host: HTMLElement | null, getScroller: () => HTMLElement | null): void => {
     host?.addEventListener('wheel', (e) => {
         if (e.ctrlKey) return;
+        if (e.deltaX !== 0) return; // 横向滚留给原生（如工具栏窄窗横滚）
         const scroller = getScroller();
         if (!scroller) return;
         if (e.target instanceof Node && scroller.contains(e.target)) return;
@@ -1489,6 +1554,8 @@ bindRegionWheel(document.querySelector<HTMLElement>('#page-head'), () =>
     document.getElementById('app')?.classList.contains('memo-mode')
         ? document.querySelector<HTMLElement>('#memo-view')
         : docScroll);
+// 浮条上的按钮会吃滚轮，滚过去等于滚文档
+bindRegionWheel(document.querySelector<HTMLElement>('#toolbar'), () => docScroll);
 bindRegionWheel(tocPanel, () => tocEl);
 
 /** 右键「复制路径」：库内相对路径拼成 OS 绝对路径（带盘符）。 */
@@ -1582,6 +1649,7 @@ nav.addEventListener('contextmenu', (event) => {
                 writeLastView(null);
             }
             if (host.deleteDoc) await host.deleteDoc(path).catch((err: Error) => saySave(`删除失败：${err.message}`));
+            tabMap((p) => (p === path ? null : p));
             await refreshList();
         })() },
     ]);
@@ -1602,6 +1670,7 @@ nav.addEventListener('keydown', (event) => {
 });
 
 function closeIfDeleted(files: string[], dirs: string[]): void {
+    tabMap((p) => (files.includes(p) || dirs.some((d) => p === d || p.startsWith(`${d}/`)) ? null : p));
     if (!openFile) return;
     if (!files.includes(openFile) && !dirs.some((d) => openFile === d || openFile!.startsWith(`${d}/`))) return;
     openFile = null;
@@ -1709,6 +1778,7 @@ function folderContextMenu(dir: string, x: number, y: number): void {
                 writeLastView(null);
             }
             if (host.deleteDoc) await host.deleteDoc(dir).catch(() => undefined);
+            tabMap((p) => (p === dir || p.startsWith(`${dir}/`) ? null : p));
             if (selectedDir === dir) selectedDir = null;
             await refreshList();
         })() },
@@ -1727,6 +1797,7 @@ async function renameCurrentDoc(stem: string): Promise<void> {
         const from = openFile;
         const to = await host.moveDoc(from, dest);
         openFile = to;
+        tabMap((p) => (p === from ? to : p));
         writeLastView({ v: 'file', path: to });
         renderBreadcrumb();
         paintToc();
@@ -1797,6 +1868,7 @@ function renameInline(button: HTMLButtonElement, path: string): void {
             if (!dest) return;
             try {
                 const to = await host.moveDoc!(path, dest);
+                tabMap((p) => (p === path ? to : p));
                 if (openFile === path) {
                     openFile = to;
                     writeLastView({ v: 'file', path: to });
@@ -1824,6 +1896,7 @@ function renameDirInline(button: HTMLElement, dir: string): void {
             try {
                 await host.moveDoc!(dir, to);
                 const shift = (p: string) => (p === dir ? to : `${to}${p.slice(dir.length)}`);
+                tabMap((p) => (p === dir || p.startsWith(`${dir}/`) ? shift(p) : p));
                 selectedDirs = new Set([...selectedDirs].map((d) => (d === dir || d.startsWith(`${dir}/`) ? shift(d) : d)));
                 if (selectedDir === dir || selectedDir?.startsWith(`${dir}/`)) selectedDir = shift(selectedDir);
                 if (openFile?.startsWith(`${dir}/`)) {
@@ -2163,6 +2236,8 @@ attachScrollFade();
 async function leaveOpenDoc(): Promise<void> {
     if (openFile && currentEditor()) await saveNow(currentEditor()!.getMarkdown());
     openFile = null;
+    openTabs = [];
+    renderTabs();
     destroyEditor();
     hideDocHead();
     setTocOpen(false);

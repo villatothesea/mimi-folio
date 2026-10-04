@@ -114,6 +114,7 @@ body {
     min-width: 0;
     min-height: 0;
     background: var(--folio-bg);
+    position: relative; /* 工具栏浮条的定位锚 */
 }
 
 /* 中区右上角：圆形按钮；目录窗绝对定位向左下弹出，不进 flex，避免被 20px 钮挤成竖条。 */
@@ -779,15 +780,112 @@ body.is-col-resizing iframe {
     white-space: nowrap;
 }
 
-/* 工具栏绝对居中（bug2.7：top:50% 强制垂直居中，abspos 静态位在 flex 里不可靠） */
+/* 页签：顶栏切出的无边界矩形，当前签用页底色从面板底里「切」出来 */
+#doc-tabs {
+    flex: 1;
+    display: flex;
+    align-self: stretch;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+#doc-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.doc-tab {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--folio-space-1);
+    max-width: 200px;
+    min-width: 0;
+    padding: 0 var(--folio-space-2) 0 var(--folio-space-3);
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--folio-fg-muted);
+    font: inherit;
+    font-size: var(--folio-font-size-sm);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.doc-tab-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.doc-tab:hover {
+    background: var(--folio-hover);
+}
+
+.doc-tab[aria-current] {
+    background: var(--folio-bg);
+    color: var(--folio-fg);
+    /* 往下盖 1px 页底色「切断」顶栏下边框，签就是从栏里切出的口 */
+    box-shadow: 0 1px 0 var(--folio-bg);
+}
+
+.doc-tab-x {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--folio-font-size) * 1.1);
+    height: calc(var(--folio-font-size) * 1.1);
+    border-radius: var(--folio-radius);
+    color: var(--folio-fg-muted);
+    line-height: 1;
+    opacity: 0;
+}
+
+.doc-tab:hover .doc-tab-x,
+.doc-tab[aria-current] .doc-tab-x {
+    opacity: 0.7;
+}
+
+.doc-tab-x:hover {
+    background: var(--folio-hover-active);
+    opacity: 1;
+}
+
+/* 工具栏改顶栏下的透明浮条：不涂底只摆按钮，平时 30% 透明，悬停显全。
+   条体不吃事件（不然挡住文档首行），按钮各自接指针；悬停在按钮上时
+   :hover 沿祖先链上溯，整条随之亮起。 */
 #toolbar {
     position: absolute;
-    top: 50%;
+    top: calc(var(--folio-control-h) + 2 * var(--folio-space-2) + 5px);
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
+    max-width: calc(100% - 2 * var(--folio-space-2));
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
     display: inline-flex;
     align-items: center;
     gap: var(--folio-space-1);
+    z-index: 19;
+    opacity: 0.3;
+    transition: opacity 0.15s;
+    pointer-events: none;
+}
+
+#toolbar::-webkit-scrollbar {
+    display: none;
+}
+
+#toolbar:hover,
+#toolbar:focus-within {
+    opacity: 1;
+}
+
+#toolbar > * {
+    pointer-events: auto;
 }
 
 .tool-btn {
@@ -841,7 +939,8 @@ body.is-col-resizing iframe {
     display: flex;
     align-items: center;
     gap: var(--folio-space-1);
-    margin-top: 1px;
+    /* 工具栏浮条占住顶栏下一带，查找条让到它下面 */
+    margin-top: calc(var(--folio-control-h) + var(--folio-space-2));
     padding: var(--folio-space-1) var(--folio-space-2);
     border: 1px solid var(--folio-border);
     border-top: 0;
