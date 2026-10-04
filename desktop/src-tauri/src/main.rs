@@ -494,6 +494,16 @@ fn main() {
             .map(|d| d.as_millis())
             .unwrap_or_default(),
     );
+    // 静默消失盘查：panic 也进 boot-log，不然 Rust panic 只在 stderr（无窗进程看不到）
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let path = boot_log_path();
+        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let ms = BOOT_T0.get().map(|t| t.elapsed().as_millis()).unwrap_or_default();
+            let _ = writeln!(f, "{ms:>7}ms [shell] PANIC {info}");
+        }
+        default_hook(info);
+    }));
     // epoch 也落账：进程创建时刻（WMI）对得上它时，差值就是 OS/杀软的 pre-main 耗时
     stamp(&format!("main enter @{}", BOOT_EPOCH_MS.get().copied().unwrap_or_default()));
 
@@ -629,12 +639,28 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("failed to build tauri")
         .run(|app, event| {
-            if matches!(event, RunEvent::Exit) {
-                if let Some(state) = app.try_state::<std::sync::Arc<ServerProc>>() {
-                    if let Some(mut child) = state.inner().0.lock().unwrap().take() {
-                        let _ = child.kill();
+            // 静默消失盘查：关窗/退出请求/退出全落账。
+            // CloseRequested+Destroyed = 正常关窗；只有 Destroyed = WV2 侧死窗；
+            // ExitRequested 带 code = handle.exit() 或外部请求。
+            match event {
+                RunEvent::WindowEvent { label, event: tauri::WindowEvent::CloseRequested { .. }, .. } => {
+                    stamp(&format!("window {label} close-requested"));
+                }
+                RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } => {
+                    stamp(&format!("window {label} destroyed"));
+                }
+                RunEvent::ExitRequested { code, .. } => {
+                    stamp(&format!("exit requested code={code:?}"));
+                }
+                RunEvent::Exit => {
+                    stamp("exit");
+                    if let Some(state) = app.try_state::<std::sync::Arc<ServerProc>>() {
+                        if let Some(mut child) = state.inner().0.lock().unwrap().take() {
+                            let _ = child.kill();
+                        }
                     }
                 }
+                _ => {}
             }
         });
 }
