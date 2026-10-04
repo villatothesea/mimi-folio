@@ -1463,6 +1463,30 @@ attachTableColResize(wrap, () => openFile);
 // 色卡块（验收批）：```color 代码块渲染成色卡，点色卡露源码编辑
 attachColorSwatches(wrap);
 
+// 悬停区滚轮（验收批）：原生只滚「光标下的可滚祖先」——滚在面板头/底栏/空隙等
+// 不可滚子区时整区无响应。这里把未命中滚动体的滚轮转发给本区滚动体；命中滚动体
+// 内部仍走原生，不干预。
+const bindRegionWheel = (host: HTMLElement | null, getScroller: () => HTMLElement | null): void => {
+    host?.addEventListener('wheel', (e) => {
+        if (e.ctrlKey) return;
+        const scroller = getScroller();
+        if (!scroller) return;
+        if (e.target instanceof Node && scroller.contains(e.target)) return;
+        const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+        scroller.scrollTop += dy;
+        e.preventDefault();
+    }, { passive: false });
+};
+bindRegionWheel(sidebarEl, () =>
+    document.getElementById('app')?.classList.contains('memo-mode')
+        ? document.querySelector<HTMLElement>('#memo-rail')
+        : nav);
+bindRegionWheel(document.querySelector<HTMLElement>('#page-head'), () =>
+    document.getElementById('app')?.classList.contains('memo-mode')
+        ? document.querySelector<HTMLElement>('#memo-view')
+        : docScroll);
+bindRegionWheel(tocPanel, () => tocEl);
+
 /** 右键「复制路径」：库内相对路径拼成 OS 绝对路径（带盘符）。 */
 async function copyAbsPath(rel: string): Promise<void> {
     const text = vaultAbsDir ? joinOsAbs(vaultAbsDir, rel) : rel;

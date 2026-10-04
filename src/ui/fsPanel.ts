@@ -61,6 +61,14 @@ export function toggleFsPanel(opts: FsPanelOpts): void {
     tree.addEventListener('contextmenu', (e) => e.preventDefault());
 
     panel.append(head, tree);
+    // 悬停区滚轮：滚在头部等不可滚子区时转发给树（与左栏 bindRegionWheel 同理）
+    panel.addEventListener('wheel', (e) => {
+        if (e.ctrlKey) return;
+        if (e.target instanceof Node && tree.contains(e.target)) return;
+        const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+        tree.scrollTop += dy;
+        e.preventDefault();
+    }, { passive: false });
     document.getElementById('sidebar')?.after(panel);
     void fillChildren(tree, null, 0, opts);
 }
