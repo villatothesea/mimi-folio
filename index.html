@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="folio-desktop" content="%VITE_FOLIO_DESKTOP%" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      // 主题/宽度要在 CSS 解析前挂上，不然首屏按默认档画完再跳（启动宽度闪变）
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem('folio-theme') === 'dark' ? 'dark' : 'light';
+        const w = localStorage.getItem('folio-width');
+        if (w === 'wide' || w === 'std') document.documentElement.dataset.width = w;
+      } catch {}
+    </script>
     <!-- 样式在 JS 之前进 head：避免等 Muya 包时 img 按 300×150 画出半截 logo -->
     <style>
       #app-icon { width: 18px; height: 18px; display: block; flex-shrink: 0; }
