@@ -2266,6 +2266,13 @@ html[data-width='wide'] .mu-editor .mu-container {
     opacity: 0.5;
 }
 
+/* 输入框选中反色：暗色下原生高亮字色太深看不清，与搜索命中同一反色规则 */
+input::selection,
+textarea::selection {
+    background: var(--folio-fg);
+    color: var(--folio-bg);
+}
+
 /* ===== 清单原地重命名 ===== */
 .rename-input {
     flex: 1;
