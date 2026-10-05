@@ -99,7 +99,7 @@ body {
 
 /* 占位/错误行不可点，也不吃树行 hover */
 .fs-note-row .row-main {
-    cursor: var(--folio-cursor-default);
+    cursor: default;
     color: var(--folio-fg-muted);
 }
 
@@ -151,7 +151,7 @@ body {
     border-radius: var(--folio-toc-fab-radius);
     background: var(--folio-bg);
     color: var(--folio-fg);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 #toc-fab .folio-icon {
@@ -192,7 +192,7 @@ body {
     bottom: 0;
     left: 0;
     width: var(--folio-resize-hit);
-    cursor: var(--folio-cursor-ew-resize);
+    cursor: ew-resize;
 }
 
 .toc-resize-h {
@@ -200,7 +200,7 @@ body {
     right: 0;
     bottom: 0;
     height: var(--folio-resize-hit);
-    cursor: var(--folio-cursor-ns-resize);
+    cursor: ns-resize;
 }
 
 .toc-resize-wh {
@@ -208,7 +208,7 @@ body {
     bottom: 0;
     width: var(--folio-resize-hit);
     height: var(--folio-resize-hit);
-    cursor: var(--folio-cursor-nesw-resize);
+    cursor: nesw-resize;
     z-index: 3;
 }
 
@@ -293,7 +293,7 @@ body.is-toc-resizing iframe {
 }
 
 .drag-region {
-    cursor: var(--folio-cursor-default);
+    cursor: default;
     user-select: none;
 }
 
@@ -344,7 +344,7 @@ body.is-toc-resizing iframe {
     border: 1px solid var(--folio-border);
     background: var(--folio-bg);
     padding: var(--folio-space-1);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     text-align: left;
 }
 
@@ -376,7 +376,7 @@ body.is-toc-resizing iframe {
     color: inherit;
     font: inherit;
     text-align: left;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     padding: var(--folio-space-1);
 }
 
@@ -425,7 +425,7 @@ body.is-toc-resizing iframe {
     font: inherit;
     font-size: var(--folio-font-size-sm);
     padding: var(--folio-space-2);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     text-align: left;
 }
 
@@ -468,18 +468,18 @@ body.is-toc-resizing iframe {
 }
 
 #ws-add-form button.ws-create {
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     text-align: center;
 }
 
 #ws-add-form button.ws-create:disabled {
     opacity: 0.5;
-    cursor: var(--folio-cursor-not-allowed);
+    cursor: not-allowed;
 }
 
 #ws-add-form button.ws-pick {
     color: var(--folio-fg-muted);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -489,7 +489,7 @@ body.is-toc-resizing iframe {
     border: 0;
     background: none;
     font: inherit;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     text-align: left;
 }
 
@@ -598,13 +598,13 @@ body.folio-overlay-open .folio-modal {
     top: 0;
     bottom: 0;
     width: var(--folio-resize-hit);
-    cursor: var(--folio-cursor-ew-resize);
+    cursor: col-resize;
     z-index: 8;
     touch-action: none;
 }
 
 body.is-col-resizing {
-    cursor: var(--folio-cursor-ew-resize);
+    cursor: col-resize;
     user-select: none;
 }
 
@@ -624,7 +624,7 @@ body.is-col-resizing iframe {
     border-radius: var(--folio-radius);
     background: none;
     color: var(--folio-fg-muted);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     padding: 0;
     flex: none;
 }
@@ -666,7 +666,7 @@ body.is-col-resizing iframe {
     border-radius: 0;
     background: none;
     color: var(--folio-fg-muted);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     padding: 0;
 }
 
@@ -756,7 +756,7 @@ body.is-col-resizing iframe {
     font: inherit;
     font-size: var(--folio-font-size-sm);
     padding: 0 var(--folio-space-2);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     flex: none;
     line-height: 1;
 }
@@ -805,7 +805,7 @@ body.is-col-resizing iframe {
     color: var(--folio-fg-muted);
     font: inherit;
     font-size: var(--folio-font-size-sm);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     white-space: nowrap;
 }
 
@@ -933,7 +933,7 @@ body.is-col-resizing iframe {
     font-size: var(--folio-font-size-xs);
     line-height: 1;
     padding: 0 var(--folio-space-1);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .tool-zoom-val:hover {
@@ -1006,7 +1006,7 @@ body.is-col-resizing iframe {
     font-size: var(--folio-font-size-sm);
     padding: 0 var(--folio-space-2);
     line-height: 1;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 #findbar button:hover {
@@ -1018,7 +1018,7 @@ body.is-col-resizing iframe {
     position: fixed;
     width: calc(var(--folio-space-1) + var(--folio-space-2));
     z-index: 30;
-    cursor: var(--folio-cursor-ew-resize);
+    cursor: col-resize;
     touch-action: none;
 }
 
@@ -1058,7 +1058,7 @@ body.is-col-resizing iframe {
     font: inherit;
     font-size: var(--folio-font-size-xs);
     padding: 0;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .crumb:hover {
@@ -1186,7 +1186,7 @@ html[data-width='wide'] #doc-head {
     font-size: var(--folio-font-size);
     padding: 0;
     outline: none;
-    cursor: var(--folio-cursor-text);
+    cursor: text;
 }
 
 .prop-key-input {
@@ -1212,7 +1212,7 @@ html[data-width='wide'] #doc-head {
     font: inherit;
     font-size: var(--folio-font-size);
     padding: 0;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .prop-key-input::placeholder,
@@ -1238,7 +1238,7 @@ html[data-width='wide'] #doc-head {
     font-size: var(--folio-font-size-sm);
     padding: 0 var(--folio-space-2);
     line-height: 1.8;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .doc-tag-x {
@@ -1249,7 +1249,7 @@ html[data-width='wide'] #doc-head {
     font-size: var(--folio-font-size-sm);
     line-height: 1;
     padding: 0;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .doc-tag-x:hover {
@@ -1267,12 +1267,12 @@ html[data-width='wide'] #doc-head {
     padding: 0 var(--folio-space-2);
     line-height: 1.8;
     width: 5em;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .doc-tag-input {
     border-style: solid;
-    cursor: var(--folio-cursor-text);
+    cursor: text;
     outline: none;
 }
 
@@ -1311,7 +1311,7 @@ html[data-width='wide'] #doc-head {
     border-radius: 50%;
     border: 1px solid var(--folio-border);
     background: var(--tag-c);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     padding: 0;
 }
 
@@ -1422,7 +1422,7 @@ span.mu-inline-image.folio-img-fixed {
     font-size: var(--folio-font-size-sm);
     padding: 0 var(--folio-space-2);
     line-height: 1.5;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .bl-chip:hover {
@@ -1441,7 +1441,7 @@ span.mu-inline-image.folio-img-fixed {
     box-shadow: var(--folio-shadow);
     padding: var(--folio-space-1) var(--folio-space-3);
     font-size: var(--folio-font-size-sm);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     max-width: 240px;
 }
 
@@ -1532,7 +1532,7 @@ span.mu-inline-image.folio-img-fixed {
     border-bottom: 1px solid var(--folio-border);
     background: none;
     padding: var(--folio-space-2) var(--folio-space-4);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     text-align: left;
 }
 
@@ -1615,7 +1615,7 @@ span.mu-inline-image.folio-img-fixed {
     font: inherit;
     font-size: var(--folio-font-size-sm);
     padding: var(--folio-space-2);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     text-align: left;
 }
 
@@ -1694,7 +1694,7 @@ span.mu-inline-image.folio-img-fixed {
     font-size: var(--folio-font-size-sm);
     text-align: left;
     padding: var(--folio-space-2);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .settings-nav button:hover {
@@ -1781,7 +1781,7 @@ span.mu-inline-image.folio-img-fixed {
     font: inherit;
     font-size: var(--folio-font-size-sm);
     padding: var(--folio-space-1) var(--folio-space-2);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .set-swatch::before {
@@ -1818,7 +1818,7 @@ span.mu-inline-image.folio-img-fixed {
     border: 1px solid var(--folio-border);
     border-radius: 50%;
     background: var(--swatch, var(--folio-fg-muted));
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .set-fmt-dot[aria-pressed='true'] {
@@ -1901,7 +1901,7 @@ span.mu-inline-image.folio-img-fixed {
     font: inherit;
     font-size: var(--folio-font-size-sm);
     padding: var(--folio-space-1) var(--folio-space-3);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .about {
@@ -2187,7 +2187,7 @@ html[data-width='wide'] .mu-editor .mu-container {
     font: inherit;
     font-size: var(--folio-font-size-sm);
     padding: var(--folio-space-2);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     text-align: left;
     position: relative;
 }
@@ -2199,7 +2199,7 @@ html[data-width='wide'] .mu-editor .mu-container {
 .ctx-menu button:disabled {
     color: var(--folio-fg-muted);
     opacity: 0.55;
-    cursor: var(--folio-cursor-default);
+    cursor: default;
 }
 
 .ctx-menu button.danger {
@@ -2310,7 +2310,7 @@ html[data-width='wide'] .mu-editor .mu-container {
     font: inherit;
     font-size: var(--folio-font-size-xs);
     padding: var(--folio-space-1) var(--folio-space-2);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     flex-shrink: 0;
 }
 
@@ -2346,7 +2346,7 @@ html[data-width='wide'] .mu-editor .mu-container {
     font: inherit;
     font-size: var(--folio-font-size-sm);
     padding: var(--folio-space-1) var(--folio-space-3);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .folio-modal-actions button.danger {
@@ -2370,7 +2370,7 @@ html[data-width='wide'] .mu-editor .mu-container {
     text-align: left;
     padding: var(--folio-space-2);
     padding-left: calc(var(--folio-space-2) + var(--tree-step) * var(--pick-depth, 0));
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .folio-modal-list button:hover:not(:disabled) {
@@ -2389,7 +2389,7 @@ html[data-width='wide'] .mu-editor .mu-container {
     z-index: calc(var(--folio-modal-z) + 1);
     background: var(--folio-veil);
     overflow: hidden;
-    cursor: var(--folio-cursor-zoom-out);
+    cursor: zoom-out;
     animation: folio-fade-in 0.15s ease-out;
 }
 
@@ -2406,7 +2406,7 @@ html[data-width='wide'] .mu-editor .mu-container {
 }
 
 .mu-editor .mu-inline-image img {
-    cursor: var(--folio-cursor-zoom-in);
+    cursor: zoom-in;
 }
 
 /* 输入框选中反色：暗色下原生高亮字色太深看不清，与搜索命中同一反色规则 */
@@ -2498,7 +2498,7 @@ textarea::selection {
     border: 1px solid var(--folio-border);
     background: none;
     padding: 2px;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .tag-hex-label {
@@ -2524,7 +2524,7 @@ textarea::selection {
     line-height: 1.7;
     text-align: left;
     padding: 0;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2849,7 +2849,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     font-weight: var(--folio-title-weight);
     text-align: left;
     padding: 0;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .memo-open .file-name {
@@ -2903,7 +2903,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     line-height: var(--folio-tree-row-lh);
     text-align: left;
     padding: var(--folio-tree-row-py) calc(var(--folio-sel-bar) + var(--folio-sel-gap)) var(--folio-tree-row-py) 0;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 
@@ -2985,7 +2985,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     font-size: var(--folio-link-size);
     line-height: 1;
     vertical-align: middle;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .folio-wikilink .folio-icon {
@@ -3046,7 +3046,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     font: inherit;
     font-size: var(--folio-font-size-sm);
     padding: var(--folio-space-1) var(--folio-space-2);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     text-align: left;
 }
 
@@ -3099,7 +3099,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     font-size: var(--folio-font-size-xs);
     padding: 0 var(--folio-space-2);
     line-height: 1.7;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .search-tags .tag-chip:hover {
@@ -3359,7 +3359,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     color: var(--folio-fg);
     font: inherit;
     font-size: var(--folio-font-size-xs);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3414,7 +3414,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     padding: 0 var(--folio-space-2);
     line-height: 1.7;
     border-radius: var(--folio-radius-card);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .memo-chip[aria-pressed='true'] {
@@ -3467,7 +3467,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     height: var(--folio-control-h);
     padding: 0 var(--folio-space-3);
     border-radius: var(--folio-radius-card);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .memo-flow-head {
@@ -3511,7 +3511,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     background: transparent;
     color: var(--folio-fg);
     font: inherit;
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
     text-decoration: underline;
     text-underline-offset: 2px;
 }
@@ -3568,7 +3568,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
     color: var(--folio-fg);
     font: inherit;
     padding: var(--folio-space-2);
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 .memo-mini-title {
@@ -3590,7 +3590,7 @@ html[data-num-b='cjk-paren'] .mu-editor ol.mu-order-list > li.mu-list-item::mark
 
 #memo-tags .tag-chip,
 #memo-active .tag-chip {
-    cursor: var(--folio-cursor-pointer);
+    cursor: pointer;
 }
 
 #memo-stream {
