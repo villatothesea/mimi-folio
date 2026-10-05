@@ -48,16 +48,13 @@ export function toggleFsPanel(opts: FsPanelOpts): void {
     const title = document.createElement('span');
     title.className = 'fs-title';
     title.textContent = '外链导入';
-    const hint = document.createElement('span');
-    hint.className = 'fs-hint';
-    hint.textContent = '点击打开';
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'icon-btn';
     close.innerHTML = icon('x');
     close.title = '关闭';
     close.addEventListener('click', closeFsPanel);
-    head.append(title, hint, close);
+    head.append(title, close);
 
     const tree = document.createElement('nav');
     tree.id = 'fs-tree';

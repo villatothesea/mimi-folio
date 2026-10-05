@@ -74,11 +74,13 @@ body {
     z-index: 2;
 }
 
-/* 外链导入树：左栏右侧的同宽面板，行结构复用左栏树（#fs-tree 见下） */
+/* 外链导入树：左栏右侧的同宽面板，行结构复用左栏树（#fs-tree 见下）。
+   box-sizing 与 #sidebar-head 对齐，缺了它 min-height 不含下边框、底线下沉 1px。 */
 .fs-head {
     display: flex;
     align-items: center;
     gap: var(--folio-space-2);
+    box-sizing: border-box;
     min-height: calc(var(--folio-control-h) + 2 * var(--folio-space-2) + 1px);
     padding: 0 var(--folio-space-3);
     border-bottom: 1px solid var(--folio-border);
@@ -88,13 +90,6 @@ body {
 .fs-title {
     flex: 1;
     min-width: 0;
-}
-
-.fs-hint {
-    color: var(--folio-fg-muted);
-    font-size: var(--folio-font-size-xs);
-    font-weight: 400;
-    white-space: nowrap;
 }
 
 /* 占位/错误行不可点，也不吃树行 hover */
