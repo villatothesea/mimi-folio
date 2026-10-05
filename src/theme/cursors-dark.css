@@ -1,0 +1,39 @@
+/**
+ * 暗色主题：把黑身系统光标换成 Win11 的反转色变体（*_i.cur）。
+ * 位图就是 Windows 自己的资源（Explorer/WinUI 深色模式同款白描边光标），
+ * 经 /folio/v1/sys-cursor 从本机 %SystemRoot%\Cursors 现读——不打包微软资产；
+ * 文件不在（Win10/非 Windows）时 url() 失败，落回后面的原生关键字兜底。
+ * :root[data-theme] 前缀已把特异性抬过同 bundle 里靠后的 muya core.css。
+ */
+:root[data-theme='dark'] input:not([type='checkbox']):not([type='radio']):not([type='button']):not([type='submit']):not([type='file']),
+:root[data-theme='dark'] textarea,
+:root[data-theme='dark'] .mu-editor [contenteditable='true'],
+:root[data-theme='dark'] body .mu-container h1,
+:root[data-theme='dark'] body .mu-container h2,
+:root[data-theme='dark'] body .mu-container h3,
+:root[data-theme='dark'] body .mu-container h4,
+:root[data-theme='dark'] body .mu-container h5,
+:root[data-theme='dark'] body .mu-container h6 {
+    cursor: url('/folio/v1/sys-cursor?name=beam_i'), text;
+}
+
+:root[data-theme='dark'] .toc-resize-w,
+:root[data-theme='dark'] .col-resize,
+:root[data-theme='dark'] body.is-col-resizing,
+:root[data-theme='dark'] .col-resize-hit,
+:root[data-theme='dark'] .mu-transformer .left,
+:root[data-theme='dark'] .mu-transformer .right {
+    cursor: url('/folio/v1/sys-cursor?name=size3_i'), ew-resize;
+}
+
+:root[data-theme='dark'] .toc-resize-h {
+    cursor: url('/folio/v1/sys-cursor?name=size4_i'), ns-resize;
+}
+
+:root[data-theme='dark'] .toc-resize-wh {
+    cursor: url('/folio/v1/sys-cursor?name=size2_i'), nesw-resize;
+}
+
+:root[data-theme='dark'] #ws-add-form button.ws-create:disabled {
+    cursor: url('/folio/v1/sys-cursor?name=no_i'), not-allowed;
+}

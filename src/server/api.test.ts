@@ -57,6 +57,20 @@ describe('POST /folio/v1/presence|bye', () => {
     });
 });
 
+describe('GET /folio/v1/sys-cursor', () => {
+    it('只放行 *_i 名；存在的返回位图，缺文件 404', async () => {
+        const bad = await fetch(`${base}/folio/v1/sys-cursor?name=${encodeURIComponent('../x_i')}`);
+        assert.equal(bad.status, 400);
+        const missing = await fetch(`${base}/folio/v1/sys-cursor?name=nosuchcursor_i`);
+        assert.equal(missing.status, 404);
+        if (process.platform === 'win32') {
+            const res = await fetch(`${base}/folio/v1/sys-cursor?name=beam_i`);
+            assert.equal(res.status, 200);
+            assert.ok((await res.arrayBuffer()).byteLength > 100);
+        }
+    });
+});
+
 describe('GET /folio/v1/*', () => {
     it('list 返回全部 md、标题、tags 与 kind', async () => {
         const res = await fetch(`${base}/folio/v1/list`);

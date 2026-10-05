@@ -1111,6 +1111,25 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
     if (!raw.startsWith(PREFIX)) return false;
     const [pathname, search = ''] = raw.slice(PREFIX.length).split('?');
     const query = new URLSearchParams(search);
+
+    // 系统光标位图：Win11 深色反转光标 *_i.cur 存于本机 %SystemRoot%\Cursors，
+    // 页面暗色主题经 cursor: url() 引用。白名单文件名防目录穿越；与 vault 无关。
+    if (req.method === 'GET' && pathname === 'sys-cursor') {
+        const name = query.get('name') ?? '';
+        if (!/^[a-z0-9]+_i$/.test(name)) return fail(res, 400, '需要 *_i 光标名');
+        const dir = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'Cursors');
+        try {
+            const data = await fs.readFile(path.join(dir, `${name}.cur`));
+            res.statusCode = 200;
+            res.setHeader('content-type', 'application/octet-stream');
+            res.setHeader('cache-control', 'public, max-age=86400');
+            res.end(data);
+        } catch {
+            return fail(res, 404, '光标不存在');
+        }
+        return true;
+    }
+
     await loadWorkspaces();
     const root = vaultRoot();
 
