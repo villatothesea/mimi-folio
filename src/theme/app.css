@@ -598,13 +598,14 @@ body.folio-overlay-open .folio-modal {
     top: 0;
     bottom: 0;
     width: var(--folio-resize-hit);
-    cursor: col-resize;
+    /* ew-resize = 系统 ↔（col-resize 是 Chromium 自打包位图，糊且无白边） */
+    cursor: ew-resize;
     z-index: 8;
     touch-action: none;
 }
 
 body.is-col-resizing {
-    cursor: col-resize;
+    cursor: ew-resize;
     user-select: none;
 }
 
@@ -1018,7 +1019,7 @@ body.is-col-resizing iframe {
     position: fixed;
     width: calc(var(--folio-space-1) + var(--folio-space-2));
     z-index: 30;
-    cursor: col-resize;
+    cursor: ew-resize;
     touch-action: none;
 }
 
