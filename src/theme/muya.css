@@ -317,10 +317,9 @@
     gap: var(--folio-space-2);
 }
 
-/* 源码空行 → 网格里另起一行（跨整行的零内容占位） */
-.mu-editor .swatch-break {
-    grid-column: 1 / -1;
-    height: var(--folio-space-2);
+/* 源码空行 → 拆成相邻网格；组间距 = 网格内 gap，与横向间距一致 */
+.mu-editor .swatch-grid + .swatch-grid {
+    margin-top: var(--folio-space-2);
 }
 
 .mu-editor .swatch-card {

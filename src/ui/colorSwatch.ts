@@ -125,50 +125,57 @@ function renderBoard(swatches: SwatchItem[], cols: number): HTMLElement {
     bar.append(label, dec, num, inc);
     board.append(bar);
 
-    const grid = document.createElement('div');
-    grid.className = 'swatch-grid';
-    grid.style.setProperty('--sw-cols', String(cols));
+    // 源码空行 → 在断行处拆成多个网格；组间距走 `.swatch-grid + .swatch-grid`，
+    // 与网格内横向 gap 同为 space-2，断行间距 = 横向间距
+    const groups: Swatch[][] = [[]];
+    for (const s of swatches) {
+        if (s === 'br') groups.push([]);
+        else groups[groups.length - 1].push(s);
+    }
     if (!swatches.length) {
+        const grid = document.createElement('div');
+        grid.className = 'swatch-grid';
+        grid.style.setProperty('--sw-cols', String(cols));
         const hint = document.createElement('div');
         hint.className = 'swatch-empty';
         hint.textContent = '每行一个色码，可跟名字，如 #0F4921 Emerald';
         grid.append(hint);
+        board.append(grid);
     }
-    for (const s of swatches) {
-        if (s === 'br') {
-            const br = document.createElement('div');
-            br.className = 'swatch-break';
-            grid.append(br);
-            continue;
+    for (const group of groups) {
+        if (!group.length) continue;
+        const grid = document.createElement('div');
+        grid.className = 'swatch-grid';
+        grid.style.setProperty('--sw-cols', String(cols));
+        for (const s of group) {
+            const card = document.createElement('div');
+            card.className = 'swatch-card';
+            card.style.setProperty('--sw', s.color);
+            // 卡上深字/浅字按卡色 WCAG 亮度选：L>0.18 时深字比浅字对比度高
+            if (luminance(s.color) > 0.18) card.classList.add('swatch-light');
+            if (s.name) {
+                card.classList.add('swatch-named');
+                const name = document.createElement('span');
+                name.className = 'swatch-name';
+                name.textContent = s.name;
+                card.append(name);
+            }
+            const code = document.createElement('span');
+            code.className = 'swatch-code';
+            code.textContent = hexText(s.color);
+            card.append(code);
+            grid.append(card);
         }
-        const card = document.createElement('div');
-        card.className = 'swatch-card';
-        card.style.setProperty('--sw', s.color);
-        // 卡上深字/浅字按卡色 WCAG 亮度选：L>0.18 时深字比浅字对比度高
-        if (luminance(s.color) > 0.18) card.classList.add('swatch-light');
-        if (s.name) {
-            card.classList.add('swatch-named');
-            const name = document.createElement('span');
-            name.className = 'swatch-name';
-            name.textContent = s.name;
-            card.append(name);
-        }
-        const code = document.createElement('span');
-        code.className = 'swatch-code';
-        code.textContent = hexText(s.color);
-        card.append(code);
-        grid.append(card);
+        board.append(grid);
     }
-    board.append(grid);
     return board;
 }
 
 /**
- * 把代码块源码整段换掉。Не через DOM/execCommand: у stamped-листа
- * `codeblock.content` сеттер .text сам диспатчит jsonState.editOperation
- * (ot-text diff) → модель → json-change → автосохранение. DOM сеттер не
- * трогает — leaf.update() перерендеривает лист. Проверено в живой странице:
- * getMarkdown обновляется синхронно, файл сохраняется.
+ * 把代码块源码整段换掉。不走 DOM/execCommand：stamped 叶
+ * `codeblock.content` 的 .text setter 自己派发 jsonState.editOperation
+ * (ot-text diff) → 模型 → json-change → 自动落盘。DOM 不由 setter 碰——
+ * leaf.update() 触发重渲。实测：getMarkdown 同步更新，文件写入。
  */
 type MuyaContentLeaf = {
     blockName?: string;
