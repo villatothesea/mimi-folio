@@ -1103,6 +1103,53 @@ export async function serveAttachment(req: IncomingMessage, res: ServerResponse)
 }
 
 /**
+ * Win11 的 *_i.cur 是 1bpp AND/XOR 掩码光标：「反白」靠 invert 像素（AND=1,XOR=1，
+ * Win32 对屏显异或，深底上显白）。Chromium 不认 invert 语义直接渲黑，且会挑 128px
+ * 大档。这里取最接近 32px 的一档解码，invert→实白后重打包成单档 32bpp .cur——
+ * 形状仍是微软原版，颜色是真白身黑边。只处理 1bpp；别的格式返回 null 走原样。
+ */
+function sysCursorTo32(buf: Buffer): Buffer | null {
+    if (buf.length < 6 || buf.readUInt16LE(0) !== 0 || buf.readUInt16LE(2) !== 2) return null;
+    const count = buf.readUInt16LE(4);
+    let best = -1, bestD = Infinity;
+    for (let i = 0; i < count; i++) {
+        const w = buf[6 + i * 16] || 256;
+        const d = Math.abs(w - 32);
+        if (d < bestD) { best = i; bestD = d; }
+    }
+    if (best < 0) return null;
+    const o = 6 + best * 16;
+    const w = buf[o] || 256, h = buf[o + 1] || 256;
+    const off = buf.readUInt32LE(o + 12);
+    if (buf.readUInt32LE(off) !== 40 || buf.readUInt16LE(off + 14) !== 1) return null;
+    const stride = Math.ceil(w / 32) * 4;
+    const xorOff = off + 48, andOff = xorOff + stride * h;
+    if (andOff + stride * h > buf.length) return null;
+    const pal0 = buf.readUInt32LE(off + 40), pal1 = buf.readUInt32LE(off + 44);
+    const img = w * h * 4 + stride * h;
+    const out = Buffer.alloc(22 + 40 + img);
+    out.writeUInt16LE(2, 2); out.writeUInt16LE(1, 4);
+    out[6] = w >= 256 ? 0 : w; out[7] = h >= 256 ? 0 : h;
+    out.writeUInt16LE(buf.readUInt16LE(o + 4), 10);
+    out.writeUInt16LE(buf.readUInt16LE(o + 6), 12);
+    out.writeUInt32LE(40 + img, 14); out.writeUInt32LE(22, 18);
+    out.writeUInt32LE(40, 22); out.writeInt32LE(w, 26); out.writeInt32LE(h * 2, 30);
+    out.writeUInt16LE(1, 34); out.writeUInt16LE(32, 36); out.writeUInt32LE(img, 42);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const bit = (h - 1 - y) * stride + (x >> 3), sh = 7 - (x & 7);
+        const xb = (buf[xorOff + bit] >> sh) & 1, ab = (buf[andOff + bit] >> sh) & 1;
+        const p = 62 + (y * w + x) * 4;
+        if (ab === 0) {                                       // 不透明：调色板色
+            const c = xb ? pal1 : pal0;
+            out[p] = c & 0xff; out[p + 1] = (c >> 8) & 0xff; out[p + 2] = (c >> 16) & 0xff; out[p + 3] = 255;
+        } else if (xb === 1) {                                // invert → 白（暗色语义）
+            out[p] = out[p + 1] = out[p + 2] = out[p + 3] = 255;
+        }                                                     // 其余 = 透明，留 0
+    }
+    return out;
+}
+
+/**
  * 统一入口：匹配 /folio/v1/* 就处理并回 true，否则回 false 由调用方走静态/下一个中间件。
  * dev 由 vite 中间件调，独立整服由 src/server/main.ts 调，合入后 daemon 按同一契约实现。
  */
@@ -1119,11 +1166,11 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
         if (!/^[a-z0-9]+_i$/.test(name)) return fail(res, 400, '需要 *_i 光标名');
         const dir = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'Cursors');
         try {
-            const data = await fs.readFile(path.join(dir, `${name}.cur`));
+            const raw = await fs.readFile(path.join(dir, `${name}.cur`));
             res.statusCode = 200;
             res.setHeader('content-type', 'application/octet-stream');
             res.setHeader('cache-control', 'public, max-age=86400');
-            res.end(data);
+            res.end(sysCursorTo32(raw) ?? raw);
         } catch {
             return fail(res, 404, '光标不存在');
         }
