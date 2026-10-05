@@ -1,8 +1,8 @@
 /**
  * 外链导入面板：从左栏右侧伸出的文件树（替代弹窗选框），右缘可拖宽。
- * 从盘符根起懒加载展开，右键文件/文件夹出菜单选「加入外链」——读写回原路径、不拷贝正文；
- * vault 本体及其内部路径右键只提示不链。DOM/类名复用左栏树（.tree-row/.folder-row/…），
- * 视觉差异只在 #fs-panel 容器层。
+ * 从盘符根起懒加载展开。单击文件 = 链入 links/ 并打开（vault 内文件直接打开）；
+ * 右键文件/文件夹出菜单选「加入外链」——读写回原路径、不拷贝正文。
+ * DOM/类名复用左栏树（.tree-row/.folder-row/…），视觉差异只在 #fs-panel 容器层。
  */
 import type { FolioBrowse } from '../host/types.ts';
 import { showContextMenu } from './contextMenu';
@@ -16,6 +16,8 @@ export type FsPanelOpts = {
     isInsideVault(abs: string): boolean;
     onLinkFile(abs: string): void;
     onLinkDir(abs: string): void;
+    /** vault 内文件的单击直开（abs → 相对路径由调用方换算） */
+    onOpenInside(abs: string): void;
     /** 轻提示（状态栏 saySave） */
     say(msg: string): void;
 };
@@ -48,7 +50,7 @@ export function toggleFsPanel(opts: FsPanelOpts): void {
     title.textContent = '外链导入';
     const hint = document.createElement('span');
     hint.className = 'fs-hint';
-    hint.textContent = '右键菜单';
+    hint.textContent = '点击打开';
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'icon-btn';
@@ -199,7 +201,12 @@ function fileRow(ent: FsEntry, depth: number, opts: FsPanelOpts): HTMLElement {
     name.className = 'file-name';
     name.textContent = ent.name;
     button.append(ic, name);
-    button.title = `${ent.path}（右键出菜单）`;
+    button.title = `${ent.path}（点击打开）`;
+    // 单击 = 打开：库外链入 links/ 再开（onLinkFile 内部已 open），库内直接开
+    button.addEventListener('click', () => {
+        if (opts.isInsideVault(ent.path)) opts.onOpenInside(ent.path);
+        else opts.onLinkFile(ent.path);
+    });
     row.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();

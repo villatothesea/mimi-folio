@@ -1367,6 +1367,12 @@ function toggleExtPanel(): void {
         isInsideVault,
         onLinkFile: (abs) => void linkOutsideAbs(abs),
         onLinkDir: (abs) => void linkFolderAbs(abs),
+        // 库内文件单击直接开：剥掉 vault 前缀得到相对路径
+        onOpenInside: (abs) => {
+            const norm = (p: string) => p.replace(/\\/g, '/');
+            const rel = norm(abs).slice(norm(vaultAbsDir).length).replace(/^\/+/, '');
+            if (rel) void open(rel);
+        },
         say: saySave,
     });
 }
