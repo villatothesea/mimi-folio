@@ -1124,8 +1124,8 @@ body.is-col-resizing iframe {
     box-sizing: border-box;
     max-width: var(--folio-measure);
     margin: 0 auto;
-    /* 顶距多留一档：首屏标题落在浮条淡出带之下 */
-    padding: calc(var(--folio-space-4) + var(--folio-space-3)) var(--folio-doc-pad) var(--folio-space-2);
+    /* 顶距 = 淡出带高（浮条底 + 渐隐尾）+ 一档余量：首行完整落在淡出层之下 */
+    padding: calc(var(--folio-control-h) + var(--folio-space-4) + var(--folio-space-2)) var(--folio-doc-pad) var(--folio-space-2);
     background: var(--folio-bg);
 }
 
