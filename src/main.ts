@@ -3,6 +3,7 @@ import { installDesktopShellGuards } from './shared/desktopShell.ts';
 import { installTitlebar } from './ui/titlebar.ts';
 import { applyTextScale, readTextScale } from './shared/textScale.ts';
 import { createHost } from './host/index.ts';
+import { detectHostKind } from './host/types.ts';
 import { startMimiPresence } from './host/presence.ts';
 import { currentEditor, destroyEditor, focusEditorBody, mountEditor } from './ui/editorHost.ts';
 import { attachMediaHandlers } from './ui/mediaPaste.ts';
@@ -46,6 +47,25 @@ import type { FolioListItem } from './host/types.ts';
 const host = createHost();
 
 startMimiPresence(); // mimi 模式下报存活：米米顶栏按钮高亮跟着它翻
+
+// 程序已开着时双击关联文件/拖到图标：壳把绝对路径 POST 进 server 的待开队列，
+// 这里轮询弹出后链入并打开。仅独立模式（桌面壳）；mimi 模式没有壳转发，不轮询。
+if (detectHostKind() === 'standalone') {
+    const pollPendingOpen = async () => {
+        try {
+            const res = await fetch('/folio/v1/pending-open');
+            if (res.status === 204 || !res.ok) return;
+            const { path } = (await res.json()) as { path?: string };
+            if (path) {
+                await refreshList();
+                await open(path);
+            }
+        } catch {
+            /* server 没起来/断连就等下一轮 */
+        }
+    };
+    window.setInterval(() => void pollPendingOpen(), 1500);
+}
 
 let activeWorkspaceId = '';
 /** 当前 vault 磁盘绝对路径（带盘符）；复制路径用，避免 await 后再写剪贴板丢掉用户手势。 */
@@ -1521,8 +1541,34 @@ attachWikilinkHandlers(wrap, {
     onCreate: (p) => void createAndOpen(p),
 });
 
-// 音视频/图片文件的粘贴与拖放落盘（单元 4）；外壳常驻，编辑器重建不受影响
-attachMediaHandlers(wrap, host, currentEditor, (msg) => saySave(msg));
+// 音视频/图片文件的粘贴与拖放落盘（单元 4）；外壳常驻，编辑器重建不受影响。
+// md/html 拖进窗口 = 打开它：WV2 拿不到源路径做不了外链，落一份 vault 文档再开
+attachMediaHandlers(wrap, host, currentEditor, (msg) => saySave(msg), (files) => void importDroppedDocs(files));
+
+/** 拖入文档去重路径：根目录 <base>.<ext>，撞名加 -2/-3 */
+function freeImportPath(name: string): string {
+    const ext = name.match(/\.[^.]*$/)?.[0] ?? '.md';
+    const base = (name.slice(0, name.length - ext.length) || '拖入文档').replace(/[\\/]/g, '_');
+    for (let i = 0; ; i++) {
+        const cand = i === 0 ? `${base}${ext}` : `${base}-${i}${ext}`;
+        if (!allFiles.some((f) => f.path === cand)) return cand;
+    }
+}
+
+async function importDroppedDocs(files: File[]): Promise<void> {
+    await refreshList();
+    for (const f of files) {
+        try {
+            const p = freeImportPath(f.name);
+            await host.write(p, await f.text());
+            saySave(`已导入并打开 ${f.name}`);
+            await refreshList();
+            await open(p);
+        } catch (err) {
+            saySave(`导入 ${f.name} 失败：${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+}
 
 // muya 在浏览器里把相对图片路径转成 file:// 必然失败，宿主层兜底补同源 img
 attachImageFallback(wrap);

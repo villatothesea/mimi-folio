@@ -40,6 +40,7 @@ export function attachMediaHandlers(
     host: FolioHost,
     getEditor: () => Muya | null,
     onError?: (message: string) => void,
+    onDocDrop?: (files: File[]) => void,
 ): void {
     if (!host.saveFile) throw new Error('当前 FolioHost 未实现 saveFile，无法落盘音视频附件');
     const putFile = host.saveFile.bind(host);
@@ -133,7 +134,15 @@ export function attachMediaHandlers(
             if (!files || files.length === 0) return;
             event.preventDefault();
             event.stopImmediatePropagation();
-            void handleFiles(files, false);
+            // md/html 拖进来 = 打开它。WV2 的 File 不带真实路径（做不了外链），
+            // 交给 onDocDrop 导入 vault 后打开；没挂回调时退回旧路（往当前文档插内容）
+            const docs = [...files].filter((f) => isMarkdownFile(f) || /\.html?$/i.test(f.name));
+            const rest = [...files].filter((f) => !docs.includes(f));
+            if (docs.length > 0 && onDocDrop) {
+                onDocDrop(docs);
+                if (rest.length === 0) return;
+            }
+            void handleFiles(rest.length > 0 ? rest : files, false);
         },
         { capture: true },
     );

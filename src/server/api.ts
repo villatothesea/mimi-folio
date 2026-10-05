@@ -256,6 +256,9 @@ async function linkOutside(root: string, absSource: string): Promise<string> {
 
 const OPENABLE_RE = /\.(md|markdown|html?)$/i;
 
+// 二次双击进来的待开文档（vault 相对路径）；GET pending-open 弹一个走一个
+const pendingOpen: string[] = [];
+
 /**
  * 双击关联打开：把盘上任一 md/html 落成 vault 里可读写的相对路径。
  * 库内文件直接回相对路径；库外按 links/ 规矩链入——幂等：同一文件重复打开回同一条目，
@@ -1517,6 +1520,26 @@ export async function handleFolioApi(req: IncomingMessage, res: ServerResponse):
             } catch (err) {
                 return fail(res, 400, err instanceof Error ? err.message : String(err));
             }
+            return true;
+        }
+
+        // 已在跑的实例收到二次双击：壳 POST 文件进来入待开队列，页面轮询 pending-open 弹出打开
+        if (req.method === 'POST' && pathname === 'request-open') {
+            const body = JSON.parse((await readBody(req)).toString('utf8')) as { path?: string };
+            if (typeof body.path !== 'string') return fail(res, 400, '需要 {path: 绝对路径}');
+            try {
+                const rel = await openExternalDoc(root, body.path);
+                pendingOpen.push(rel);
+                send(res, 200, { path: rel });
+            } catch (err) {
+                return fail(res, 400, err instanceof Error ? err.message : String(err));
+            }
+            return true;
+        }
+        if (req.method === 'GET' && pathname === 'pending-open') {
+            const next = pendingOpen.shift();
+            if (next === undefined) send(res, 204);
+            else send(res, 200, { path: next });
             return true;
         }
 

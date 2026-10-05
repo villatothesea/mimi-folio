@@ -71,6 +71,36 @@ describe('GET /folio/v1/sys-cursor', () => {
     });
 });
 
+describe('POST request-open + GET pending-open', () => {
+    it('二次双击：入队 vault 相对路径，pending-open 弹一次后 204', async () => {
+        const src = path.join(outsideDir, '再开我.md');
+        await fs.writeFile(src, '# 二次打开\n', 'utf8');
+        const post = await fetch(`${base}/folio/v1/request-open`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: src }),
+        });
+        assert.equal(post.status, 200);
+        assert.deepEqual(await post.json(), { path: 'links/再开我.md' });
+        const pop = await fetch(`${base}/folio/v1/pending-open`);
+        assert.equal(pop.status, 200);
+        assert.deepEqual(await pop.json(), { path: 'links/再开我.md' });
+        const empty = await fetch(`${base}/folio/v1/pending-open`);
+        assert.equal(empty.status, 204);
+        const bad = await fetch(`${base}/folio/v1/request-open`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: 'not-absolute.md' }),
+        });
+        assert.equal(bad.status, 400);
+        // 别把链入产物留在共享库，后面 list 要数文件
+        const linkDir = path.join(vault, 'links');
+        await fs.rm(path.join(linkDir, '再开我.md'), { force: true });
+        await fs.rm(path.join(linkDir, '再开我.md.folio-link'), { force: true });
+        await fs.rmdir(linkDir).catch(() => {});
+    });
+});
+
 describe('GET /folio/v1/*', () => {
     it('list 返回全部 md、标题、tags 与 kind', async () => {
         const res = await fetch(`${base}/folio/v1/list`);

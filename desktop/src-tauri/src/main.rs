@@ -346,6 +346,32 @@ fn focus_running_instance() {
     }
 }
 
+/// 二次启动（双击/拖到图标）带着文件参数：POST 给在跑的 server 进待开队列，
+/// 页面轮询 pending-open 弹出后链入并打开。服务可能还在启动中 → 重试几轮。
+#[cfg(all(windows, not(debug_assertions)))]
+fn request_open_via_api(path: &str) {
+    let body = serde_json::json!({ "path": path }).to_string();
+    let req = format!(
+        "POST /folio/v1/request-open HTTP/1.0\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], PORT));
+    for _ in 0..10 {
+        if let Ok(mut s) = std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(300)) {
+            let _ = s.set_write_timeout(Some(Duration::from_secs(2)));
+            let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
+            if s.write_all(req.as_bytes()).is_ok() {
+                let mut buf = [0u8; 256];
+                let _ = s.read(&mut buf);
+                return;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    stamp("request-open post failed: api unreachable");
+}
+
 /// 看门狗：server 被杀/崩而窗口还活着时 2s 内重拉。start_api 内部先
 /// netstat 复查再决定 spawn/reuse，两个实例竞速也只会赢一个。
 #[cfg(not(debug_assertions))]
@@ -638,10 +664,16 @@ fn main() {
     stamp(&format!("main enter @{}", BOOT_EPOCH_MS.get().copied().unwrap_or_default()));
 
     // 同一数据目录只开一个实例（原因见 claim_single_instance 注释）。
-    // 局限：双击关联文件二次启动只聚焦已有窗，不再走 ?open= 新开。
+    // 带着文件参数的二次启动：先把路径递交给在跑的 server（pending-open 队列，
+    // 页面轮询消费），再聚焦已有窗退出——文件不再丢。
     #[cfg(all(windows, not(debug_assertions)))]
     if !claim_single_instance() {
-        stamp("second instance, focus existing");
+        if let Some(file) = open_file_arg() {
+            stamp(&format!("second instance forwards open: {file}"));
+            request_open_via_api(&file);
+        } else {
+            stamp("second instance, focus existing");
+        }
         focus_running_instance();
         return;
     }
